@@ -258,10 +258,22 @@ async function pwaTests(browser, url) {
     await page.waitForTimeout(1000);
     const cached = await page.evaluate(async () => (await caches.keys()).find((k) => k.startsWith('drumbort-v')));
     check('cache versionata', cached === `drumbort-v${await page.evaluate(() => drumbort.version)}`, cached);
-    await context.setOffline(true);
-    await page.reload();
-    check('funziona offline', await page.evaluate(() => !!document.querySelector('.step')));
-    await context.setOffline(false);
+    // Tutti i file precaricati devono essere in cache
+    const missing = await page.evaluate(async () => {
+      const src = await (await fetch('./sw.js')).text();
+      const list = JSON.parse(src.match(/const ASSETS = (\[[\s\S]*?\]);/)[1].replace(/'/g, '"').replace(/,\s*\]/, ']'));
+      const out = [];
+      for (const a of list) if (!(await caches.match(new URL(a, location.href).href, { ignoreSearch: true }))) out.push(a);
+      return out;
+    });
+    check('tutti i file in cache', missing.length === 0, missing.join(', '));
+    // Reload offline reale: solo Chromium (in WebKit di Playwright setOffline + reload va in errore interno)
+    if (browser.browserType().name() === 'chromium') {
+      await context.setOffline(true);
+      await page.reload();
+      check('funziona offline', await page.evaluate(() => !!document.querySelector('.step')));
+      await context.setOffline(false);
+    }
   }
   const manifest = await page.evaluate(async () => (await fetch('./manifest.webmanifest')).json());
   check('manifest start_url/scope relativi', manifest.start_url === './' && manifest.scope === './');

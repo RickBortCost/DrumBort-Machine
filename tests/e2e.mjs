@@ -294,7 +294,7 @@ for (const name of BROWSERS) {
     await audioTests(browser, url);
     await pwaTests(browser, url);
   } catch (err) {
-    check(`[${name}] esecuzione`, false, err.message.split('\n')[0]);
+    check(`[${name}] esecuzione`, false, err.message.split('\n').slice(0, 4).join(' | '));
   } finally {
     await browser.close();
   }

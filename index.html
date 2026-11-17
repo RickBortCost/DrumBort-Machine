@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>DrumBort Machine</title>
+  <meta name="description" content="Drum machine web con step sequencer e kit sintetizzati ispirati alle drum machine storiche.">
+  <meta name="theme-color" content="#16171a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="DrumBort">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- ===== Barra superiore: trasporto, tempo, kit, pattern ===== -->
+    <header class="bar">
+      <div class="bar-row">
+        <button id="play" class="btn play" aria-label="Play/Stop"><span class="ico-play">▶</span><span class="ico-stop">■</span></button>
+        <div class="ctl bpm" aria-label="Tempo">
+          <button id="bpmDown" class="btn sm" aria-label="BPM meno">−</button>
+          <div class="lcd"><output id="bpmVal">120</output><small>BPM</small></div>
+          <button id="bpmUp" class="btn sm" aria-label="BPM più">+</button>
+        </div>
+        <label class="ctl swing">
+          <small>SWING</small>
+          <input id="swing" type="range" min="50" max="75" step="1" value="50">
+          <output id="swingVal" class="lcd mini">50%</output>
+        </label>
+      </div>
+      <div class="bar-row">
+        <select id="kit" class="sel" aria-label="Kit"></select>
+        <select id="slot" class="sel slot" aria-label="Pattern"></select>
+        <div class="pager" role="group" aria-label="Pagina step">
+          <button class="btn sm page on" data-page="0">1–8<i class="led"></i></button>
+          <button class="btn sm page" data-page="1">9–16<i class="led"></i></button>
+        </div>
+        <button id="menuBtn" class="btn sm" aria-label="Menu">☰</button>
+      </div>
+    </header>
+
+    <!-- ===== Griglia step sequencer (generata da ui.js) ===== -->
+    <main id="grid" class="grid" data-page="0" aria-label="Step sequencer"></main>
+
+    <!-- ===== Pannello laterale/inferiore: parametri traccia + pad ===== -->
+    <aside class="side">
+      <div class="tabs" role="tablist">
+        <button class="btn sm tab on" data-tab="pads">PAD</button>
+        <button class="btn sm tab" data-tab="params">PARAM</button>
+      </div>
+      <section id="params" class="panel params" aria-label="Parametri traccia">
+        <div class="params-head">
+          <span id="trkName" class="trk-name">KICK</span>
+          <button id="muteBtn" class="btn sm ms" aria-label="Mute">M</button>
+          <button id="soloBtn" class="btn sm ms" aria-label="Solo">S</button>
+          <button id="wavBtn" class="btn sm" aria-label="Carica WAV">WAV</button>
+        </div>
+        <div class="sliders">
+          <label><small>VOL</small><input type="range" data-param="vol" min="0" max="1" step="0.01"></label>
+          <label><small>TUNE</small><input type="range" data-param="tune" min="-12" max="12" step="0.5"></label>
+          <label><small>DECAY</small><input type="range" data-param="decay" min="0.2" max="2.5" step="0.01"></label>
+          <label><small>PAN</small><input type="range" data-param="pan" min="-1" max="1" step="0.05"></label>
+        </div>
+      </section>
+      <section id="pads" class="panel pads" aria-label="Pad"></section>
+    </aside>
+  </div>
+
+  <!-- ===== Menu azioni ===== -->
+  <div id="menu" class="sheet" hidden>
+    <div class="sheet-box">
+      <button class="btn" data-act="clear">Clear pattern</button>
+      <button class="btn" data-act="demo">Carica demo del kit</button>
+      <button class="btn" data-act="export">Esporta JSON (8 pattern)</button>
+      <button class="btn" data-act="import">Importa JSON</button>
+      <button class="btn" data-act="resetwav">Rimuovi tutti i WAV</button>
+      <button class="btn close" data-act="close">Chiudi</button>
+    </div>
+  </div>
+
+  <!-- ===== Overlay sblocco audio (iOS) ===== -->
+  <div id="overlay" class="overlay">
+    <div class="overlay-box">
+      <div class="logo">DRUMBORT<span>MACHINE</span></div>
+      <p>Tocca per iniziare</p>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+  <input id="importFile" type="file" accept=".json,application/json" hidden>
+  <input id="wavFile" type="file" accept="audio/*,.wav" hidden>
+
+  <script type="module" src="./js/ui.js"></script>
+</body>
+</html>

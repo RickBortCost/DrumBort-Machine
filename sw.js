@@ -1,9 +1,10 @@
 /**
  * sw.js — Service worker: precache dei file statici e strategia cache-first.
  * Percorsi relativi: il sito è servito sotto /DrumBort-Machine/.
- * Aggiornare CACHE a ogni rilascio per invalidare la cache.
+ * Aggiornare VERSION a ogni rilascio (insieme a js/version.js) per invalidare la cache.
  */
-const CACHE = 'drumbort-v1';
+const VERSION = '1.0.1';
+const CACHE = `drumbort-v${VERSION}`;
 const ASSETS = [
   './',
   './index.html',
@@ -12,6 +13,7 @@ const ASSETS = [
   './js/engine.js',
   './js/sequencer.js',
   './js/ui.js',
+  './js/version.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',

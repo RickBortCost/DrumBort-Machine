@@ -69,6 +69,16 @@ python3 -m http.server 8000
 
 Il workflow `.github/workflows/pages.yml` pubblica il sito su GitHub Pages a ogni push su `main` (o manualmente da *Actions → Run workflow*). In *Settings → Pages* la sorgente deve essere **GitHub Actions**.
 
+## Versioni
+
+Versionamento [SemVer](https://semver.org/lang/it/) con tag git `vX.Y.Z`; storico in [CHANGELOG.md](CHANGELOG.md). Per un rilascio:
+
+1. aggiorna `APP_VERSION` in `js/version.js` e `VERSION` in `sw.js` (invalida la cache offline);
+2. aggiungi la voce in `CHANGELOG.md`;
+3. `git commit`, `git tag -a vX.Y.Z -m "vX.Y.Z"`, `git push --follow-tags`.
+
+La versione installata è visibile nel menu ☰.
+
 ## Licenza
 
 [MIT](LICENSE)

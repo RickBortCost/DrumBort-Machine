@@ -1,0 +1,38 @@
+name: CI
+
+# Test su ogni push e pull request; richiamato anche dal deploy Pages.
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Check version
+        run: node tests/check-version.mjs
+
+      - name: Install
+        run: npm ci
+
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: E2E (Chromium + WebKit)
+        run: BROWSERS=chromium,webkit node tests/e2e.mjs

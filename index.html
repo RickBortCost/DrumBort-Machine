@@ -17,82 +17,169 @@
   <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
-  <div id="app">
+  <div id="app" data-drawer="closed">
     <!-- ===== Barra superiore: trasporto, tempo, kit, pattern ===== -->
     <header class="bar">
-      <div class="bar-row">
-        <button id="play" class="btn play" aria-label="Play/Stop"><span class="ico-play">▶</span><span class="ico-stop">■</span></button>
-        <div class="ctl bpm" aria-label="Tempo">
-          <button id="bpmDown" class="btn sm" aria-label="BPM meno">−</button>
-          <div class="lcd"><output id="bpmVal">120</output><small>BPM</small></div>
-          <button id="bpmUp" class="btn sm" aria-label="BPM più">+</button>
+      <div class="bar-row r1">
+        <button id="play" class="btn play" aria-label="Play" aria-pressed="false"><span class="ico-play" aria-hidden="true">▶</span><span class="ico-stop" aria-hidden="true">■</span></button>
+        <button id="rec" class="btn rec" aria-label="Registrazione dal vivo" aria-pressed="false"><span aria-hidden="true">●</span></button>
+        <div class="ctl bpm" role="group" aria-label="Tempo">
+          <button id="bpmDown" class="btn sm" aria-label="Diminuisci BPM">−</button>
+          <div class="lcd" aria-live="polite"><output id="bpmVal">120</output><small>BPM</small></div>
+          <button id="bpmUp" class="btn sm" aria-label="Aumenta BPM">+</button>
         </div>
+        <button id="tap" class="btn sm" aria-label="Tap tempo">TAP</button>
         <label class="ctl swing">
           <small>SWING</small>
-          <input id="swing" type="range" min="50" max="75" step="1" value="50">
+          <input id="swing" type="range" min="50" max="75" step="1" value="50" aria-label="Swing">
           <output id="swingVal" class="lcd mini">50%</output>
         </label>
       </div>
-      <div class="bar-row">
+      <div class="bar-row r2">
         <select id="kit" class="sel" aria-label="Kit"></select>
+        <button id="lockBtn" class="btn sm" aria-label="Blocca kit al cambio pattern" aria-pressed="false">🔓</button>
         <select id="slot" class="sel slot" aria-label="Pattern"></select>
         <div class="pager" role="group" aria-label="Pagina step">
-          <button class="btn sm page on" data-page="0">1–8<i class="led"></i></button>
-          <button class="btn sm page" data-page="1">9–16<i class="led"></i></button>
+          <button class="btn sm page on" data-page="0" aria-label="Step 1-8" aria-pressed="true">1–8<i class="led"></i></button>
+          <button class="btn sm page" data-page="1" aria-label="Step 9-16" aria-pressed="false">9–16<i class="led"></i></button>
         </div>
-        <button id="menuBtn" class="btn sm" aria-label="Menu">☰</button>
+        <button id="menuBtn" class="btn sm" aria-label="Menu" aria-haspopup="dialog">☰</button>
+        <button id="drawerBtn" class="btn sm" aria-label="Pannello pad e strumenti" aria-expanded="false">◧</button>
       </div>
     </header>
 
     <!-- ===== Griglia step sequencer (generata da ui.js) ===== -->
-    <main id="grid" class="grid" data-page="0" aria-label="Step sequencer"></main>
+    <main id="grid" class="grid" data-page="0" aria-label="Step sequencer. Frecce per spostarsi, Invio per attivare."></main>
 
-    <!-- ===== Pannello laterale/inferiore: parametri traccia + pad ===== -->
-    <aside class="side">
-      <div class="tabs" role="tablist">
-        <button class="btn sm tab on" data-tab="pads">PAD</button>
-        <button class="btn sm tab" data-tab="params">PARAM</button>
+    <!-- ===== Pannello: strumenti, parametri traccia, pad ===== -->
+    <aside class="side" data-tab="pads" aria-label="Strumenti, parametri e pad">
+      <div class="tools" role="toolbar" aria-label="Strumenti">
+        <button class="btn sm" data-cmd="undo" aria-label="Annulla">↶</button>
+        <button class="btn sm" data-cmd="redo" aria-label="Ripeti">↷</button>
+        <button class="btn sm" data-cmd="copy" aria-label="Copia pattern">CPY</button>
+        <button class="btn sm" data-cmd="paste" aria-label="Incolla pattern">PST</button>
+        <button class="btn sm" data-cmd="edit" aria-label="Modifica opzioni step" aria-pressed="false">EDIT</button>
+        <button class="btn sm" data-cmd="met" aria-label="Metronomo" aria-pressed="false">MET</button>
+        <button class="btn sm" data-cmd="song" aria-label="Song mode" aria-haspopup="dialog">SONG</button>
+        <button class="btn sm" data-cmd="fx" aria-label="Effetti master" aria-haspopup="dialog">FX</button>
       </div>
-      <section id="params" class="panel params" aria-label="Parametri traccia">
+      <div class="tabs" role="tablist">
+        <button class="btn sm tab on" data-tab="pads" role="tab" aria-selected="true">PAD</button>
+        <button class="btn sm tab" data-tab="params" role="tab" aria-selected="false">PARAM</button>
+      </div>
+      <section id="params" class="panel params" data-pg="snd" aria-label="Parametri traccia">
         <div class="params-head">
           <span id="trkName" class="trk-name">KICK</span>
-          <button id="muteBtn" class="btn sm ms" aria-label="Mute">M</button>
-          <button id="soloBtn" class="btn sm ms" aria-label="Solo">S</button>
-          <button id="wavBtn" class="btn sm" aria-label="Carica WAV">WAV</button>
+          <button id="muteBtn" class="btn sm ms" aria-label="Mute" aria-pressed="false">M</button>
+          <button id="soloBtn" class="btn sm ms" aria-label="Solo" aria-pressed="false">S</button>
+          <button id="wavBtn" class="btn sm" aria-label="Carica campione WAV">WAV</button>
+          <button id="pgBtn" class="btn sm" aria-label="Mostra mixer">MIX</button>
         </div>
-        <div class="sliders">
-          <label><small>VOL</small><input type="range" data-param="vol" min="0" max="1" step="0.01"></label>
-          <label><small>TUNE</small><input type="range" data-param="tune" min="-12" max="12" step="0.5"></label>
-          <label><small>DECAY</small><input type="range" data-param="decay" min="0.2" max="2.5" step="0.01"></label>
-          <label><small>PAN</small><input type="range" data-param="pan" min="-1" max="1" step="0.05"></label>
-        </div>
+        <div id="sliders" class="sliders"></div>
       </section>
       <section id="pads" class="panel pads" aria-label="Pad"></section>
     </aside>
   </div>
 
-  <!-- ===== Menu azioni ===== -->
-  <div id="menu" class="sheet" hidden>
+  <!-- ===== Fogli modali ===== -->
+  <div id="menu" class="sheet" role="dialog" aria-modal="true" aria-label="Menu" hidden>
     <div class="sheet-box">
       <button class="btn" data-act="clear">Clear pattern</button>
       <button class="btn" data-act="demo">Carica demo del kit</button>
-      <button class="btn" data-act="export">Esporta JSON (8 pattern)</button>
+      <button class="btn" data-act="wav-pattern">Esporta WAV (pattern × 4)</button>
+      <button class="btn" data-act="wav-song">Esporta WAV (song)</button>
+      <button class="btn" data-act="export">Esporta JSON (pattern, song, FX)</button>
       <button class="btn" data-act="import">Importa JSON</button>
+      <button class="btn" data-act="midi">MIDI…</button>
       <button class="btn" data-act="resetwav">Rimuovi tutti i WAV</button>
-      <button class="btn close" data-act="close">Chiudi</button>
+      <button class="btn close" data-close>Chiudi</button>
       <div id="version" class="version"></div>
     </div>
   </div>
 
+  <div id="stepSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="stepTitle" hidden>
+    <div class="sheet-box">
+      <div class="sheet-title" id="stepTitle">Step</div>
+      <div class="seg" role="group" aria-label="Stato step" data-k="v">
+        <button class="btn sm" data-v="0">OFF</button>
+        <button class="btn sm" data-v="1">ON</button>
+        <button class="btn sm" data-v="2">ACC</button>
+      </div>
+      <label class="row-ctl"><small>PROB</small><input type="range" data-k="p" min="0" max="100" step="5" aria-label="Probabilità"><output></output></label>
+      <div class="row-ctl"><small>RATCHET</small>
+        <div class="seg" role="group" aria-label="Ratchet" data-k="r">
+          <button class="btn sm" data-v="1">1</button><button class="btn sm" data-v="2">2</button>
+          <button class="btn sm" data-v="3">3</button><button class="btn sm" data-v="4">4</button>
+        </div>
+      </div>
+      <div class="row-ctl"><small>FLAM</small>
+        <div class="seg" role="group" aria-label="Flam" data-k="f">
+          <button class="btn sm" data-v="0">NO</button><button class="btn sm" data-v="1">SÌ</button>
+        </div>
+      </div>
+      <label class="row-ctl"><small>NUDGE</small><input type="range" data-k="n" min="-50" max="50" step="5" aria-label="Nudge"><output></output></label>
+      <div class="sheet-actions">
+        <button class="btn" data-act="step-reset">Reset opzioni</button>
+        <button class="btn close" data-close>Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="songSheet" class="sheet" role="dialog" aria-modal="true" aria-label="Song mode" hidden>
+    <div class="sheet-box">
+      <div class="sheet-title">SONG</div>
+      <button id="songOn" class="btn" aria-pressed="false">Song mode: OFF</button>
+      <div id="chain" class="chain" aria-label="Catena pattern"></div>
+      <small class="hint">Tocca un blocco per cambiare le ripetizioni, × per rimuoverlo.</small>
+      <div id="chainAdd" class="chain-add" role="group" aria-label="Aggiungi pattern"></div>
+      <div class="sheet-actions">
+        <button class="btn" data-act="chain-clear">Svuota catena</button>
+        <button class="btn close" data-close>Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="fxSheet" class="sheet" role="dialog" aria-modal="true" aria-label="Effetti master" hidden>
+    <div class="sheet-box">
+      <div class="sheet-title">FX MASTER</div>
+      <div id="fxCtl" class="fx-ctl"></div>
+      <div class="sheet-actions">
+        <button class="btn" data-act="fx-reset">Reset FX</button>
+        <button class="btn close" data-close>Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="midiSheet" class="sheet" role="dialog" aria-modal="true" aria-label="MIDI" hidden>
+    <div class="sheet-box">
+      <div class="sheet-title">MIDI</div>
+      <p id="midiMsg" class="hint"></p>
+      <button id="midiEnable" class="btn">Attiva MIDI</button>
+      <div id="midiCtl" class="midi-ctl" hidden>
+        <label class="row-ctl"><small>IN</small><select id="midiIn" class="sel"></select></label>
+        <label class="row-ctl"><small>OUT</small><select id="midiOut" class="sel"></select></label>
+        <button class="btn" data-mopt="noteIn" aria-pressed="false">Note in → pad</button>
+        <button class="btn" data-mopt="noteOut" aria-pressed="false">Note out (canale 10)</button>
+        <button class="btn" data-mopt="clockOut" aria-pressed="false">Clock out</button>
+        <button class="btn" data-mopt="clockIn" aria-pressed="false">Clock in (segui tempo/start/stop)</button>
+      </div>
+      <button class="btn close" data-close>Chiudi</button>
+    </div>
+  </div>
+
   <!-- ===== Overlay sblocco audio (iOS) ===== -->
-  <div id="overlay" class="overlay">
+  <div id="overlay" class="overlay" role="button" tabindex="0" aria-label="Tocca per iniziare">
     <div class="overlay-box">
       <div class="logo">DRUMBORT<span>MACHINE</span></div>
       <p>Tocca per iniziare</p>
     </div>
   </div>
 
-  <div id="toast" class="toast" hidden></div>
+  <div id="updateBar" class="update-bar" role="alert" hidden>
+    <span>Nuova versione disponibile</span>
+    <button id="updateBtn" class="btn sm">Aggiorna</button>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <input id="importFile" type="file" accept=".json,application/json" hidden>
   <input id="wavFile" type="file" accept="audio/*,.wav" hidden>
 

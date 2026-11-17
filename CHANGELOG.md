@@ -2,6 +2,27 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.1.0] - 2026-11-17
+
+### Aggiunto
+- Registrazione dal vivo dai pad (REC) con quantizzazione allo step più vicino e metronomo (MET).
+- Annulla/ripeti (fino a 100 passi, anche Ctrl/Cmd+Z) e copia/incolla dei pattern tra gli 8 slot.
+- Song mode: catena di pattern con ripetizioni 1–8, la vista segue la riproduzione.
+- Lunghezza per traccia 1–16 step (poliritmi, 12 per le terzine).
+- Opzioni per step (EDIT): probabilità, ratchet 2–4, flam, nudge ±50%.
+- Effetti master: riverbero e delay a mandata per traccia, filtro LP/HP con risonanza, volume master.
+- Export WAV del pattern (×4) o della song, con condivisione su iOS.
+- Tap tempo e blocco del kit al cambio pattern (🔒).
+- Web MIDI: note in → pad, note out (canale 10, mappa GM), clock in/out.
+- Avviso "Nuova versione disponibile" con aggiornamento immediato dell'app offline.
+- Campioni WAV persistenti (IndexedDB).
+- Accessibilità: stato degli step per VoiceOver, navigazione da tastiera (frecce, Invio), focus visibile.
+- Test end-to-end (Chromium e WebKit) e controllo di coerenza della versione in CI; il deploy parte solo con i test verdi.
+
+### Modificato
+- iPhone landscape: griglia a tutta larghezza, pad e strumenti in un cassetto laterale (◧).
+- Pannello parametri a due pagine: SND (vol, tune, decay, len) e MIX (vol, pan, rev, dly).
+
 ## [1.0.1] - 2026-11-17
 
 ### Corretto
@@ -21,5 +42,6 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); vers
 - Layout touch per iPhone e iPad (portrait/landscape), PWA offline.
 - Deploy automatico su GitHub Pages.
 
+[1.1.0]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/RickBortCost/DrumBort-Machine/releases/tag/v1.0.0

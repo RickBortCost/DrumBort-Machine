@@ -1,6 +1,8 @@
 # DrumBort-Machine
 
 [![Deploy to GitHub Pages](https://github.com/RickBortCost/DrumBort-Machine/actions/workflows/pages.yml/badge.svg)](https://github.com/RickBortCost/DrumBort-Machine/actions/workflows/pages.yml)
+[![CI](https://github.com/RickBortCost/DrumBort-Machine/actions/workflows/ci.yml/badge.svg)](https://github.com/RickBortCost/DrumBort-Machine/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/RickBortCost/DrumBort-Machine)](https://github.com/RickBortCost/DrumBort-Machine/releases)
 
 Drum machine virtuale per il web: step sequencer 16 × 8, pad live e una libreria di kit ispirati alle drum machine storiche. Tutti i suoni sono sintetizzati in tempo reale con la Web Audio API, senza campioni esterni. Ottimizzata per il touch su iPhone e iPad, installabile come PWA e utilizzabile offline.
 
@@ -8,13 +10,33 @@ Drum machine virtuale per il web: step sequencer 16 × 8, pad live e una libreri
 
 ## Funzioni
 
-- Step sequencer 16 step × 8 tracce, due livelli di accento (tap: off → normale → accento).
-- Scheduler look-ahead (timer 25 ms, pianificazione 100 ms avanti) per un timing stabile.
-- Tempo 40–240 BPM, swing 50–75%, play/stop, playhead.
-- Mute/Solo, volume, tune, decay e pan per traccia.
-- 8 pad per suonare dal vivo.
-- 8 pattern salvati in `localStorage`, export/import JSON, groove demo per ogni kit.
-- Campioni WAV propri per traccia (opzionale, tenuti solo in memoria).
+**Sequencer**
+- 16 step × 8 tracce, due livelli di accento (tap: off → normale → accento), trascinamento per dipingere.
+- Lunghezza per traccia 1–16 step: poliritmi e terzine (12 step).
+- Opzioni per step (modalità **EDIT**): probabilità, ratchet 2–4, flam, nudge ±50%.
+- Scheduler look-ahead (timer 25 ms, pianificazione 100 ms avanti).
+- Tempo 40–240 BPM, **TAP** tempo, swing 50–75%, metronomo (**MET**).
+- Annulla/ripeti (↶ ↷, Ctrl/Cmd+Z), copia/incolla dei pattern (**CPY**/**PST**).
+
+**Pattern e song**
+- 8 pattern salvati in `localStorage`, groove demo per ogni kit.
+- **SONG**: catena di pattern con ripetizioni 1–8; la vista segue la riproduzione.
+- 🔒 blocca il kit quando cambi pattern.
+- Export/import JSON (pattern, song, effetti).
+
+**Suono**
+- Mute/Solo, volume, tune, decay, pan, mandate riverbero e delay per traccia (pagine SND/MIX).
+- **FX** master: filtro LP/HP con risonanza, riverbero, delay sincronizzato al tempo, volume master.
+- Campioni WAV propri per traccia, salvati nel browser (IndexedDB).
+- Export **WAV** del pattern (×4) o della song.
+
+**Live e MIDI**
+- 8 pad; con **●** (REC) attivo i colpi vengono registrati nello step più vicino.
+- Web MIDI: note in → pad, note out su canale 10 (mappa GM), clock in/out. Non disponibile su Safari iOS/iPadOS.
+
+**App**
+- PWA installabile, funziona offline, avviso "Nuova versione disponibile".
+- Accessibilità: step leggibili da VoiceOver, navigazione con frecce e Invio.
 
 ## Kit
 
@@ -40,7 +62,7 @@ Tracce: Kick, Snare, Clap/Rim, Closed Hat, Open Hat, Tom, Cymbal/Ride, Percussio
 3. Scegli **Aggiungi alla schermata Home** e conferma.
 4. Avvia DrumBort dall'icona: si apre a schermo intero e funziona anche offline.
 
-Al primo avvio tocca "Tocca per iniziare" per attivare l'audio.
+Al primo avvio tocca "Tocca per iniziare" per attivare l'audio. Su iPhone in orizzontale pad e strumenti stanno nel cassetto ◧.
 
 ## Struttura
 
@@ -50,32 +72,48 @@ css/style.css           layout responsive e stile
 js/kits.js              sintesi dei suoni per kit
 js/engine.js            AudioContext, mixer, catena master
 js/sequencer.js         pattern, step, swing, tempo
-js/ui.js                griglia, pad, controlli, salvataggio
+js/ui.js                interfaccia, salvataggio, undo, song, PWA
+js/export.js            render offline e codifica WAV
+js/midi.js              Web MIDI (note e clock)
+js/idb.js               campioni WAV in IndexedDB
+js/version.js           versione dell'app
 manifest.webmanifest    manifest PWA
-sw.js                   service worker (cache-first)
+sw.js                   service worker (cache-first, versionato)
 icons/                  icone 192, 512, apple-touch-icon 180
+tests/                  test end-to-end e controllo versione
 ```
 
-Nessun build step, nessuna dipendenza. Tutti i percorsi sono relativi perché il sito è servito sotto `/DrumBort-Machine/`.
+Nessun build step, nessuna dipendenza a runtime (Playwright serve solo ai test). Tutti i percorsi sono relativi perché il sito è servito sotto `/DrumBort-Machine/`.
 
 ## Sviluppo locale
 
 ```sh
-python3 -m http.server 8000
-# http://localhost:8000/
+npm start            # http://127.0.0.1:8080/DrumBort-Machine/
+# oppure: python3 -m http.server 8000
 ```
+
+## Test
+
+```sh
+npm ci && npx playwright install chromium webkit
+npm test             # versione + e2e su Chromium
+npm run test:all     # Chromium + WebKit
+npm run test:live    # contro il sito pubblicato
+```
+
+Controllano layout (440×956, 956×440, 820×1180, 1180×820: niente scroll, target ≥ 44 px), funzioni, segnale di tutte le 80 voci, service worker e uso offline.
 
 ## Deploy
 
-Il workflow `.github/workflows/pages.yml` pubblica il sito su GitHub Pages a ogni push su `main` (o manualmente da *Actions → Run workflow*). In *Settings → Pages* la sorgente deve essere **GitHub Actions**.
+Il workflow `.github/workflows/pages.yml` esegue i test (`ci.yml`) e, se passano, pubblica il sito su GitHub Pages a ogni push su `main` (o manualmente da *Actions → Run workflow*). In *Settings → Pages* la sorgente deve essere **GitHub Actions**.
 
 ## Versioni
 
 Versionamento [SemVer](https://semver.org/lang/it/) con tag git `vX.Y.Z`; storico in [CHANGELOG.md](CHANGELOG.md). Per un rilascio:
 
 1. aggiorna `APP_VERSION` in `js/version.js` e `VERSION` in `sw.js` (invalida la cache offline);
-2. aggiungi la voce in `CHANGELOG.md`;
-3. `git commit`, `git tag -a vX.Y.Z -m "vX.Y.Z"`, `git push --follow-tags`.
+2. aggiungi la voce in `CHANGELOG.md` (`npm run version:check` verifica la coerenza, anche in CI);
+3. commit e push su `main`: il workflow `release.yml` crea tag e GitHub Release con le note del changelog.
 
 La versione installata è visibile nel menu ☰.
 

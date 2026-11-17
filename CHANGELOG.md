@@ -2,6 +2,11 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.1.1] - 2026-11-17
+
+### Corretto
+- Editor delle opzioni step: su Safari/WebKit il tap in modalità EDIT non apriva il foglio. Ora si apre al tocco e il click successivo non lo richiude.
+
 ## [1.1.0] - 2026-11-17
 
 ### Aggiunto
@@ -42,6 +47,7 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); vers
 - Layout touch per iPhone e iPad (portrait/landscape), PWA offline.
 - Deploy automatico su GitHub Pages.
 
+[1.1.1]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/RickBortCost/DrumBort-Machine/releases/tag/v1.0.0

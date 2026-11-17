@@ -497,3 +497,13 @@ requestAnimationFrame(frame);
 
 // Esposto per debug/test
 window.drumbort = { engine, seq, state };
+
+// =====================================================================
+// PWA: service worker (percorso relativo, il sito sta sotto /DrumBort-Machine/)
+// =====================================================================
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => { /* offline non disponibile */ });
+  });
+}

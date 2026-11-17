@@ -1,0 +1,68 @@
+name: Release
+
+# Crea il tag vX.Y.Z e la GitHub Release quando APP_VERSION in js/version.js
+# cambia su main. Manualmente si può taggare una versione/commit specifici.
+on:
+  push:
+    branches: [main]
+    paths: [js/version.js]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versione da taggare (es. 1.0.0). Vuoto = js/version.js"
+        required: false
+      ref:
+        description: "Commit da taggare. Vuoto = HEAD di main"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: v
+        env:
+          IN_VERSION: ${{ inputs.version }}
+          IN_REF: ${{ inputs.ref }}
+        run: |
+          V="$IN_VERSION"
+          [ -z "$V" ] && V=$(grep -oE "[0-9]+\.[0-9]+\.[0-9]+" js/version.js | head -1)
+          REF="$IN_REF"
+          [ -z "$REF" ] && REF=$(git rev-parse HEAD)
+          REF=$(git rev-parse --verify "$REF^{commit}")
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$V" >/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag v$V già presente: nulla da fare."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract changelog section
+        if: steps.v.outputs.exists == 'false'
+        env:
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          awk -v v="$V" '
+            index($0, "## [" v "]") == 1 { on=1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Release v$V" > notes.md
+
+      - name: Create tag and release
+        if: steps.v.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.v.outputs.version }}
+          REF: ${{ steps.v.outputs.ref }}
+        run: gh release create "v$V" --target "$REF" --title "v$V" --notes-file notes.md

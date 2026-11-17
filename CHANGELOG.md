@@ -2,6 +2,14 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.1.2] - 2026-11-17
+
+### Corretto
+- I messaggi a comparsa non intercettano più i tocchi sui pulsanti sottostanti (es. "Chiudi" nei fogli).
+
+### Test
+- WebKit: verifica della cache offline al posto del reload offline simulato; errori più dettagliati.
+
 ## [1.1.1] - 2026-11-17
 
 ### Corretto
@@ -47,6 +55,7 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); vers
 - Layout touch per iPhone e iPad (portrait/landscape), PWA offline.
 - Deploy automatico su GitHub Pages.
 
+[1.1.2]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.0.0...v1.0.1

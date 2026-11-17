@@ -400,15 +400,8 @@ grid.addEventListener('pointerdown', (e) => {
   if (!c) return;
   e.preventDefault();
   setFocusCell(c, false);
-  if (ui.edit) return;               // in EDIT l'editor si apre al click (vedi sotto)
   const v = activateStep(+c.dataset.t, +c.dataset.s);
-  paint = { v, seen: new Set([c]) };
-});
-
-// Apertura su click: il click generato dal tap non deve cadere sullo sfondo del foglio appena aperto
-grid.addEventListener('click', (e) => {
-  const c = e.target.closest('.step');
-  if (c && ui.edit) openStepEditor(+c.dataset.t, +c.dataset.s);
+  if (v !== null) paint = { v, seen: new Set([c]) };
 });
 
 grid.addEventListener('pointermove', (e) => {
@@ -768,8 +761,10 @@ $('.tools').addEventListener('click', (e) => {
 // =====================================================================
 
 let lastFocus = null;
+let sheetOpenedAt = 0;
 function openSheet(id) {
   lastFocus = document.activeElement;
+  sheetOpenedAt = performance.now();
   const s = $('#' + id);
   s.hidden = false;
   const f = s.querySelector('button, input, select');
@@ -780,6 +775,8 @@ function closeSheet(s) {
   if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
 }
 $$('.sheet').forEach((s) => s.addEventListener('click', (e) => {
+  // Il click "fantasma" del tap che ha aperto il foglio non deve richiuderlo
+  if (e.target === s && performance.now() - sheetOpenedAt < 400) return;
   if (e.target === s || e.target.closest('[data-close]')) closeSheet(s);
 }));
 

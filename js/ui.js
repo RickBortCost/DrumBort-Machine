@@ -4,6 +4,7 @@
 
 import { KITS, kitById } from './kits.js';
 import { Engine } from './engine.js';
+import { APP_VERSION } from './version.js';
 import { Sequencer, createPattern, normalizePattern, parseRows, defaultTracks, isEmpty,
   STEPS, TRACKS } from './sequencer.js';
 
@@ -479,14 +480,40 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// Blocca il pinch-zoom su iOS Safari (il doppio tap è gestito da touch-action in CSS)
-document.addEventListener('gesturestart', (e) => e.preventDefault());
+// =====================================================================
+// Blocco zoom (iOS Safari ignora user-scalable=no)
+// =====================================================================
+
+// Pinch: eventi gesture proprietari di WebKit
+['gesturestart', 'gesturechange', 'gestureend'].forEach((ev) =>
+  document.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
+
+// Pinch: qualunque movimento con più di un dito
+document.addEventListener('touchmove', (e) => {
+  if (e.touches.length > 1 || (e.scale && e.scale !== 1)) e.preventDefault();
+}, { passive: false });
+
+// Doppio tap: annulla il secondo tap ravvicinato fuori dai controlli interattivi
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  const now = Date.now();
+  const interactive = e.target.closest('button, select, input, .step, .pad, .lbl, .overlay, .sheet');
+  if (!interactive && now - lastTouchEnd < 350) e.preventDefault();
+  lastTouchEnd = now;
+}, { passive: false });
+
+// Zoom da tastiera/trackpad su desktop (Ctrl/Cmd + rotella o +/-)
+window.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && ['+', '-', '=', '0'].includes(e.key)) e.preventDefault();
+});
 
 // =====================================================================
 // Init
 // =====================================================================
 
 loadState();
+$('#version').textContent = `DrumBort Machine v${APP_VERSION}`;
 buildSelects();
 buildGrid();
 buildPads();
@@ -496,7 +523,7 @@ renderAll();
 requestAnimationFrame(frame);
 
 // Esposto per debug/test
-window.drumbort = { engine, seq, state };
+window.drumbort = { engine, seq, state, version: APP_VERSION };
 
 // =====================================================================
 // PWA: service worker (percorso relativo, il sito sta sotto /DrumBort-Machine/)

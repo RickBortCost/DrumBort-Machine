@@ -3,7 +3,7 @@
  * Percorsi relativi: il sito è servito sotto /DrumBort-Machine/.
  * Aggiornare VERSION a ogni rilascio (insieme a js/version.js) per invalidare la cache.
  */
-const VERSION = '1.0.1';
+const VERSION = '1.1.0';
 const CACHE = `drumbort-v${VERSION}`;
 const ASSETS = [
   './',
@@ -14,15 +14,29 @@ const ASSETS = [
   './js/sequencer.js',
   './js/ui.js',
   './js/version.js',
+  './js/export.js',
+  './js/midi.js',
+  './js/idb.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',
 ];
 
-// ----- Install: precache -----
+// ----- Install: precache. La nuova versione resta in attesa finché l'utente non conferma -----
+// Le versioni ≤ 1.0.1 non hanno il banner "Aggiorna": in quel caso si attiva subito.
+const LEGACY = ['drumbort-v1', 'drumbort-v1.0.1'];
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE).then((c) => c.addAll(ASSETS))
+      .then(() => caches.keys())
+      .then((keys) => { if (keys.some((k) => LEGACY.includes(k))) return self.skipWaiting(); })
+  );
+});
+
+// ----- Messaggi dalla pagina: "Aggiorna" → attiva subito la nuova versione -----
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 // ----- Activate: rimuove le cache vecchie -----

@@ -1,11 +1,13 @@
 name: Release
 
-# Crea il tag vX.Y.Z e la GitHub Release quando APP_VERSION in js/version.js
-# cambia su main. Manualmente si può taggare una versione/commit specifici.
+# Crea il tag vX.Y.Z e la GitHub Release dopo un deploy riuscito (test verdi),
+# se la versione in js/version.js non è ancora taggata.
+# Manualmente si può taggare una versione/commit specifici.
 on:
-  push:
+  workflow_run:
+    workflows: [Deploy to GitHub Pages]
+    types: [completed]
     branches: [main]
-    paths: [js/version.js]
   workflow_dispatch:
     inputs:
       version:
@@ -20,12 +22,14 @@ permissions:
 
 jobs:
   release:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Read version
         id: v

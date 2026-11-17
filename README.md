@@ -113,7 +113,7 @@ Versionamento [SemVer](https://semver.org/lang/it/) con tag git `vX.Y.Z`; storic
 
 1. aggiorna `APP_VERSION` in `js/version.js` e `VERSION` in `sw.js` (invalida la cache offline);
 2. aggiungi la voce in `CHANGELOG.md` (`npm run version:check` verifica la coerenza, anche in CI);
-3. commit e push su `main`: il workflow `release.yml` crea tag e GitHub Release con le note del changelog.
+3. commit e push su `main`: dopo test e deploy riusciti il workflow `release.yml` crea tag e GitHub Release con le note del changelog.
 
 La versione installata è visibile nel menu ☰.
 

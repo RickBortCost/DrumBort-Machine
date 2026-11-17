@@ -155,7 +155,7 @@ export const clap = ({ freq = 1100, q = 1.2, bursts = 3, spacing = 0.011, burstD
 
 /** Rimshot / clave / click: oscillatori brevissimi, opzionalmente filtrati. */
 export const rim = ({ freqs = [500, 1700], type = 'square', decay = 0.035, hp = 600,
-  level = 0.7 } = {}) =>
+  level = 0.5 } = {}) =>
   (ctx, out, t, v, p) => {
     const k = ratio(p), dur = decay * dmul(p);
     const amp = vca(ctx, out, t, (v * level) / freqs.length, dur);
@@ -306,8 +306,8 @@ export const KITS = [
       T('Kick', 'BD', kick({ start: 95, end: 62, sweep: 0.04, decay: 0.3, level: 0.9 })),
       T('Snare', 'SD', snare({ tones: [300], oscType: 'sine', drop: 1.05, toneDecay: 0.05, toneLevel: 0.35, nType: 'bandpass', nFreq: 4200, nQ: 0.9, nDecay: 0.12, noiseLevel: 0.6 })),
       T('Rim', 'RM', rim({ freqs: [1100], type: 'sine', decay: 0.03, hp: 0, level: 0.5 }), -0.15),
-      T('Closed Hat', 'CH', metal({ mult: 1.4, hp: 9000, bp: 11000, bpQ: 1.5, decay: 0.03, level: 0.4, noise: 0.15 }), 0.25),
-      T('Open Hat', 'OH', metal({ mult: 1.4, hp: 8500, bp: 10500, bpQ: 1.5, decay: 0.2, level: 0.35, noise: 0.15 }), 0.25),
+      T('Closed Hat', 'CH', metal({ mult: 1.4, hp: 9000, bp: 11000, bpQ: 1.5, decay: 0.03, level: 0.6, noise: 0.15 }), 0.25),
+      T('Open Hat', 'OH', metal({ mult: 1.4, hp: 8500, bp: 10500, bpQ: 1.5, decay: 0.2, level: 0.5, noise: 0.15 }), 0.25),
       T('Bongo', 'BG', tom({ start: 420, end: 380, sweep: 0.03, decay: 0.12, level: 0.6 }), -0.3),
       T('Cymbal', 'CY', metal({ mult: 1.2, hp: 6500, bp: 8500, bpQ: 0.7, decay: 0.8, level: 0.3, noise: 0.3 }), 0.35),
       T('Guiro', 'GU', clap({ freq: 3400, q: 4, bursts: 8, spacing: 0.016, burstDecay: 0.01, tail: 0.03, level: 0.6 }), -0.2),

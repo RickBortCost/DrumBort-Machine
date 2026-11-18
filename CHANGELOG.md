@@ -2,6 +2,15 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.14.0] - 2026-11-18
+
+### Modificato
+- **Mix dentro le tracce**, come in Ableton Live: la barra del mixer non c'è più; volume, pan e livello sono nell'intestazione di ogni traccia (vista TRACCE) e sotto ogni colonna (SESSION), con il MASTER come ultima riga.
+- **Audio su Windows (host desktop)**: uscita tramite WASAPI (latenza bassa e stabile, conversione di frequenza automatica), con ritorno a MME se il dispositivo lo rifiuta; con MME buffer più ampio contro i crepitii. L'elenco delle uscite mostra ogni dispositivo una sola volta.
+
+### Corretto
+- Host desktop 1.13.0: con "Predefinito di sistema" lo stream audio veniva chiuso e riaperto ogni 4 secondi a riposo (click, code dei suoni troncate, primi colpi persi). Ora su Windows si legge solo l'uscita predefinita del sistema e l'audio si riapre solo quando cambia davvero.
+
 ## [1.13.0] - 2026-11-18
 
 ### Aggiunto

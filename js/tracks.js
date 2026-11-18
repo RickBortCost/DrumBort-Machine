@@ -87,12 +87,16 @@ export function initTracksView(app, root, COLORS) {
         <button class="tv-ms${p.mute ? ' on' : ''}" data-ms="mute" aria-label="Mute">M</button>
         <button class="tv-ms${p.solo ? ' on solo' : ''}" data-ms="solo" aria-label="Solo">S</button>
         <button class="tv-x" data-rm aria-label="Togli la traccia">×</button>
+        <div class="tv-mix">${app.mixHTML(i, p)}</div>
       </div>`;
       html += `<div class="tv-lane" data-i="${i}" style="--tc:${COLORS[i]}; width:${W}px">${regions(i).map((r) => `
         <div class="tv-reg${selReg && selReg.i === i && selReg.b0 === r.b0 ? ' sel' : ''}" data-i="${i}" data-b0="${r.b0}" data-b1="${r.b1}" style="left:${r.b0 * BW}px; width:${(r.b1 - r.b0 + 1) * BW - 2}px">
           <span class="tv-rn">P${r.slot + 1}</span><canvas width="${(r.b1 - r.b0 + 1) * BW}" height="26"></canvas><i class="tv-rz" title="Trascina per allungare"></i>
         </div>`).join('')}</div>`;
     }
+    // Master in fondo, come l'ultima traccia di una DAW
+    if (act.length) html += `<div class="tv-hdr tv-master" style="--tc:#d9d2bd"><span class="tv-ico">◆</span><span class="tv-name"><b>MASTER</b><i>Uscita principale</i></span>
+        <div class="tv-mix">${app.mixHTML('m')}</div></div><div class="tv-lane-m" style="width:${W}px"></div>`;
     if (!act.length) html += `<div class="tv-empty">Nessuna traccia. Premi <b>＋ TRACCIA</b> per aggiungere un canale di batteria o un synth.</div>`;
     html += `<div class="tv-ph" id="tvPh" hidden></div></div></div>`;
     const keep = $('#tvScroll', root) ? [$('#tvScroll', root).scrollLeft, $('#tvScroll', root).scrollTop] : [0, 0];
@@ -177,7 +181,8 @@ export function initTracksView(app, root, COLORS) {
 
   root.addEventListener('click', (e) => {
     if (e.target.closest('#tvAdd')) { addMenu(e.target.closest('#tvAdd')); return; }
-    const hdr = e.target.closest('.tv-hdr');
+    if (e.target.closest('.tv-mix')) return;           // volume e pan: gestiti da studio.js
+    const hdr = e.target.closest('.tv-hdr:not(.tv-master)');
     if (hdr) {
       const i = +hdr.dataset.i;
       const ms = e.target.closest('[data-ms]');

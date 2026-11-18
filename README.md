@@ -49,9 +49,9 @@ Aspetto da workstation: pannelli ardesia con accenti arancio e verdi (colori isp
 Su computer (finestra di almeno 1000×600) l'app si apre nel layout **Studio**, pensato per mouse e tastiera. Un nuovo progetto è **vuoto**, senza preset né groove (`?demo` nell'indirizzo carica i groove dimostrativi).
 
 - **Vista TRACCE** (predefinita, stile Logic Pro): tracce attive in colonna a sinistra (colore, nome, M/S, ×), timeline a battute a destra. **＋ TRACCIA** aggiunge una voce di batteria o un synth; nella timeline clic+trascina crea una regione, si sposta trascinando, il bordo destro la allunga, clic destro o Canc la elimina. Il righello fissa il punto di partenza.
-- **Pannelli nascondibili**: ◧ browser (**B**), ◨ pannello laterale (**I**), ▤ MIXER. Clic sull'intestazione di una traccia → in basso i suoi **effetti**; clic su una regione → le sue **note** (pulsanti FX / NOTE).
+- **Pannelli nascondibili**: ◧ browser (**B**), ◨ pannello laterale (**I**). Clic sull'intestazione di una traccia → in basso i suoi **effetti**; clic su una regione → le sue **note** (pulsanti FX / NOTE).
 - **Catena di effetti** stile device: un riquadro per effetto (Strumento/Voce, Drive, Bit crush, EQ con curva, Filtro con curva, Compressore, Mandate, Mixer), ognuno con interruttore e manopole (trascina in verticale, Shift = fine, rotella, frecce, doppio clic = valore iniziale). La barra inferiore si **ridimensiona** trascinandone il bordo superiore (doppio clic: altezza iniziale).
-- **Uscita audio** (Menu → 🎧 Uscita audio): scelta del dispositivo (cuffie, casse, interfaccia). Con l'host desktop l'elenco è quello della scheda audio del PC; "Predefinito di sistema" segue automaticamente il dispositivo predefinito, per esempio quando si collegano le cuffie.
+- **Uscita audio** (Menu → 🎧 Uscita audio): scelta del dispositivo (cuffie, casse, interfaccia). Con l'host desktop l'elenco è quello della scheda audio del PC; "Predefinito di sistema" segue automaticamente il dispositivo predefinito di Windows, per esempio quando si collegano le cuffie (su macOS e Linux: RILEGGI DISPOSITIVI).
 
 Le viste **SESSION** e **GRIGLIA** restano come *session view*:
 
@@ -60,7 +60,8 @@ Le viste **SESSION** e **GRIGLIA** restano come *session view*:
 - **Follow action** per scena (colonna FOLLOW): dopo N battute lancia la scena successiva, precedente, la prima, una casuale, un'altra o ferma tutto.
 - **Arrangement** (pulsante ARRANGE o **Tab**): timeline tracce × battute. **● REC ARR** registra i lanci della session battuta per battuta; **▶ ARR** riproduce l'arrangiamento (un lancio manuale torna alla session, come in Live). Le celle si dipingono con il pattern selezionato (trascinando), la riga TEMPO sceglie il pattern che dà tempo e swing, il righello fissa il punto di partenza; + BAR, − BAR, ×2, DA SONG (converte la catena del song mode), SVUOTA.
 - **Editor** (sotto le clip): la griglia step della batteria o le corsie note del synth per la clip selezionata.
-- **Parametri e pad** (destra), **mixer** (in basso) con fader, pan, mandate, mute/solo e indicatori di livello.
+- **Mix dentro le tracce** (come in Live, senza barra del mixer): ogni traccia ha volume, pan e indicatore di livello nell'intestazione (vista TRACCE) o sotto la colonna (SESSION); il MASTER è l'ultima riga. Doppio clic: volume 80, pan al centro. Mandate e altri parametri nel device MIXER della catena di effetti.
+- **Parametri e pad** (destra).
 - **Clip lunghe** (1, 2 o 4 battute), **automazione** disegnabile per step (∿ AUTO o **A**), **effetti per traccia** (filtro, EQ, compressore, drive, crush) e **4 macro** (◎ MACRO o **M**); export degli **stem** (Menu → Stem WAV).
 - **Piano roll** delle tracce synth (ROLL o **P**) e **tastiera del computer come tastiera musicale** (⌨: A–L note, W E T Y U O P diesis, Z/X ottava).
 - Tastiera: **1-8** lanciano le scene, **.** ferma tutto, **Tab** session/arrangement, **W** synth wavetable, **Spazio** play/stop, **Ctrl/Cmd+Z** annulla.
@@ -212,7 +213,7 @@ js/remote.js            controllo remoto tramite l'host desktop (WebSocket)
 js/lab.js               Sound Lab (telefono): synth, designer batteria, invio al PC
 desktop/                host desktop C#: motore audio nativo, server, sincronizzazione
 tools/export-dsp.mjs    esporta kit e preset per il motore desktop
-js/studio.js            layout Studio: browser, clip, mixer, pannelli
+js/studio.js            layout Studio: browser, clip, mix nelle tracce, pannelli
 js/tracks.js            vista TRACCE (tracce in colonna e timeline)
 js/fxchain.js           catena di effetti della traccia selezionata
 js/audioout.js          scelta del dispositivo di uscita audio

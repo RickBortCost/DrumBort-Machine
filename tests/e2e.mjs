@@ -529,8 +529,10 @@ async function studioTests(browser, url) {
   check('Studio senza scroll', L.sw <= 1440 && L.sh <= 900, `${L.sw}×${L.sh}`);
 
   // Vista TRACCE predefinita (stile Logic): tracce attive del progetto dimostrativo
-  const tv = await page.evaluate(() => [!document.querySelector('#sxTracks').hidden, document.querySelectorAll('.tv-hdr').length, drumbort.state.tracks.length]);
+  const tv = await page.evaluate(() => [!document.querySelector('#sxTracks').hidden, document.querySelectorAll('.tv-hdr:not(.tv-master)').length, drumbort.state.tracks.length]);
   check('vista TRACCE predefinita con le tracce attive', tv[0] && tv[1] === tv[2] && tv[2] > 0, JSON.stringify(tv));
+  const tmx = await page.evaluate(() => [document.querySelectorAll('.tv-hdr:not(.tv-master) [data-mx="vol"]').length, document.querySelectorAll('.tv-master [data-mx="master"]').length]);
+  check('volume e pan in ogni traccia, master in fondo', tmx[0] === tv[2] && tmx[1] === 1, JSON.stringify(tmx));
   // Pannelli nascondibili e barra degli effetti della traccia selezionata
   await page.click('#sxBrowser'); await page.click('#sxSide');
   await page.click('.tv-hdr[data-i="1"] .tv-name');
@@ -580,12 +582,13 @@ async function studioTests(browser, url) {
   const pk = await page.evaluate(() => [drumbort.state.slot, drumbort.ui.view, drumbort.ui.ssel]);
   check('selezione clip apre l\'editor giusto', pk[0] === 4 && pk[1] === 'synth' && pk[2] === 1, pk.join(' '));
 
-  // Mixer e livelli
-  await page.evaluate(() => { const f = document.querySelector('.mx-strip[data-i="1"] [data-p="vol"]'); f.value = 0.3; f.dispatchEvent(new Event('input', { bubbles: true })); });
-  const vol = await page.evaluate(() => { const m = drumbort.state.session.map[1], s = m >= 0 ? m : drumbort.state.session.master; return drumbort.state.slots[s].tracks[1].vol; });
-  check('fader del mixer', vol === 0.3, `${vol}`);
+  // Mix dentro le tracce (niente barra del mixer): volume nella colonna della session e livelli
+  const mixHidden = await page.evaluate(() => document.querySelector('#mixer').offsetParent === null && !document.querySelector('#sxMixer'));
+  await page.evaluate(() => { const f = document.querySelector('[data-mxcol="1"] [data-mx="vol"]'); f.value = 0.3; f.dispatchEvent(new Event('input', { bubbles: true })); });
+  const vol = await page.evaluate(() => drumbort.state.slots.every((s) => s.tracks[1].vol === 0.3));
+  check('volume nella traccia, barra del mixer rimossa', vol && mixHidden, JSON.stringify([vol, mixHidden]));
   await page.waitForTimeout(500);
-  check('indicatori di livello attivi', await page.evaluate(() => [...document.querySelectorAll('.mx-meter i')].some((e) => /scaleY\((0\.0[1-9]|0\.[1-9]|1)/.test(e.style.transform))));
+  check('indicatori di livello nelle tracce', await page.evaluate(() => [...document.querySelectorAll('#session [data-meter] i')].some((e) => /scaleX\((0\.0[1-9]|0\.[1-9]|1)/.test(e.style.transform))));
 
   // Browser
   await page.fill('#bwSearch', 'supersaw');

@@ -26,7 +26,6 @@ export function initStudio(app) {
   let active = false;
   let selTrack = 0;        // traccia selezionata (0-11)
   let view = 'tracks';     // 'tracks' (predefinita, stile Logic) | 'session' | 'arrange' (Tab)
-  ui.mixerOn = false;      // nella vista TRACCE il mixer si apre a richiesta
 
   const isSynth = (i) => i >= DRUM_TRACKS;
   const trackName = (i, p = app.pat()) => (isSynth(i) ? SYNTH_TRACKS[i - DRUM_TRACKS].name : app.kitOf(p).tracks[i].name);
@@ -50,7 +49,6 @@ export function initStudio(app) {
       <button id="arrRec" class="btn sm" aria-pressed="false" title="Registra i lanci della session nell'arrangiamento">● REC ARR</button>
       <button id="sxAuto" class="btn sm" title="Automazione della clip selezionata (A)">∿ AUTO</button>
       <button id="sxMacro" class="btn sm" title="Macro (M)">◎ MACRO</button>
-      <button id="sxMixer" class="btn sm" aria-pressed="false" title="Mostra il mixer">▤ MIXER</button>
       <div class="seg sx-bottom" role="group" aria-label="Pannello in basso">
         <button class="btn sm" data-bottom="fx" title="Effetti della traccia selezionata">FX</button>
         <button class="btn sm" data-bottom="editor" title="Note della traccia selezionata">NOTE</button>
@@ -93,6 +91,10 @@ export function initStudio(app) {
     html += '<div class="sx-row sx-foot"><div class="sx-rh"></div>';
     for (let i = 0; i < SESSION_TRACKS; i++) html += `<button class="sx-stop" data-stop="${i}" aria-label="Ferma traccia">■</button>`;
     html += '<button class="sx-stopall" data-stopall aria-label="Ferma tutte le clip">■ STOP</button><div></div></div>';
+    // Volume e pan sotto ogni colonna (come il mixer della session view di Live)
+    html += '<div class="sx-row sx-mixrow"><div class="sx-rh">MIX</div>';
+    for (let i = 0; i < SESSION_TRACKS; i++) html += `<div class="sx-mx" data-mxcol="${i}" style="--tc:${COLORS[i]}"></div>`;
+    html += '<div class="sx-mx sx-mxm" data-mxcol="m"></div><div></div></div>';
     grid.innerHTML = html;
   }
 
@@ -152,7 +154,7 @@ export function initStudio(app) {
     if (f === undefined) return;
     const fo = state.session.follow[+f];
     if (t.dataset.fa !== undefined) fo.a = t.value; else fo.n = +t.value;
-    app.save(); renderSession();
+    app.save(); renderSession(); renderSessionMix();
   });
 
   // ===================================================================
@@ -171,8 +173,7 @@ export function initStudio(app) {
     applyPanels();
     // Vista TRACCE: niente controlli da session; il mixer si apre con ▤ MIXER
     panel.dataset.view = view;
-    document.getElementById('app').classList.toggle('mixer-off', view === 'tracks' && !ui.mixerOn);
-    app.setToggle($('#sxMixer'), view !== 'tracks' || ui.mixerOn);
+    document.getElementById('app').classList.add('mixer-off');   // volumi nelle tracce, niente barra del mixer
   }
   panel.querySelector('.sx-tool').addEventListener('click', (e) => {
     const v = e.target.closest('[data-sxv]');
@@ -182,7 +183,6 @@ export function initStudio(app) {
     if (e.target.closest('#sxSide')) { togglePanel('side'); return; }
     const bt = e.target.closest('[data-bottom]');
     if (bt) { setBottom(bt.dataset.bottom); return; }
-    if (e.target.closest('#sxMixer')) { ui.mixerOn = !ui.mixerOn; if (view !== 'tracks') ui.mixerOn = true; renderTool(); return; }
     if (e.target.closest('#sxMacro')) { app.openMacros(); return; }
     if (e.target.closest('#sxAuto')) { app.openAuto(selTrack < DRUM_TRACKS ? `d${selTrack}.vol` : `s${selTrack - DRUM_TRACKS}.cut`); return; }
     if (e.target.closest('#arrRec')) {
@@ -194,9 +194,65 @@ export function initStudio(app) {
   function setView(v) {
     view = v;
     renderTool();
-    if (v === 'arrange') renderArr(); else if (v === 'tracks') tracks.render(); else renderSession();
+    if (v === 'arrange') renderArr(); else if (v === 'tracks') tracks.render(); else renderSession(); renderSessionMix();
   }
-  const tracks = initTracksView({ ...app, openLibrary: () => app.openLibrary(), setBottom: (m) => setBottom(m) }, $('#sxTracks'), COLORS);
+  // ===================================================================
+  // Volume, pan e livello dentro ogni traccia (vista TRACCE e colonne della SESSION)
+  // ===================================================================
+  const trOf = (p, i) => (isSynth(i) ? p.synth.tracks[i - DRUM_TRACKS] : p.tracks[i]);
+  const volTxt = (v) => (v <= 0.001 ? '−∞' : `${Math.round(v * 100)}`);
+  const panTxt = (v) => (Math.abs(v) < 0.03 ? 'C' : (v < 0 ? 'L' : 'R') + Math.round(Math.abs(v) * 100));
+  /** Controlli di mix di una traccia (i) o del master ('m'). */
+  function mixHTML(i, tr) {
+    if (i === 'm') {
+      const v = state.fx.master;
+      return `<span class="mxi-meter" data-meter="m"><i></i></span>
+        <input class="mxi-vol" type="range" min="0" max="1" step="0.01" value="${v}" data-mx="master" aria-label="Volume master">
+        <output class="mxi-o" data-mxo="master">${volTxt(v)}</output>`;
+    }
+    tr = tr || trOf(state.slots[state.slot], i);
+    return `<span class="mxi-meter" data-meter="${i}"><i></i></span>
+      <input class="mxi-vol" type="range" min="0" max="1" step="0.01" value="${tr.vol}" data-mx="vol" data-mi="${i}" aria-label="Volume ${trackShort(i)}">
+      <output class="mxi-o" data-mxo="vol">${volTxt(tr.vol)}</output>
+      <input class="mxi-pan" type="range" min="-1" max="1" step="0.05" value="${tr.pan || 0}" data-mx="pan" data-mi="${i}" aria-label="Pan ${trackShort(i)}" title="Pan (doppio clic: centro)">
+      <output class="mxi-o pan" data-mxo="pan">${panTxt(tr.pan || 0)}</output>`;
+  }
+  function renderSessionMix() {
+    $$('[data-mxcol]', grid).forEach((el) => {
+      const c = el.dataset.mxcol;
+      el.innerHTML = c === 'm' ? mixHTML('m') : mixHTML(+c);
+    });
+  }
+  function setMix(inp, v) {
+    const k = inp.dataset.mx;
+    if (k === 'master') { state.fx.master = v; engine.setFx({ master: v }, null); }
+    else {
+      const i = +inp.dataset.mi;
+      state.slots.forEach((p) => { trOf(p, i)[k] = v; });
+      engine.setChannel(channel(i), trOf(state.slots[state.slot], i));
+    }
+    inp.value = v;
+    const o = inp.nextElementSibling;
+    if (o && o.matches('.mxi-o')) o.textContent = k === 'pan' ? panTxt(v) : volTxt(v);
+  }
+  panel.addEventListener('pointerdown', (e) => { if (e.target.matches('[data-mx]')) app.snapshot(); }, true);
+  panel.addEventListener('input', (e) => {
+    if (!e.target.matches('[data-mx]')) return;
+    setMix(e.target, +e.target.value);
+    app.save();
+  });
+  panel.addEventListener('change', (e) => {
+    if (e.target.matches('[data-mx]') && state.panels.bottom === 'fx') renderFx();   // allinea il device MIXER
+  });
+  panel.addEventListener('dblclick', (e) => {
+    const inp = e.target.closest('[data-mx]');
+    if (!inp) return;
+    app.snapshot();
+    setMix(inp, inp.dataset.mx === 'pan' ? 0 : 0.8);
+    app.save();
+  });
+
+  const tracks = initTracksView({ ...app, mixHTML, openLibrary: () => app.openLibrary(), setBottom: (m) => setBottom(m) }, $('#sxTracks'), COLORS);
 
   // ===================================================================
   // Pannelli: browser e pannello laterale nascondibili; in basso effetti o note
@@ -212,7 +268,7 @@ export function initStudio(app) {
     $$('[data-bottom]', panel).forEach((b) => app.setToggle(b, b.dataset.bottom === P.bottom));
     if (P.bottom === 'fx') renderFx();
   }
-  function togglePanel(k) { state.panels[k] = !state.panels[k]; applyPanels(); app.save(); }
+  function togglePanel(k) { state.panels[k] = !state.panels[k]; applyPanels(); app.save(); if (view === 'tracks') requestAnimationFrame(() => tracks.render()); }
   function setBottom(m) { state.panels.bottom = m; applyPanels(); app.save(); }
   document.addEventListener('keydown', (e) => {
     if (!active || e.ctrlKey || e.metaKey || e.altKey || e.target.closest('input, select, textarea') || (app.kbActive && app.kbActive())) return;
@@ -464,6 +520,11 @@ export function initStudio(app) {
         peaks[j] = Math.max(lv, peaks[j] * 0.9);
         if (bars[j]) bars[j].style.transform = `scaleY(${peaks[j].toFixed(3)})`;
       });
+      // Livelli dentro le tracce (barre orizzontali)
+      panel.querySelectorAll('[data-meter]').forEach((el) => {
+        const k = el.dataset.meter, j = k === 'm' ? SESSION_TRACKS : +k;
+        el.firstElementChild.style.transform = `scaleX(${peaks[j].toFixed(3)})`;
+      });
     }
     requestAnimationFrame(meterLoop);
   }
@@ -550,7 +611,7 @@ export function initStudio(app) {
       if (!active) return;
       selTrack = ui.view === 'synth' ? DRUM_TRACKS + (ui.ssel || 0) : state.sel;
       renderTool();
-      if (view === 'arrange') renderArr(); else if (view === 'tracks') tracks.render(); else renderSession();
+      if (view === 'arrange') renderArr(); else if (view === 'tracks') tracks.render(); else renderSession(); renderSessionMix();
       renderMixer();
       renderBrowser();
       if (state.panels && state.panels.bottom === 'fx') renderFx();

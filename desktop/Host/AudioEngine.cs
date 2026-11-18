@@ -18,7 +18,8 @@ public sealed class AudioEngine : IDisposable
     public readonly Sequencer Seq;
     readonly ConcurrentQueue<Action> inbox = new();
     readonly float[] ringL, ringR;
-    readonly int capacity;
+    int capacity;                  // frame bufferizzati (latenza); il ring è più grande per poterla alzare
+    readonly int baseCapacity;
     long written, read;            // contatori di frame (scrittura: render, lettura: callback)
     readonly AutoResetEvent wake = new(false);
     Thread? thread;
@@ -37,8 +38,8 @@ public sealed class AudioEngine : IDisposable
         Mx = new Mixer(Ctx);
         if (Environment.GetEnvironmentVariable("DRUMBORT_NOCACHE") != "1") Mx.Cache = new VoiceCache(sampleRate);
         Seq = new Sequencer(Mx);
-        capacity = Math.Max(AudioContext.Block * 2, bufferFrames);
-        ringL = new float[capacity * 2]; ringR = new float[capacity * 2];
+        capacity = baseCapacity = Math.Max(AudioContext.Block * 2, bufferFrames);
+        ringL = new float[Math.Max(capacity, 2048) * 2]; ringR = new float[Math.Max(capacity, 2048) * 2];
     }
 
     /// <summary>Esegue un'azione sul thread audio prima del prossimo blocco.</summary>
@@ -113,40 +114,81 @@ public sealed class AudioEngine : IDisposable
     // Uscita audio: scelta del dispositivo e cambio a caldo
     // =================================================================
     readonly object paLock = new();
-    int wantDevice = -1;                 // −1 = segue il dispositivo predefinito del sistema
     string? wantName;                    // dispositivo scelto (per nome: gli indici cambiano)
     public string CurrentDevice { get; private set; } = "";
     public bool FollowDefault => wantName == null;
-    long lastActivity = Environment.TickCount64;
     /// <summary>Notifica di cambio uscita (per i dispositivi collegati).</summary>
     public event Action<string>? DeviceChanged;
     Timer? watch;
 
-    /// <summary>Attività dal vivo (pad, note): il controllo del dispositivo predefinito aspetta.</summary>
-    public void Touch() => lastActivity = Environment.TickCount64;
+
+    /// <summary>API host usata: WASAPI su Windows (latenza bassa e stabile), altrimenti quella predefinita.</summary>
+    int HostApi() => OperatingSystem.IsWindows() && !noWasapi ? PaHost.Index(PaHost.WASAPI) : -1;
+    bool noWasapi;                       // WASAPI non ha aperto l'uscita: si usa l'API predefinita (MME)
+
+    /// <summary>Uscite stereo dell'API host in uso (su Windows ogni dispositivo compare una volta sola).</summary>
+    IEnumerable<int> Outputs()
+    {
+        int api = HostApi();
+        for (int i = 0; i < PortAudio.DeviceCount; i++)
+        {
+            var d = PortAudio.GetDeviceInfo(i);
+            if (d.maxOutputChannels >= 2 && (api < 0 || d.hostApi == api)) yield return i;
+        }
+    }
+    int DefaultOut()
+    {
+        int api = HostApi();
+        int d = api >= 0 ? PaHost.DefaultOutput(api) : -1;
+        return d >= 0 ? d : PortAudio.DefaultOutputDevice;
+    }
 
     void OpenStream()
     {
+        try { OpenOn(HostApi()); }
+        catch (Exception e) when (HostApi() >= 0)
+        {
+            // WASAPI rifiuta il formato o il dispositivo: si ripiega sull'API predefinita
+            Console.Error.WriteLine($"[audio] WASAPI: {e.Message} — uso l'API predefinita");
+            noWasapi = true;
+            OpenOn(-1);
+        }
+    }
+
+    void OpenOn(int api)
+    {
         int dev = -1;
         if (wantName != null)
-            for (int i = 0; i < PortAudio.DeviceCount; i++)
-            {
-                var d = PortAudio.GetDeviceInfo(i);
-                if (d.maxOutputChannels >= 2 && d.name == wantName) { dev = i; break; }
-            }
-        if (dev < 0) dev = PortAudio.DefaultOutputDevice;
-        if (dev == PortAudio.NoDevice) throw new InvalidOperationException("Nessun dispositivo audio di uscita");
+            foreach (int i in Outputs())
+                if (SameName(PortAudio.GetDeviceInfo(i).name, wantName)) { dev = i; break; }
+        if (dev < 0) dev = DefaultOut();
+        if (dev == PortAudio.NoDevice || dev < 0) throw new InvalidOperationException("Nessun dispositivo audio di uscita");
         var info = PortAudio.GetDeviceInfo(dev);
-        var p = new StreamParameters
+        bool wasapi = api >= 0 && info.hostApi == api;
+        // MME chiama la callback a raffiche: serve più margine nel buffer di rendering
+        capacity = OperatingSystem.IsWindows() && !wasapi ? Math.Max(baseCapacity, 2048) : baseCapacity;
+        IntPtr extra = wasapi ? PaHost.WasapiInfo() : IntPtr.Zero;
+        try
         {
-            device = dev, channelCount = 2, sampleFormat = SampleFormat.Float32,
-            suggestedLatency = info.defaultLowOutputLatency, hostApiSpecificStreamInfo = IntPtr.Zero,
-        };
-        stream = new PaStream(null, p, Ctx.SampleRate, 256, StreamFlags.ClipOff, Callback, null!);
-        stream.Start();
+            // Latenza: almeno 20 ms (WASAPI) o quella "alta" del driver (MME/DirectSound) per evitare crepitii
+            double lat = wasapi ? Math.Max(0.02, info.defaultLowOutputLatency)
+                : OperatingSystem.IsWindows() ? info.defaultHighOutputLatency : info.defaultLowOutputLatency;
+            var p = new StreamParameters
+            {
+                device = dev, channelCount = 2, sampleFormat = SampleFormat.Float32,
+                suggestedLatency = lat, hostApiSpecificStreamInfo = extra,
+            };
+            stream = new PaStream(null, p, Ctx.SampleRate, wasapi ? 0u : 256u, StreamFlags.ClipOff, Callback, null!);
+            stream.Start();
+        }
+        catch { try { stream?.Dispose(); } catch { } stream = null; throw; }
+        finally { if (extra != IntPtr.Zero) Marshal.FreeHGlobal(extra); }
         CurrentDevice = info.name;
-        Console.WriteLine($"Audio: {info.name} · {Ctx.SampleRate} Hz · buffer {capacity} frame ({1000.0 * capacity / Ctx.SampleRate:0} ms)");
+        Console.WriteLine($"Audio: {info.name}{(wasapi ? " · WASAPI" : "")} · {Ctx.SampleRate} Hz · buffer {capacity} frame ({1000.0 * capacity / Ctx.SampleRate:0} ms)");
     }
+
+    /// <summary>MME tronca i nomi a 31 caratteri: un nome salvato da un'altra API resta riconoscibile.</summary>
+    static bool SameName(string a, string b) => a == b || (Math.Min(a.Length, b.Length) >= 31 && (a.StartsWith(b) || b.StartsWith(a)));
 
     /// <summary>Chiude e riapre PortAudio (rilegge i dispositivi collegati nel frattempo) e l'uscita.</summary>
     void Reopen()
@@ -157,6 +199,7 @@ public sealed class AudioEngine : IDisposable
             stream = null;
             try { PortAudio.Terminate(); } catch { }
             PortAudio.Initialize();
+            noWasapi = false;
             OpenStream();
         }
         DeviceChanged?.Invoke(CurrentDevice);
@@ -168,11 +211,10 @@ public sealed class AudioEngine : IDisposable
         lock (paLock)
         {
             var list = new List<(int, string, string, bool)>();
-            int def = PortAudio.DefaultOutputDevice;
-            for (int i = 0; i < PortAudio.DeviceCount; i++)
+            int def = DefaultOut();
+            foreach (int i in Outputs())
             {
                 var d = PortAudio.GetDeviceInfo(i);
-                if (d.maxOutputChannels < 2) continue;
                 list.Add((i, d.name, $"API {d.hostApi}", i == def));
             }
             return list;
@@ -200,35 +242,24 @@ public sealed class AudioEngine : IDisposable
         if (device >= 0) wantName = PortAudio.GetDeviceInfo(device).name;
         else { var saved = Settings.Load("device"); wantName = string.IsNullOrEmpty(saved) ? null : saved; }
         lock (paLock) OpenStream();
-        // Segue il dispositivo predefinito (cuffie collegate/scollegate): controlla a riposo ogni 4 s
-        watch = new Timer(_ => CheckDefault(), null, 4000, 4000);
+        // Windows: segue il dispositivo predefinito (cuffie collegate/scollegate). Si legge solo l'id
+        // dell'uscita predefinita (nessun effetto sull'audio) e si riapre lo stream solo se cambia.
+        lastDefault = PaHost.WindowsDefaultId();
+        if (lastDefault != null) watch = new Timer(_ => CheckDefault(), null, 2000, 2000);
     }
 
+    string? lastDefault;
     void CheckDefault()
     {
-        if (!running || !FollowDefault || Seq.Playing || Environment.TickCount64 - lastActivity < 5000) return;
+        if (!running) return;
+        var now = PaHost.WindowsDefaultId();
+        if (now == null || now == lastDefault) return;
+        lastDefault = now;
+        if (!FollowDefault) return;
         try
         {
-            string? now;
-            lock (paLock)
-            {
-                // PortAudio aggiorna l'elenco solo dopo una nuova inizializzazione: si apre una sessione
-                // separata solo per leggere il nome del predefinito
-                PortAudio.Terminate(); PortAudio.Initialize();
-                int def = PortAudio.DefaultOutputDevice;
-                now = def == PortAudio.NoDevice ? null : PortAudio.GetDeviceInfo(def).name;
-                if (now == null || now == CurrentDevice)
-                {
-                    // Stessa uscita: si riapre lo stream (la terminazione l'ha chiuso)
-                    try { stream?.Dispose(); } catch { }
-                    OpenStream();
-                    return;
-                }
-                try { stream?.Dispose(); } catch { }
-                OpenStream();
-            }
-            Console.WriteLine($"Uscita audio cambiata: {CurrentDevice}");
-            DeviceChanged?.Invoke(CurrentDevice);
+            Console.WriteLine("Uscita predefinita di Windows cambiata: riapro l'audio");
+            Reopen();
         }
         catch (Exception e) { Console.Error.WriteLine($"[audio] {e.Message}"); }
     }

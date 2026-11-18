@@ -24,6 +24,10 @@ jobs:
   release:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    outputs:
+      created: ${{ steps.v.outputs.exists == 'false' }}
+      version: ${{ steps.v.outputs.version }}
+      ref: ${{ steps.v.outputs.ref }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -70,3 +74,23 @@ jobs:
           V: ${{ steps.v.outputs.version }}
           REF: ${{ steps.v.outputs.ref }}
         run: gh release create "v$V" --target "$REF" --title "v$V" --notes-file notes.md
+
+  # Host desktop: test, pacchetti per Windows/macOS/Linux, allegati alla release appena creata
+  desktop:
+    needs: release
+    if: needs.release.outputs.created == 'true'
+    uses: ./.github/workflows/desktop.yml
+
+  attach:
+    needs: [release, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: DrumBortHost-*
+          merge-multiple: true
+      - name: Upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ needs.release.outputs.version }}
+        run: gh release upload "v$V" DrumBortHost-*.zip --repo "$GITHUB_REPOSITORY" --clobber

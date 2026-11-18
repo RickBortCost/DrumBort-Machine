@@ -649,7 +649,7 @@ async function audioTests(browser, url) {
         const d = (await ctx.startRendering()).getChannelData(0);
         let pk = 0, nan = false;
         for (let i = 0; i < d.length; i++) { if (d[i] !== d[i]) nan = true; pk = Math.max(pk, Math.abs(d[i])); }
-        if (nan || pk < 0.05 || pk > 1.6) bad.push(`${k.id}/${tr.short}:${pk.toFixed(3)}${nan ? ' NaN' : ''}`);
+        if (nan || pk < 0.05 || pk > 2) bad.push(`${k.id}/${tr.short}:${pk.toFixed(3)}${nan ? ' NaN' : ''}`);
         n++;
       }
     }

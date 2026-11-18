@@ -88,8 +88,12 @@ function driveCurve(amount) {
 // Voci parametriche
 // =====================================================================
 
+/** Factory con la propria descrizione (`spec`): serve al motore desktop (desktop/, kits.json). */
+const withSpec = (type, factory) => (o = {}) => Object.assign(factory(o), { spec: { type, o } });
+
+
 /** Cassa: sinusoide con pitch-sweep esponenziale, click e drive opzionali. */
-export const kick = ({ start = 150, end = 50, sweep = 0.05, decay = 0.5, click = 0, drive = 0,
+export const kick = withSpec('kick', ({ start = 150, end = 50, sweep = 0.05, decay = 0.5, click = 0, drive = 0,
   noise = 0, noiseFreq = 1500, type = 'sine', level = 1 } = {}) =>
   (ctx, out, t, v, p) => {
     const k = ratio(p), dur = decay * dmul(p);
@@ -112,10 +116,10 @@ export const kick = ({ start = 150, end = 50, sweep = 0.05, decay = 0.5, click =
       noiseSrc(ctx, t, dur).connect(filt(ctx, 'bandpass', noiseFreq, 1)).connect(g);
     }
     return amp;
-  };
+  });
 
 /** Rullante: corpo tonale (1-2 oscillatori con leggero drop) + rumore filtrato. */
-export const snare = ({ tones = [180, 330], oscType = 'triangle', drop = 1.4, sweep = 0.03,
+export const snare = withSpec('snare', ({ tones = [180, 330], oscType = 'triangle', drop = 1.4, sweep = 0.03,
   toneDecay = 0.12, toneLevel = 0.6, nType = 'highpass', nFreq = 1800, nQ = 0.7,
   nDecay = 0.18, noiseLevel = 0.7 } = {}) =>
   (ctx, out, t, v, p) => {
@@ -131,10 +135,10 @@ export const snare = ({ tones = [180, 330], oscType = 'triangle', drop = 1.4, sw
     const ng = vca(ctx, bus, t, v * noiseLevel, nDecay * d);
     noiseSrc(ctx, t, nDecay * d).connect(filt(ctx, nType, nFreq * k, nQ)).connect(ng);
     return bus;
-  };
+  });
 
 /** Clap (e guiro): raffiche di rumore band-pass + coda. */
-export const clap = ({ freq = 1100, q = 1.2, bursts = 3, spacing = 0.011, burstDecay = 0.008,
+export const clap = withSpec('clap', ({ freq = 1100, q = 1.2, bursts = 3, spacing = 0.011, burstDecay = 0.008,
   tail = 0.18, level = 0.9 } = {}) =>
   (ctx, out, t, v, p) => {
     const k = ratio(p), d = dmul(p);
@@ -151,10 +155,10 @@ export const clap = ({ freq = 1100, q = 1.2, bursts = 3, spacing = 0.011, burstD
     noiseSrc(ctx, t, bursts * spacing + tail * d)
       .connect(filt(ctx, 'bandpass', freq * k, q)).connect(g).connect(out);
     return g;
-  };
+  });
 
 /** Rimshot / clave / click: oscillatori brevissimi, opzionalmente filtrati. */
-export const rim = ({ freqs = [500, 1700], type = 'square', decay = 0.035, hp = 600,
+export const rim = withSpec('rim', ({ freqs = [500, 1700], type = 'square', decay = 0.035, hp = 600,
   level = 0.5 } = {}) =>
   (ctx, out, t, v, p) => {
     const k = ratio(p), dur = decay * dmul(p);
@@ -163,14 +167,14 @@ export const rim = ({ freqs = [500, 1700], type = 'square', decay = 0.035, hp = 
     if (hp) dest.connect(amp);
     for (const f of freqs) osc(ctx, type, f * k, t, dur).connect(dest);
     return amp;
-  };
+  });
 
 /** Frequenze inarmoniche "metalliche" (stile circuito hat/cymbal 808). */
 const METAL_808 = [205.3, 304.4, 369.6, 522.7, 540, 800];
 const METAL_909 = [245, 306.5, 365.8, 415.3, 437.9, 619.9];
 
 /** Hat / piatti: sei square inarmoniche → band-pass → high-pass (+ rumore). */
-export const metal = ({ freqs = METAL_808, mult = 1, bp = 10000, bpQ = 1, hp = 7000,
+export const metal = withSpec('metal', ({ freqs = METAL_808, mult = 1, bp = 10000, bpQ = 1, hp = 7000,
   decay = 0.06, level = 0.5, noise = 0, type = 'square', attack = 0.001 } = {}) =>
   (ctx, out, t, v, p) => {
     const k = ratio(p) * mult, dur = decay * dmul(p);
@@ -188,10 +192,10 @@ export const metal = ({ freqs = METAL_808, mult = 1, bp = 10000, bpQ = 1, hp = 7
       noiseSrc(ctx, t, dur).connect(ng).connect(b);
     }
     return amp;
-  };
+  });
 
 /** Tom / conga / bongo: oscillatore con pitch-sweep, rumore opzionale. */
-export const tom = ({ start = 200, end = 120, sweep = 0.15, decay = 0.4, type = 'sine',
+export const tom = withSpec('tom', ({ start = 200, end = 120, sweep = 0.15, decay = 0.4, type = 'sine',
   noise = 0, noiseFreq = 1200, level = 0.9 } = {}) =>
   (ctx, out, t, v, p) => {
     const k = ratio(p), dur = decay * dmul(p);
@@ -204,10 +208,10 @@ export const tom = ({ start = 200, end = 120, sweep = 0.15, decay = 0.4, type = 
       noiseSrc(ctx, t, dur).connect(filt(ctx, 'bandpass', noiseFreq * k, 0.9)).connect(g);
     }
     return amp;
-  };
+  });
 
 /** Cowbell: due square detunate → band-pass, inviluppo a due stadi. */
-export const cowbell = ({ freqs = [540, 800], bp = 2640, q = 1.2, decay = 0.35, level = 0.45 } = {}) =>
+export const cowbell = withSpec('cowbell', ({ freqs = [540, 800], bp = 2640, q = 1.2, decay = 0.35, level = 0.45 } = {}) =>
   (ctx, out, t, v, p) => {
     const k = ratio(p), dur = decay * dmul(p);
     const amp = ctx.createGain();
@@ -220,13 +224,13 @@ export const cowbell = ({ freqs = [540, 800], bp = 2640, q = 1.2, decay = 0.35, 
     f.connect(amp);
     for (const fr of freqs) osc(ctx, 'square', fr * k, t, dur + 0.03).connect(f);
     return amp;
-  };
+  });
 
 /**
  * Rumore filtrato con inviluppo e sweep del filtro: shaker, snap, riser, downlifter, crash,
  * "gunshot". Attacchi lunghi (riser) seguono anche il parametro decay.
  */
-export const noiseHit = ({ type = 'highpass', freq = 6000, q = 0.7, to = 0, attack = 0.001, decay = 0.1,
+export const noiseHit = withSpec('noiseHit', ({ type = 'highpass', freq = 6000, q = 0.7, to = 0, attack = 0.001, decay = 0.1,
   level = 0.6, drive = 0 } = {}) =>
   (ctx, out, t, v, p) => {
     const k = ratio(p), d = dmul(p);
@@ -243,13 +247,13 @@ export const noiseHit = ({ type = 'highpass', freq = 6000, q = 0.7, to = 0, atta
       src.connect(f).connect(amp);
     }
     return amp;
-  };
+  });
 
 /** Più voci sovrapposte nello stesso colpo (es. rullante + clap + coda di rumore). */
-export const layer = (...voices) => (ctx, out, t, v, p) => {
+export const layer = (...voices) => Object.assign((ctx, out, t, v, p) => {
   for (const vc of voices) vc(ctx, out, t, v, p);
   return out;
-};
+}, { spec: { type: 'layer', voices: voices.map((x) => x.spec) } });
 
 // =====================================================================
 // Libreria kit

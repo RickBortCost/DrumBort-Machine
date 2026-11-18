@@ -1,0 +1,72 @@
+name: Desktop host
+
+# Host desktop C# (desktop/): test del motore audio (confronto con la web app), test
+# end-to-end telefono ↔ PC, pacchetti self-contained per Windows, macOS e Linux.
+# Richiamato anche da release.yml per allegare i pacchetti alla GitHub Release.
+on:
+  push:
+    branches-ignore: [main]
+    paths: ['desktop/**', 'js/**', 'index.html', 'css/**', 'tools/**', 'tests/remote.mjs', 'tests/desktop-compare.mjs', '.github/workflows/desktop.yml']
+  pull_request:
+    paths: ['desktop/**', 'js/**', 'tools/**', '.github/workflows/desktop.yml']
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci && npx playwright install --with-deps chromium
+      - name: Asset del motore aggiornati
+        run: node tools/export-dsp.mjs --check
+      - name: Build
+        run: dotnet build desktop -c Release
+      - name: Motore C# vs web app (voci, compressore, riverbero)
+        run: |
+          ./desktop/bin/Release/net8.0/DrumBortHost --render-voices voices.json
+          node tests/desktop-compare.mjs voices.json
+      - name: Telefono ↔ PC (nativo e relay)
+        run: node tests/remote.mjs
+
+  package:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - { rid: win-x64, os: windows-latest }
+          - { rid: osx-arm64, os: macos-latest }
+          - { rid: osx-x64, os: macos-latest }
+          - { rid: linux-x64, os: ubuntu-latest }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Publish
+        shell: bash
+        run: |
+          dotnet publish desktop -c Release -r ${{ matrix.rid }} --self-contained true -o "out/DrumBortHost-${{ matrix.rid }}"
+          cp desktop/README.md "out/DrumBortHost-${{ matrix.rid }}/LEGGIMI.md"
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path "out/DrumBortHost-${{ matrix.rid }}" -DestinationPath "DrumBortHost-${{ matrix.rid }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DrumBortHost-${{ matrix.rid }}
+          path: DrumBortHost-${{ matrix.rid }}.zip
+          retention-days: 14

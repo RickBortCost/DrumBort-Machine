@@ -90,6 +90,7 @@ export class Engine {
     this.channels = [];
     this.fx = { ...DEFAULT_FX };
     this.bpm = 120;
+    this.silent = false;   // controller remoto: nessuna voce (l'audio lo produce il motore)
   }
 
   // -------------------------------------------------------------------
@@ -319,7 +320,7 @@ export class Engine {
   trigger(i, time, vel, p, voiceKit = null) {
     const kit = voiceKit || this.kit;          // session: ogni traccia può venire da un kit diverso
     const ctx = this.ctx;
-    if (!ctx) return;
+    if (!ctx || this.silent) return;
     const t = Math.max(time, ctx.currentTime);
 
     // Sidechain: la cassa abbassa i synth e li fa "respirare" a tempo
@@ -374,7 +375,7 @@ export class Engine {
 
   /** Pre-renderizza in background le voci del pattern: batteria (kit corrente) e note synth. */
   prewarm(pattern, kit = this.kit) {
-    if (!this.cache) return;
+    if (!this.cache || this.silent) return;
     pattern.tracks.forEach((tr, i) => { if (!this.samples[i]) this._prerenderDrum((pattern.kits && pattern.kits[i]) || kit, i, tr); });
     if (!pattern.synth) return;
     pattern.synth.tracks.forEach((tr, k) => {
@@ -439,6 +440,7 @@ export class Engine {
   playSynth(k, time, dur, notes, vel, tr, glideFrom = null) {
     const ctx = this.ctx;
     if (!ctx) return null;
+    if (this.silent) return { release() {}, kill() {} };
     const pr = presetOf(tr);
     if (!pr) return null;
     const t = Math.max(time, ctx.currentTime);
@@ -500,6 +502,7 @@ export class Engine {
   /** Click del metronomo (fuori dalla catena effetti). */
   click(time, accent) {
     const ctx = this.ctx;
+    if (this.silent) return;
     const o = ctx.createOscillator();
     const g = ctx.createGain();
     o.frequency.value = accent ? 1760 : 1175;

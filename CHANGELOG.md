@@ -2,6 +2,21 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.8.0] - 2026-11-18
+
+### Aggiunto
+- **DrumBort Host**, versione PC per Windows, macOS e Linux (`desktop/`, zip allegati alla Release):
+  - motore audio nativo C# con gli stessi suoni della web app: porting 1:1 di kit, synth sottrattivo/FM, piano, corde, organo e wavetable su un grafo audio compatibile con le API Web Audio;
+  - riverbero algoritmico tarato sull'originale e compressore master con la curva di Chrome;
+  - rendering su un thread dedicato con buffer ad anello verso PortAudio, voci pre-renderizzate in background;
+  - serve la web app sulla rete locale e stampa un QR code per il telefono.
+- **Telefono come controller**: con l'host il telefono (badge CTRL·C#) modifica il progetto e comanda trasporto, lanci di clip e scene, pad, note, beat repeat, fill, mute e filtro XY; l'audio esce dal PC. Modalità relay (`--mode browser`): l'audio lo produce il browser del PC.
+- Test in CI: confronto del motore C# con la web app (voci, compressore, riverbero) e test end-to-end telefono ↔ PC in modalità nativa e relay.
+
+### Modificato
+- Le voci dei kit portano la propria descrizione (`spec`), esportata in `desktop/Assets/kits.json` da `tools/export-dsp.mjs`; la CI verifica che sia aggiornata.
+- Le follow action casuali usano una sequenza deterministica, uguale su tutti i dispositivi collegati.
+
 ## [1.7.0] - 2026-11-18
 
 ### Aggiunto

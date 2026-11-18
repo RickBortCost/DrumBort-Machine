@@ -33,6 +33,7 @@ export function initPerformance(app) {
       (g.s || []).forEach((k) => seq.muteS.add(k));
     }
     $$('#muteGrid .btn').forEach((b) => app.setToggle(b, muted.has(b.dataset.g)));
+    if (app.remoteOp) app.remoteOp('mutes', { d: [...seq.muteD], s: [...seq.muteS] });
   }
   $('#muteGrid').addEventListener('click', (e) => {
     const b = e.target.closest('[data-g]');
@@ -48,9 +49,14 @@ export function initPerformance(app) {
     if (!b) return;
     e.preventDefault();
     seq.startStutter(+b.dataset.st);
+    if (app.remoteOp) app.remoteOp('stut', { len: +b.dataset.st });
     stutBtns.forEach((x) => x.classList.toggle('on', x === b));
   };
-  const stutUp = () => { seq.stopStutter(); stutBtns.forEach((x) => x.classList.remove('on')); };
+  const stutUp = () => {
+    seq.stopStutter();
+    if (app.remoteOp) app.remoteOp('stut', { len: 0 });
+    stutBtns.forEach((x) => x.classList.remove('on'));
+  };
   $('.perf .stut').addEventListener('pointerdown', stutDown);
   window.addEventListener('pointerup', () => { if (seq.stutter) stutUp(); });
   window.addEventListener('pointercancel', stutUp);
@@ -60,9 +66,15 @@ export function initPerformance(app) {
   fill.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     seq.fillPattern = fillPattern(seq.pattern);
+    if (app.remoteOp) app.remoteOp('fill', { on: true });
     fill.classList.add('on');
   });
-  const fillUp = () => { if (seq.fillPattern) { seq.fillPattern = null; fill.classList.remove('on'); } };
+  const fillUp = () => {
+    if (!seq.fillPattern) return;
+    seq.fillPattern = null;
+    if (app.remoteOp) app.remoteOp('fill', { on: false });
+    fill.classList.remove('on');
+  };
   window.addEventListener('pointerup', fillUp);
   window.addEventListener('pointercancel', fillUp);
 
@@ -77,7 +89,9 @@ export function initPerformance(app) {
     dot.style.transform = `translate(${x * r.width}px, ${y * r.height}px)`;
     const filter = x * 2 - 1;
     const res = 0.7 * Math.pow(18 / 0.7, 1 - y);
-    engine.setFx({ filter: Math.abs(filter) < 0.06 ? 0 : filter, res }, null);
+    const fxl = { filter: Math.abs(filter) < 0.06 ? 0 : filter, res };
+    engine.setFx(fxl, null);
+    if (app.remoteOp) app.remoteOp('fxl', { fx: fxl });
     xy.dataset.v = `${filter < -0.06 ? 'LP' : filter > 0.06 ? 'HP' : 'OFF'} ${Math.round(Math.abs(filter) * 100)} · Q ${res.toFixed(1)}`;
   }
   xy.addEventListener('pointerdown', (e) => {
@@ -94,6 +108,7 @@ export function initPerformance(app) {
     xy.classList.remove('on');
     if (snap()) {
       engine.setFx(saved, null);
+      if (app.remoteOp) app.remoteOp('fxl', { fx: saved });
       dot.style.transform = '';
       delete xy.dataset.v;
     } else {

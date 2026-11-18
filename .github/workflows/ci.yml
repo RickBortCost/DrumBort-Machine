@@ -28,6 +28,9 @@ jobs:
       - name: Check version
         run: node tests/check-version.mjs
 
+      - name: Asset del motore desktop aggiornati
+        run: node tools/export-dsp.mjs --check
+
       - name: Install
         run: npm ci
 

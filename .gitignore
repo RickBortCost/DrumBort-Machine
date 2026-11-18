@@ -4,3 +4,7 @@ Thumbs.db
 node_modules
 .vscode/
 .idea/
+
+# Host desktop (dotnet)
+desktop/bin/
+desktop/obj/

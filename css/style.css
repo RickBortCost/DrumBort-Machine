@@ -593,6 +593,10 @@ input[type="range"]::-moz-range-thumb {
 .wave-tabs { flex-wrap: wrap; }
 .wave-tracks { margin-bottom: 6px; }
 .wave-tracks .btn { flex: 1; }
+.remote-badge { align-self: center; padding: 3px 6px; border-radius: 4px; font-size: 10px; letter-spacing: .08em; border: 1px solid var(--edge); color: var(--ink-dim); white-space: nowrap; }
+.remote-badge.control { color: #7dd3ff; border-color: #2f6f99; }
+.remote-badge.engine { color: #7dff9b; border-color: #3fbf6a; }
+.remote-badge.off { color: #ff9c8c; }
 .btn.wt { color: #b9a6ff; border-color: #6c5bb8; background: linear-gradient(180deg, #2c2640, #1d1a2b); font-weight: bold; letter-spacing: .05em; }
 .btn.wt:hover { color: #d9ceff; }
 .wave-tabs .btn { flex: 1 1 60px; }

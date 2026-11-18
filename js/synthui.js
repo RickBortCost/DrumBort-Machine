@@ -329,6 +329,7 @@ export function initSynthUI(app) {
     if (!engine.ctx || !st) return;
     const notes = st.ch ? st.ch.map((x) => st.n + x) : [st.n];
     engine.playSynth(k, engine.ctx.currentTime, 0.22, notes, 0.8, tr(k));
+    if (app.remoteOp) app.remoteOp('prev', { k, notes });
   }
 
   /** Nota on: suona, aggiorna il pennello, registra se REC. */
@@ -337,6 +338,7 @@ export function initSynthUI(app) {
     const t = tr(k);
     const notes = ch ? ch.map((x) => n + x) : [n];
     const handle = engine.playSynth(k, engine.ctx.currentTime, null, notes, vel, t);
+    if (app.remoteOp) app.remoteOp('non', { id, k, notes, vel });
     ui.brush[k] = { n, ch: ch ? ch.slice() : null };
     let rec = null;
     if (ui.rec && seq.playing) {
@@ -360,6 +362,7 @@ export function initSynthUI(app) {
     const h = held.get(id);
     if (!h) return;
     held.delete(id);
+    if (app.remoteOp) app.remoteOp('noff', { id });
     const now = engine.ctx ? engine.ctx.currentTime : 0;
     if (h.handle) h.handle.release(now);
     if (h.rec) {

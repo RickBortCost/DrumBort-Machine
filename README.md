@@ -56,6 +56,18 @@ Su computer (finestra di almeno 1000×600) l'app si apre nel layout **Studio**, 
 
 Il pulsante **▦** nella barra (o Menu → Layout) passa tra Studio e layout compatto.
 
+## Versione PC (DrumBort Host)
+
+App desktop per **Windows, macOS e Linux** (cartella [`desktop/`](desktop/README.md), zip nella pagina Release): un **motore audio nativo C#** genera gli stessi suoni della web app e il **telefono fa da controller** sulla rete Wi-Fi.
+
+1. Avvia `DrumBortHost` sul PC: compaiono gli indirizzi e un QR code.
+2. Inquadra il QR con il telefono: in alto appare **CTRL·C#**. Tutto ciò che fai sul telefono (step, suoni, editor wavetable, mixer, pad, lanci, play/stop) suona sul PC.
+3. Anche il browser del PC (`http://localhost:8765/`) può comandare l'host, con il layout Studio.
+
+Con `--mode browser` l'audio lo produce invece il browser del PC (badge **AUDIO**) e il telefono lo comanda (badge **CTRL**).
+
+Il motore C# è verificato in CI contro la web app, voce per voce (livello e inviluppo entro ±3 dB) e su compressore e riverbero. Grazie alla cache delle voci su thread separato, rende il mix completo a circa 20–25× il tempo reale; il browser, a parità di cache, arriva a 12–14×.
+
 ## Synth wavetable
 
 Il motore wavetable (categoria **Wavetable** della libreria; editor dal pulsante **WT** in alto, dal menu Suoni o con il tasto W) segue l'approccio dei grandi synth wavetable software con un'implementazione e un'interfaccia originali:
@@ -169,6 +181,9 @@ js/projects.js          progetti e link di condivisione
 js/wavetable.js         motore wavetable, tabelle e preset
 js/waveeditor.js        editor wavetable
 js/session.js           modalità session (clip, scene, follow action, arrangiamento)
+js/remote.js            controllo remoto tramite l'host desktop (WebSocket)
+desktop/                host desktop C#: motore audio nativo, server, sincronizzazione
+tools/export-dsp.mjs    esporta kit e preset per il motore desktop
 js/studio.js            layout Studio: browser, clip, mixer
 js/ui.js                interfaccia, salvataggio, undo, song, PWA
 js/export.js            render offline e codifica WAV

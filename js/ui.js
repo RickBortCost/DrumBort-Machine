@@ -4,7 +4,7 @@
  * La sezione SYNTH è in synthui.js.
  */
 
-import { KITS, USER_KITS, kitById, setUserKits } from './kits.js';
+import { KITS, USER_KITS, kitById, findKit, setUserKits } from './kits.js';
 import { setUserPresets } from './presets.js';
 import { Engine, DEFAULT_FX } from './engine.js';
 import { Sequencer, createPattern, normalizePattern, normalizeOpt, parseRows, defaultTrack,
@@ -18,6 +18,8 @@ import { initPanels } from './panels.js';
 import { initPerformance } from './performance.js';
 import { composePattern, SESSION_TRACKS, normalizeSession, normalizeArr, followTarget, songToArr, MAX_ARR_BARS } from './session.js';
 import { initStudio } from './studio.js';
+import { initRemote, hostInfo } from './remote.js';
+import { fillPattern } from './generate.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -67,6 +69,8 @@ ui.arrStart = 0;          // battuta da cui parte la riproduzione dell'arrangiam
 ui.arrRec = false;        // registrazione session → arrangiamento armata
 ui.arrRecOn = false;      // registrazione in corso (prima battuta già scritta)
 let perf = null;        // vista performance (performance.js)
+let remote = null;      // controllo remoto tramite l'host desktop (remote.js)
+const remoteOp = (op, data) => { if (remote) remote.op(op, data); };
 
 function normalizeFx(o) {
   const fx = { ...DEFAULT_FX };
@@ -120,6 +124,7 @@ function loadState() {
 
 let saveTimer = null;
 function save() {
+  if (remote) remote.sync();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try {
@@ -555,6 +560,7 @@ grid.addEventListener('keydown', (e) => {
 function hitPad(t, vel = 1) {
   if (!engine.ctx) return;
   engine.trigger(t, engine.ctx.currentTime, vel, seq.pattern.tracks[t]);
+  remoteOp('trig', { i: t, vel });
   // Web Animations: nessun reflow forzato (prima: classList + offsetWidth)
   if (pads[t].animate) {
     pads[t].animate([{ filter: 'brightness(1.8)', transform: 'translateY(2px)' }, { filter: 'none', transform: 'none' }],
@@ -685,8 +691,9 @@ async function restoreSamples() {
 // Trasporto, tempo, kit, pattern
 // =====================================================================
 
-function startPlayback() {
+function startPlayback(fromRemote = false) {
   if (!engine.ctx || seq.playing) return;
+  if (!fromRemote) remoteOp('play');
   if (sessionActive()) {
     // Clip in attesa partono subito; senza clip si lancia la scena del pattern selezionato
     ui.sceneBars = 0;
@@ -718,7 +725,8 @@ function startPlayback() {
   $('#play').setAttribute('aria-label', 'Stop');
 }
 
-function stopPlayback() {
+function stopPlayback(fromRemote = false) {
+  if (!fromRemote && seq.playing) remoteOp('stop');
   seq.stop();
   ui.queued.fill(null);
   ui.pendingMaster = null;
@@ -912,6 +920,7 @@ $('.tools').addEventListener('click', (e) => {
     case 'met':
       ui.met = !ui.met;
       seq.metronome = ui.met;
+      remoteOp('met', { on: ui.met });
       break;
     case 'song': renderSong(); openSheet('songSheet'); break;
     case 'fx': renderFx(); openSheet('fxSheet'); break;
@@ -1045,12 +1054,13 @@ function leaveArr() {
 }
 
 /** Lancia la clip `slot` sulla traccia `i` (-1 = ferma la traccia). */
-function launchClip(i, slot) {
+function launchClip(i, slot, fromRemote = false) {
+  if (!fromRemote) remoteOp('launch', { i, s: slot });
   leaveArr();
   if (!seq.playing) {
     state.session.map[i] = slot;
     if (slot >= 0 && state.session.map.filter((v) => v >= 0).length === 1) state.session.master = slot;
-    if (slot >= 0) startPlayback(); else syncPlayback();
+    if (slot >= 0) startPlayback(true); else syncPlayback();
   } else {
     ui.queued[i] = slot;
   }
@@ -1059,13 +1069,14 @@ function launchClip(i, slot) {
 }
 
 /** Lancia la scena `slot` (stessa riga su tutte le tracce); diventa il pattern principale. */
-function launchScene(slot) {
+function launchScene(slot, fromRemote = false) {
+  if (!fromRemote) remoteOp('scene', { s: slot });
   leaveArr();
   if (!seq.playing) {
     state.session.map.fill(slot);
     state.session.master = ui.curScene = slot;
     ui.sceneBars = 0;
-    startPlayback();
+    startPlayback(true);
   } else {
     ui.queued.fill(slot);
     ui.pendingMaster = slot;
@@ -1074,7 +1085,8 @@ function launchScene(slot) {
   if (studio) studio.render();
 }
 
-function stopAllClips() {
+function stopAllClips(fromRemote = false) {
+  if (!fromRemote) remoteOp('stopall');
   leaveArr();
   ui.curScene = null;
   ui.pendingMaster = null;
@@ -1107,15 +1119,17 @@ function endArrRec() {
   if (studio) studio.render();
 }
 
-function setArrRec(on) {
+function setArrRec(on, fromRemote = false) {
+  if (!fromRemote) remoteOp('arrrec', { on });
   ui.arrRec = on;
   if (!on && ui.arrRecOn) endArrRec();
   if (studio) studio.render();
 }
 
 /** ▶ ARR: riproduce l'arrangiamento (durante la riproduzione riprende dalla battuta successiva). */
-function toggleArr() {
-  if (!state.arr.bars.length) { toast('Arrangiamento vuoto: registra con ● REC ARR o disegna le battute'); return; }
+function toggleArr(fromRemote = false) {
+  if (!state.arr.bars.length) { if (!fromRemote) toast('Arrangiamento vuoto: registra con ● REC ARR o disegna le battute'); return; }
+  if (!fromRemote) remoteOp('arr');
   state.arr.on = !state.arr.on;
   if (state.arr.on) { ui.queued.fill(null); ui.pendingMaster = null; }
   save();
@@ -1137,7 +1151,7 @@ seq.onStep = (tick, time) => {
       ui.sceneBars++;
       const sc = ui.curScene, f = sc != null ? state.session.follow[sc] : null;
       if (f && f.a !== 'none' && ui.sceneBars >= f.n && !hasQueued()) {
-        const t = followTarget(f.a, sc, state.slots);
+        const t = followTarget(f.a, sc, state.slots, () => ((Math.imul(tick + 1, 2654435761) >>> 0) % 1000) / 1000);
         if (t === -1) { ui.queued.fill(-1); ui.curScene = null; } else if (t != null) { ui.queued.fill(t); ui.pendingMaster = t; }
         changed = applyQueued() || changed;
         ui.sceneBars = 0;
@@ -1565,6 +1579,110 @@ window.addEventListener('keydown', (e) => {
 });
 
 // =====================================================================
+// Controllo remoto (host desktop): parti del progetto e azioni dal vivo
+// =====================================================================
+
+/** Parti del progetto sincronizzate (layout e vista restano per dispositivo). */
+function remoteParts() {
+  const parts = {
+    slot: state.slot, fx: state.fx, song: state.song, lock: state.lock,
+    session: { quant: state.session.quant, follow: state.session.follow },
+    arr: state.arr, userKits: state.userKits, userPresets: state.userPresets,
+    mode: sessionActive() ? 'session' : 'pattern',
+  };
+  state.slots.forEach((p, i) => { parts[`p${i}`] = p; });
+  return parts;
+}
+
+function applyRemoteParts(parts, full) {
+  if (parts.userPresets) mergeUserPresets(parts.userPresets);
+  if (parts.userKits) {
+    state.userKits = parts.userKits;
+    setUserKits(state.userKits);
+    buildKitSelect();
+  }
+  for (let i = 0; i < SLOTS; i++) {
+    const p = parts[`p${i}`];
+    if (p) { try { state.slots[i] = normalizePattern(p); } catch (_) { /* pattern non valido */ } }
+  }
+  if (typeof parts.slot === 'number') state.slot = clamp(parts.slot | 0, 0, SLOTS - 1);
+  if (parts.fx) state.fx = normalizeFx(parts.fx);
+  if (parts.song) state.song = normalizeSong(parts.song);
+  if ('lock' in parts) state.lock = parts.lock && findKit(parts.lock) ? parts.lock : null;
+  if (parts.session) {
+    const n = normalizeSession({ ...state.session, ...parts.session });
+    state.session.quant = n.quant;
+    state.session.follow = n.follow;
+  }
+  if (parts.arr) {
+    const on = state.arr.on;
+    state.arr = normalizeArr(parts.arr);
+    if (!full) state.arr.on = parts.arr.on ?? on;
+  }
+  if (full) { undoStack.length = 0; redoStack.length = 0; toast('Progetto sincronizzato'); }
+  syncPlayback();
+  renderAll();
+  save();
+}
+
+const remoteHeld = new Map();   // note synth tenute da un altro dispositivo
+
+function onRemoteOp(m) {
+  const now = engine.ctx ? engine.ctx.currentTime : 0;
+  switch (m.op) {
+    case 'play': startPlayback(true); break;
+    case 'stop': if (seq.playing) stopPlayback(true); break;
+    case 'launch': launchClip(m.i | 0, m.s | 0, true); break;
+    case 'scene': launchScene(m.s | 0, true); break;
+    case 'stopall': stopAllClips(true); break;
+    case 'arr': toggleArr(true); break;
+    case 'arrrec': setArrRec(!!m.on, true); break;
+    case 'met': ui.met = seq.metronome = !!m.on; renderTools(); break;
+    case 'trig':
+      if (engine.ctx && m.i >= 0 && m.i < TRACKS) engine.trigger(m.i, now, clamp(+m.vel || 0.8, 0, 1), seq.pattern.tracks[m.i]);
+      break;
+    case 'prev':
+      if (engine.ctx && Array.isArray(m.notes)) engine.playSynth(m.k | 0, now, 0.22, m.notes, 0.8, pat().synth.tracks[m.k | 0]);
+      break;
+    case 'non': {
+      if (!engine.ctx || !Array.isArray(m.notes)) break;
+      const prev = remoteHeld.get(`${m.cid}:${m.id}`);
+      if (prev) prev.release(now);
+      remoteHeld.set(`${m.cid}:${m.id}`, engine.playSynth(m.k | 0, now, null, m.notes, clamp(+m.vel || 0.85, 0, 1), pat().synth.tracks[m.k | 0]));
+      break;
+    }
+    case 'noff': {
+      const h = remoteHeld.get(`${m.cid}:${m.id}`);
+      if (h) { h.release(now); remoteHeld.delete(`${m.cid}:${m.id}`); }
+      break;
+    }
+    case 'stut': if (m.len > 0) seq.startStutter(m.len | 0); else seq.stopStutter(); break;
+    case 'fill': seq.fillPattern = m.on ? fillPattern(seq.pattern) : null; break;
+    case 'mutes':
+      seq.muteD = new Set(Array.isArray(m.d) ? m.d : []);
+      seq.muteS = new Set(Array.isArray(m.s) ? m.s : []);
+      break;
+    case 'fxl': if (m.fx) engine.setFx(m.fx, null); break;
+    default: break;
+  }
+}
+
+function onRemoteRole(role, native) {
+  engine.silent = role === 'control';
+  toast(role === 'control'
+    ? (native ? 'Collegato: l\'audio è generato dal motore nativo del PC' : 'Collegato come controller: l\'audio esce dal PC')
+    : 'Collegato: questo dispositivo produce l\'audio');
+}
+
+function renderRemote(s) {
+  const b = $('#remoteBadge');
+  b.hidden = false;
+  b.className = `remote-badge ${s.connected ? s.role : 'off'}`;
+  b.textContent = !s.connected ? 'HOST…' : s.role === 'control' ? (s.native ? 'CTRL·C#' : 'CTRL') : 'AUDIO';
+  b.title = !s.connected ? 'Connessione all\'host desktop…' : `${s.peers} dispositivi collegati`;
+}
+
+// =====================================================================
 // Init
 // =====================================================================
 
@@ -1576,11 +1694,11 @@ buildPads();
 buildSliders();
 buildFx();
 synthUI = initSynthUI({
-  engine, seq, ui, state, pat, save, snapshot, toast, setToggle, isPlayingPattern,
+  engine, seq, ui, state, pat, save, snapshot, toast, setToggle, isPlayingPattern, remoteOp,
   openSheet, closeSheet, setPage: (n) => setPage(n),
 });
 const app = {
-  engine, seq, ui, state, pat, kitOf, save, snapshot, toast, setToggle, isPlayingPattern,
+  engine, seq, ui, state, pat, kitOf, save, snapshot, toast, setToggle, isPlayingPattern, remoteOp,
   openSheet, closeSheet, deliver, syncPlayback, renderAll, buildKitSelect, exportData, importData, newProject,
 };
 panels = initPanels(app);
@@ -1602,8 +1720,11 @@ engine.fx = { ...state.fx };
 renderAll();
 requestAnimationFrame(frame);
 
+remote = initRemote({ getParts: remoteParts, applyParts: applyRemoteParts, onOp: onRemoteOp, onRole: onRemoteRole });
+if (remote) remote.onStatus(renderRemote);
+
 // Esposto per debug/test
-window.drumbort = { engine, seq, state, ui, midi, version: APP_VERSION, undo, redo, panels };
+window.drumbort = { engine, seq, state, ui, midi, version: APP_VERSION, undo, redo, panels, get remote() { return remote; } };
 panels.handleShareHash();
 window.addEventListener('hashchange', () => panels.handleShareHash());
 
@@ -1611,7 +1732,7 @@ window.addEventListener('hashchange', () => panels.handleShareHash());
 // PWA: service worker + avviso di aggiornamento
 // =====================================================================
 
-if ('serviceWorker' in navigator) {
+if ('serviceWorker' in navigator && !hostInfo()) {   // servita dall'host desktop: niente cache offline
   // Alla prima visita (pagina non ancora gestita) non c'è nulla da aggiornare:
   // niente banner e nessun controllo mentre il primo service worker si installa.
   const hadController = !!navigator.serviceWorker.controller;

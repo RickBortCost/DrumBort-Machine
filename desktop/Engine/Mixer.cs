@@ -25,8 +25,8 @@ public sealed class Mixer
     sealed class Channel
     {
         public required GainNode Gain; public required StereoPannerNode Pan; public required GainNode Rev, Dly;
-        public List<AudioNode> Ins = new(); public string Shape = "";
-        public BiquadFilterNode? LoN, HiN, FltN; public CompressorNode? CmpN;
+        public Dictionary<string, DeviceInst> Built = new(); public string DevKey = "";
+        public DeviceDef[] Chain = Array.Empty<DeviceDef>();
     }
     readonly Channel[] ch = new Channel[Channels];
     readonly GainNode master, kitIn, kitOut, revIn, revOut, dlyIn, dlyFb, dlyOut, duck;
@@ -79,7 +79,7 @@ public sealed class Mixer
             pan.Connect(rev).Connect(revIn);
             pan.Connect(dly).Connect(dlyIn);
             ch[i] = new Channel { Gain = gain, Pan = pan, Rev = rev, Dly = dly };
-            SetInserts(ch[i], default, 0);
+            gain.Connect(pan);
         }
         BuildKitChain();
         SetFx(Fx, 120, true);
@@ -140,43 +140,36 @@ public sealed class Mixer
         c.Pan.Pan.SetTargetAtTime((float)m.Pan, t, 0.01);
         c.Rev.GainParam.SetTargetAtTime((float)m.Rev, t, 0.01);
         c.Dly.GainParam.SetTargetAtTime((float)m.Dly, t, 0.01);
-        SetInserts(c, m, t);
     }
 
-    /// <summary>Drive → bit crusher → EQ (shelf 200 Hz / 5 kHz) → filtro LP/HP → compressore (come engine.js).</summary>
-    void SetInserts(Channel c, MixParams m, double t)
+    /// <summary>
+    /// Catena di device della traccia (Devices.cs), tra guadagno e pan. I device esistenti si
+    /// riusano; la catena si ricollega solo se cambiano ordine, presenza o attivazione.
+    /// </summary>
+    public void SetDevices(int i, DeviceDef[] chain)
     {
-        double drv = Math.Round(m.Drv * 20) / 20;
-        bool eq = m.Lo != 0 || m.Hi != 0, fl = Math.Abs(m.Flt) > 0.02, cp = m.Cmp > 0;
-        string shape = $"{drv}|{m.Crush}|{eq}|{fl}|{cp}";
-        if (c.Shape != shape)
+        var c = ch[i];
+        double t = Ctx.CurrentTime;
+        var act = chain.Where(d => d.On).ToArray();
+        string key = string.Join("|", act.Select(d => $"{d.Id}:{d.Type}"));
+        if (c.DevKey != key)
         {
-            c.Shape = shape;
+            c.DevKey = key;
             c.Gain.Disconnect();
-            foreach (var n in c.Ins) n.Disconnect();
-            c.Ins.Clear();
-            c.LoN = c.HiN = c.FltN = null; c.CmpN = null;
+            foreach (var b in c.Built.Values) b.Output.Disconnect();
+            foreach (var id in c.Built.Keys.ToList())
+                if (!act.Any(d => d.Id == id && d.Type == c.Built[id].Type)) { c.Built[id].Stop(); c.Built.Remove(id); }
             AudioNode node = c.Gain;
-            T Add<T>(T n) where T : AudioNode { node.Connect(n); node = n; c.Ins.Add(n); return n; }
-            if (drv > 0) { Add(Ctx.Shaper(DriveCurve(drv))); Add(Ctx.Gain((float)(1 / (1 + drv * 1.5)))); }
-            if (m.Crush > 0) Add(Ctx.Shaper(CrushCurve(m.Crush)));
-            if (eq)
+            foreach (var d in act)
             {
-                c.LoN = Add(Ctx.Biquad("lowshelf")); c.LoN.Frequency.Value = 200;
-                c.HiN = Add(Ctx.Biquad("highshelf")); c.HiN.Frequency.Value = 5000;
+                if (!c.Built.TryGetValue(d.Id, out var b)) { b = Devices.Build(Ctx, d); c.Built[d.Id] = b; }
+                node.Connect(b.Input);
+                node = b.Output;
             }
-            if (fl) { c.FltN = Add(Ctx.Biquad("lowpass")); c.FltN.Q.Value = 1; }
-            if (cp) c.CmpN = Add(new CompressorNode(Ctx));
             node.Connect(c.Pan);
         }
-        if (c.LoN != null) { c.LoN.GainParam.SetTargetAtTime((float)m.Lo, t, 0.02); c.HiN!.GainParam.SetTargetAtTime((float)m.Hi, t, 0.02); }
-        if (c.FltN != null)
-        {
-            var (l, h) = FilterFreqs(m.Flt);
-            c.FltN.Type = m.Flt < 0 ? "lowpass" : "highpass";
-            c.FltN.Frequency.SetTargetAtTime((float)(m.Flt < 0 ? l : h), t, 0.02);
-        }
-        c.CmpN?.Configure((float)(-6 - 30 * m.Cmp), (float)(1.5 + 8.5 * m.Cmp), 6, 0.005f, 0.15f);
+        c.Chain = act;
+        foreach (var d in act) c.Built[d.Id].Set(d, t, Bpm);
     }
 
     public void ApplyMix(Pattern p, double time)
@@ -191,7 +184,11 @@ public sealed class Mixer
     public void SetFx(Fx f, double bpm, bool immediate = false)
     {
         Fx = f;
-        if (bpm > 0) Bpm = bpm;
+        if (bpm > 0 && bpm != Bpm)
+        {
+            Bpm = bpm;
+            for (int i = 0; i < Channels; i++) if (ch[i].Chain.Any(d => d.Type == "delay")) SetDevices(i, ch[i].Chain);
+        }
         double t = Ctx.CurrentTime, tc = immediate ? 0.001 : 0.03;
         var (l, h) = FilterFreqs(f.Filter);
         lp.Frequency.SetTargetAtTime((float)l, t, tc);

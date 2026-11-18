@@ -57,7 +57,11 @@ public sealed class PeriodicWave
 {
     public const int Size = 4096;
     readonly float[] real, imag;
-    readonly float[]?[] tables = new float[13][];   // limite armoniche 2^k (1 … 4096)
+    // Fasce di 1/6 di ottava: ogni tabella contiene tutte le armoniche sotto Nyquist per la nota più
+    // acuta della fascia (niente aliasing, al massimo 1/6 di ottava di brillantezza in meno).
+    const int PerOct = 6, Bands = 13 * PerOct;
+    readonly float[]?[] tables = new float[Bands + 1][];
+    readonly Dictionary<int, float[]> byH = new();
     float norm = 0;
 
     public PeriodicWave(float[] real, float[] imag) { this.real = real; this.imag = imag; }
@@ -102,15 +106,19 @@ public sealed class PeriodicWave
     /// <summary>Pre-calcola tutte le fasce (evita il lavoro durante il rendering).</summary>
     public void Warm(float nyquist)
     {
-        for (int k = 0; k <= 12; k++) TableFor(nyquist / (1 << k), nyquist);
+        for (int j = 0; j <= Bands; j++) TableFor(nyquist / Size * MathF.Pow(2, j / (float)PerOct) * 0.999f, nyquist);
     }
 
     /// <summary>Tabella per la frequenza f (armoniche sotto Nyquist), normalizzata sul picco a banda piena.</summary>
     public float[] TableFor(float f, float nyquist)
     {
-        int maxH = f > 0 ? (int)(nyquist / f) : 4096;
-        int k = 0;
-        while (k < 12 && (1 << (k + 1)) <= maxH) k++;
+        // Fascia j: fondamentali fino a fMin·2^(j/6), con fMin = Nyquist / Size
+        float fMin = nyquist / Size;
+        int j = f <= fMin ? 0 : Math.Min(Bands, (int)MathF.Ceiling(PerOct * MathF.Log2(f / fMin)));
+        var hit = tables[j];
+        if (hit != null) return hit;
+        int avail = Math.Min(real.Length, imag.Length) - 1;
+        int maxH = Math.Max(1, Math.Min(avail, (int)(nyquist / (fMin * MathF.Pow(2, j / (float)PerOct)))));
         lock (tables)
         {
             if (norm == 0)
@@ -120,13 +128,18 @@ public sealed class PeriodicWave
                 foreach (var v in full) pk = Math.Max(pk, Math.Abs(v));
                 norm = pk > 0 ? 1 / pk : 1;
             }
-            if (tables[k] == null)
+            if (tables[j] == null)
             {
-                var t = Build(1 << k);
-                for (int i = 0; i < t.Length; i++) t[i] *= norm;
-                tables[k] = t;
+                // Fasce con lo stesso numero di armoniche condividono la tabella
+                if (!byH.TryGetValue(maxH, out var t))
+                {
+                    t = Build(maxH);
+                    for (int i = 0; i < t.Length; i++) t[i] *= norm;
+                    byH[maxH] = t;
+                }
+                tables[j] = t;
             }
-            return tables[k]!;
+            return tables[j]!;
         }
     }
 }
@@ -204,6 +217,11 @@ public sealed class ConstantSourceNode : SourceNode
 
 public sealed class BufferSourceNode : SourceNode
 {
+    static float Hermite(float xm, float x0, float x1, float x2, float t)
+    {
+        float c1 = 0.5f * (x1 - xm), c2 = xm - 2.5f * x0 + 2f * x1 - 0.5f * x2, c3 = 0.5f * (x2 - xm) + 1.5f * (x0 - x1);
+        return ((c3 * t + c2) * t + c1) * t + x0;
+    }
     public readonly AudioBuf Buffer;
     public readonly AudioParam PlaybackRate;
     public bool Loop;
@@ -228,10 +246,16 @@ public sealed class BufferSourceNode : SourceNode
                 if (!Loop) { StopTime = Math.Min(StopTime, Ctx.CurrentTime + i / (double)Ctx.SampleRate); break; }
                 pos %= len;
             }
-            int a = (int)pos; int b = a + 1 >= len ? (Loop ? 0 : a) : a + 1;
+            int a = (int)pos;
             float fr = (float)(pos - a);
-            L[i] = d0[a] + (d0[b] - d0[a]) * fr;
-            if (Stereo) R[i] = d1[a] + (d1[b] - d1[a]) * fr;
+            if (fr == 0) { L[i] = d0[a]; if (Stereo) R[i] = d1[a]; }
+            else
+            {
+                // Hermite a 4 punti: meno attenuazione degli acuti e meno immagini dell'interpolazione lineare
+                int am = a > 0 ? a - 1 : (Loop ? len - 1 : 0), b = a + 1 >= len ? (Loop ? 0 : a) : a + 1, c = b + 1 >= len ? (Loop ? (b + 1) % len : b) : b + 1;
+                L[i] = Hermite(d0[am], d0[a], d0[b], d0[c], fr);
+                if (Stereo) R[i] = Hermite(d1[am], d1[a], d1[b], d1[c], fr);
+            }
             pos += rate[i];
         }
     }
@@ -285,6 +309,14 @@ public sealed class BiquadFilterNode : AudioNode
             else Set((1 + cs) / 2 / a0, -(1 + cs) / a0, (1 + cs) / 2 / a0, -2 * cs / a0, (1 - alpha) / a0);
             return;
         }
+        if (Type == "peaking")
+        {
+            double A = Math.Pow(10, gainDb / 40);
+            if (fn <= 0 || fn >= 1) { Set(1, 0, 0, 0, 0); return; }
+            double w0 = Math.PI * fn, cs = Math.Cos(w0), pal = Math.Sin(w0) / (2 * Math.Max(q, 1e-4)), a0 = 1 + pal / A;
+            Set((1 + pal * A) / a0, -2 * cs / a0, (1 - pal * A) / a0, -2 * cs / a0, (1 - pal / A) / a0);
+            return;
+        }
         if (fn <= 0 || fn >= 1) { if (Type == "notch") Set(1, 0, 0, 0, 0); else Set(0, 0, 0, 0, 0); return; }
         double ww = Math.PI * fn, c = Math.Cos(ww);
         double qq = Math.Max(q, 1e-4), al = Math.Sin(ww) / (2 * qq), n0 = 1 + al;
@@ -327,24 +359,105 @@ public sealed class BiquadFilterNode : AudioNode
 public sealed class WaveShaperNode : AudioNode
 {
     public float[] Curve;
+    /// <summary>Sovracampionamento (1, 2 o 4) come WaveShaperNode.oversample: riduce l'aliasing della saturazione.</summary>
+    public int Oversample = 1;
+    readonly Resampler upL = new(), upR = new();
     public WaveShaperNode(AudioContext c, float[] curve) : base(c) { Curve = curve; }
     protected override void Process()
     {
         SumInputs(L, R, out bool st);
         Stereo = st;
-        Shape(L);
-        if (st) Shape(R);
+        if (Oversample > 1)
+        {
+            upL.Process(L, Oversample, Shape);
+            if (st) upR.Process(R, Oversample, Shape);
+            return;
+        }
+        Shape(L, AudioContext.Block);
+        if (st) Shape(R, AudioContext.Block);
     }
-    void Shape(float[] b)
+    void Shape(float[] b, int count)
     {
         var c = Curve; int n = c.Length;
-        for (int i = 0; i < AudioContext.Block; i++)
+        for (int i = 0; i < count; i++)
         {
             float v = (n - 1) * (b[i] + 1) * 0.5f;
             if (v <= 0) b[i] = c[0];
             else if (v >= n - 1) b[i] = c[n - 1];
             else { int k = (int)v; b[i] = c[k] + (c[k + 1] - c[k]) * (v - k); }
         }
+    }
+}
+
+/// <summary>
+/// Sovracampionamento ×2/×4 per elaborazioni non lineari: interpolazione polifase con un FIR
+/// passa-basso (sinc finestrata, 24 prese per fase), elaborazione, filtro e decimazione.
+/// </summary>
+public sealed class Resampler
+{
+    const int Taps = 24;
+    static readonly Dictionary<int, float[]> kernels = new();
+    float[] histIn = new float[Taps], histOut = new float[Taps * 4];
+    float[] up = new float[AudioContext.Block * 4];
+    int factor;
+
+    static float[] Kernel(int os)
+    {
+        lock (kernels)
+        {
+            if (kernels.TryGetValue(os, out var k)) return k;
+            int n = Taps * os; k = new float[n];
+            double fc = 0.45 / os, sum = 0, mid = (n - 1) / 2.0;
+            for (int i = 0; i < n; i++)
+            {
+                double x = i - mid;
+                double sinc = x == 0 ? 2 * fc : Math.Sin(2 * Math.PI * fc * x) / (Math.PI * x);
+                double w = 0.42 - 0.5 * Math.Cos(2 * Math.PI * i / (n - 1)) + 0.08 * Math.Cos(4 * Math.PI * i / (n - 1));   // Blackman
+                k[i] = (float)(sinc * w); sum += k[i];
+            }
+            for (int i = 0; i < n; i++) k[i] = (float)(k[i] / sum);
+            kernels[os] = k;
+            return k;
+        }
+    }
+
+    public void Process(float[] buf, int os, Action<float[], int> fn)
+    {
+        if (os != factor) { factor = os; Array.Clear(histIn); histOut = new float[Taps * os]; }
+        var k = Kernel(os);
+        int B = AudioContext.Block, n = Taps * os;
+        // 1) interpolazione: up[j] = os · Σ x[m] · k[j − m·os]   (polifase)
+        for (int i = 0; i < B; i++)
+        {
+            for (int p = 0; p < os; p++)
+            {
+                float acc = 0;
+                // campioni d'ingresso i, i−1, … (Taps per fase)
+                for (int t = 0; t < Taps; t++)
+                {
+                    int m = i - t;
+                    float x = m >= 0 ? buf[m] : histIn[Taps + m];
+                    acc += x * k[t * os + p];
+                }
+                up[i * os + p] = acc * os;
+            }
+        }
+        Array.Copy(buf, B - Taps, histIn, 0, Taps);
+        // 2) non linearità alla frequenza alta
+        fn(up, B * os);
+        // 3) filtro anti-aliasing e decimazione
+        for (int i = 0; i < B; i++)
+        {
+            int j = i * os + os - 1;
+            float acc = 0;
+            for (int t = 0; t < n; t++)
+            {
+                int m = j - t;
+                acc += (m >= 0 ? up[m] : histOut[n + m]) * k[t];
+            }
+            buf[i] = acc;
+        }
+        Array.Copy(up, B * os - n, histOut, 0, n);
     }
 }
 

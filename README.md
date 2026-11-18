@@ -48,9 +48,15 @@ Aspetto da workstation: pannelli ardesia con accenti arancio e verdi (colori isp
 
 Su computer (finestra di almeno 1000×600) l'app si apre nel layout **Studio**, pensato per mouse e tastiera. Un nuovo progetto è **vuoto**, senza preset né groove (`?demo` nell'indirizzo carica i groove dimostrativi).
 
-- **Vista TRACCE** (predefinita, stile Logic Pro): tracce attive in colonna a sinistra (colore, nome, M/S, ×), timeline a battute a destra. **＋ TRACCIA** aggiunge una voce di batteria o un synth; nella timeline clic+trascina crea una regione, si sposta trascinando, il bordo destro la allunga, clic destro o Canc la elimina. Il righello fissa il punto di partenza.
+- **Vista TRACCE** (predefinita, stile Logic Pro): tracce attive in colonna a sinistra (colore, nome, M/S, ×), timeline a battute a destra. Nella timeline clic+trascina crea una regione, si sposta trascinando, il bordo destro la allunga, clic destro o Canc la elimina. Il righello fissa il punto di partenza.
 - **Pannelli nascondibili**: ◧ browser (**B**), ◨ pannello laterale (**I**). Clic sull'intestazione di una traccia → in basso i suoi **effetti**; clic su una regione → le sue **note** (pulsanti FX / NOTE).
-- **Catena di effetti** stile device: un riquadro per effetto (Strumento/Voce, Drive, Bit crush, EQ con curva, Filtro con curva, Compressore, Mandate, Mixer), ognuno con interruttore e manopole (trascina in verticale, Shift = fine, rotella, frecce, doppio clic = valore iniziale). La barra inferiore si **ridimensiona** trascinandone il bordo superiore (doppio clic: altezza iniziale).
+- **Nuove tracce** come in Logic Pro: **＋ TRACCIA**, **Ctrl+Alt+N** (⌥⌘N) o doppio clic nello spazio vuoto delle tracce aprono il dialogo *Nuove tracce*: tipo (**Strumento software**, **Batteria**, **Kit di batteria** completo), strumento o voce, numero di tracce, **Apri Libreria**. Con la Libreria aperta, il browser a sinistra mostra i suoni adatti alla nuova traccia: un clic sceglie il suono. Doppio clic sul nome di una traccia: Libreria per quella traccia.
+- **Device View** come in Ableton Live: in basso lo strumento della traccia, poi la **catena di effetti audio** in ordine libero (il segnale va da sinistra a destra), infine il mixer della traccia (volume, pan, mandate). Effetti disponibili (scheda **EFFETTI** del browser): EQ Three, Auto Filter (con LFO), Compressor, Limiter, Saturator (sovracampionato, 4 curve), Bit Reduction, Delay a tempo, Reverb a convoluzione, Chorus, Utility (guadagno, ampiezza stereo, fase).
+  - **Aggiungere**: trascina un effetto dal browser nel punto voluto della catena o su una traccia; doppio clic o Invio lo accodano alla traccia selezionata; oppure **＋ EFFETTO** in fondo alla catena.
+  - **Barra del titolo** di ogni device: attivatore (spento = segnale invariato, parametri conservati), piega/espandi (anche doppio clic), menu (anche tasto destro): Rinomina, Duplica, Copia, Incolla, Ripristina valori, Elimina.
+  - **Riordinare**: trascina il device dalla barra del titolo. **Canc** elimina il device selezionato, **Ctrl/Cmd+D** lo duplica.
+  - Manopole: trascina in verticale (Shift = fine), rotella, frecce, doppio clic = valore iniziale; Dry/Wet dove serve; curve di EQ, filtro, compressore e saturazione. La barra inferiore si **ridimensiona** trascinandone il bordo superiore.
+  - La catena appartiene alla traccia (vale in tutti i pattern) e suona identica nel motore desktop C#. I progetti precedenti vengono convertiti: drive, crush, EQ, filtro e compressore diventano i device equivalenti.
 - **Uscita audio** (Menu → 🎧 Uscita audio): scelta del dispositivo (cuffie, casse, interfaccia). Con l'host desktop l'elenco è quello della scheda audio del PC; "Predefinito di sistema" segue automaticamente il dispositivo predefinito di Windows, per esempio quando si collegano le cuffie (su macOS e Linux: RILEGGI DISPOSITIVI).
 
 Le viste **SESSION** e **GRIGLIA** restano come *session view*:
@@ -215,7 +221,9 @@ desktop/                host desktop C#: motore audio nativo, server, sincronizz
 tools/export-dsp.mjs    esporta kit e preset per il motore desktop
 js/studio.js            layout Studio: browser, clip, mix nelle tracce, pannelli
 js/tracks.js            vista TRACCE (tracce in colonna e timeline)
-js/fxchain.js           catena di effetti della traccia selezionata
+js/fxchain.js           Device View: catena di effetti della traccia selezionata
+js/devices.js           tipi di device, conversione dei progetti precedenti, nodi Web Audio
+js/newtrack.js          dialogo Nuove tracce (stile Logic)
 js/audioout.js          scelta del dispositivo di uscita audio
 js/ui.js                interfaccia, salvataggio, undo, song, PWA
 js/export.js            render offline e codifica WAV

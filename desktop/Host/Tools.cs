@@ -104,7 +104,7 @@ public static class Tools
     public static JsonObject EqProbe(int rate)
     {
         var res = new JsonObject();
-        foreach (var (type, fc, g) in new[] { ("lowshelf", 200.0, 6.0), ("highshelf", 5000.0, -9.0) })
+        foreach (var (type, fc, g) in new[] { ("lowshelf", 200.0, 6.0), ("highshelf", 5000.0, -9.0), ("peaking", 1000.0, 8.0) })
             foreach (var f in new[] { 60.0, 200.0, 1000.0, 5000.0, 12000.0 })
             {
                 var ctx = new AudioContext(rate);
@@ -161,7 +161,7 @@ public static class Tools
         var json = JsonNode.Parse(File.ReadAllText(projectPath))!.AsObject();
         var parts = new JsonObject();
         if (json["slots"] is JsonArray slots) for (int i = 0; i < slots.Count && i < 8; i++) parts[$"p{i}"] = slots[i]?.DeepClone();
-        foreach (var k in new[] { "slot", "fx", "song", "lock", "session", "arr", "userKits", "userPresets", "mode" })
+        foreach (var k in new[] { "slot", "fx", "song", "lock", "session", "arr", "userKits", "userPresets", "mode", "devs" })
             if (json[k] != null) parts[k] = json[k]!.DeepClone();
         var eng = new AudioEngine(rate, 1024);
         eng.Seq.P.Apply(parts);

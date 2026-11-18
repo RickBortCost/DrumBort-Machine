@@ -103,6 +103,7 @@ export const kick = withSpec('kick', ({ start = 150, end = 50, sweep = 0.05, dec
     if (drive) {
       const ws = ctx.createWaveShaper();
       ws.curve = driveCurve(drive);
+      ws.oversample = '4x';
       o.connect(ws).connect(amp);
     } else {
       o.connect(amp);
@@ -242,6 +243,7 @@ export const noiseHit = withSpec('noiseHit', ({ type = 'highpass', freq = 6000, 
     if (drive) {
       const ws = ctx.createWaveShaper();
       ws.curve = driveCurve(drive);
+      ws.oversample = '4x';
       src.connect(f).connect(ws).connect(amp);
     } else {
       src.connect(f).connect(amp);

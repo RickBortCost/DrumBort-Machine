@@ -196,7 +196,7 @@ public static class Kits
                     var amp = Vca(ctx, outp, t, v * level, dur, 0.0015);
                     var osc = Osc(ctx, ot, start * k, t, dur);
                     osc.Frequency.ExponentialRampToValueAtTime((float)(end * k), t + sweep);
-                    if (drive > 0) osc.Connect(ctx.Shaper(DriveCurve(drive))).Connect(amp);
+                    if (drive > 0) osc.Connect(ctx.Shaper(DriveCurve(drive), 4)).Connect(amp);
                     else osc.Connect(amp);
                     if (click > 0)
                     {
@@ -339,7 +339,7 @@ public static class Kits
                     var f = Filt(ctx, ft, freq * k, q);
                     if (to > 0) f.Frequency.ExponentialRampToValueAtTime((float)Math.Min(to * k, ctx.SampleRate / 2.0 - 100), t + att + dur * 0.8);
                     var src = NoiseSrc(ctx, t, att + dur);
-                    if (drive > 0) src.Connect(f).Connect(ctx.Shaper(DriveCurve(drive))).Connect(amp);
+                    if (drive > 0) src.Connect(f).Connect(ctx.Shaper(DriveCurve(drive), 4)).Connect(amp);
                     else src.Connect(f).Connect(amp);
                 };
             }

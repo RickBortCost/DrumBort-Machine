@@ -1290,3 +1290,64 @@ input.mxi-vol::-moz-range-thumb, input.mxi-pan::-moz-range-thumb { width: 8px; h
 .sx-mxm { --tc: #d9d2bd; }
 .tv-hdr .tv-name { flex-direction: row; align-items: baseline; gap: 6px; overflow: hidden; }
 .tv-hdr .tv-name b { flex: none; }
+
+/* ----- Device View stile Live: barra del titolo, piegatura, selezione, zona di rilascio ----- */
+.dv-chain { position: relative; align-items: stretch; }
+.dv { padding: 0 8px 8px; }
+.dv > header.dv-h { gap: 5px; cursor: grab; user-select: none; }
+.dv-fixed > header.dv-h { cursor: default; }
+.dv-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .08em; text-transform: uppercase; outline: none; }
+.dv-name[contenteditable="true"] { text-transform: none; background: #12171b; padding: 0 3px; border-radius: 2px; cursor: text; }
+.dv-fold, .dv-menu { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 2px; background: none; color: var(--ink-dim); font-size: 11px; line-height: 18px; cursor: pointer; }
+.dv-fold:hover, .dv-menu:hover { background: #46505a; color: var(--ink); }
+.dv.sel { border-color: var(--tc, #f2c230); box-shadow: 0 0 0 1px var(--tc, #f2c230); }
+.dv.sel > header { background: #3c454d; }
+.dv.dragging { opacity: .4; }
+.dv:focus { outline: none; }
+.dv-body { display: flex; gap: 8px; min-height: 0; flex: 1; }
+.dv-body .dv-graph { width: 170px; height: auto; min-height: 60px; max-height: none; flex: none; }
+.dv-knobs { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); gap: 4px 4px; align-content: start; }
+.dv-fixed .dv-knobs { grid-template-rows: repeat(2, auto); }
+.dv-inst { margin-right: 4px; max-width: 120px; }
+.dv-inst span { flex-wrap: wrap; }
+.dv-mixer { margin-left: auto; border-top-color: #d9d2bd; }
+.kb-e .dv-sel { width: 66px; height: 24px; margin-top: 6px; padding: 0 2px; font-size: 10px; border-radius: 3px; border: 1px solid var(--edge); background: #1b2025; color: var(--ink); }
+.kb-e { width: 70px; }
+/* Device piegato: solo la barra del titolo, in verticale */
+.dv.fold { min-width: 0; width: 28px; padding: 0; }
+.dv.fold > header.dv-h { flex-direction: column; height: auto; flex: 1; margin: 0; padding: 6px 0; justify-content: flex-start; }
+.dv.fold .dv-name { writing-mode: vertical-rl; transform: rotate(180deg); flex: none; overflow: visible; }
+.dv.fold .dv-body, .dv.fold .dv-menu { display: none; }
+/* Zona finale e indicatore di inserimento */
+.dv-drop { flex: 0 0 150px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 1px dashed #4a545d; border-radius: 4px; color: var(--ink-dim); font-size: 11px; text-align: center; padding: 8px; }
+.dv-drop .btn { color: var(--green); }
+.dv-ins { position: absolute; top: 0; bottom: 4px; width: 3px; margin-left: -1px; border-radius: 2px; background: var(--orange, #ff9b3d); box-shadow: 0 0 8px rgba(255,155,61,.7); pointer-events: none; z-index: 5; }
+.dv-ins[hidden] { display: none; }
+.dv-pop { min-width: 180px; }
+.dv-pop .btn[disabled] { opacity: .4; }
+/* Browser: effetti trascinabili, tracce che accettano il rilascio */
+.bw-dev { cursor: grab; }
+.bw-hint { padding: 4px 6px 6px; font-size: 10px; color: var(--ink-dim); line-height: 1.35; }
+.drop-on { box-shadow: inset 0 0 0 2px var(--green, #6fd08c) !important; }
+
+/* ----- Dialogo "Nuove tracce" (stile Logic) e Libreria ----- */
+.nt-back { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(8,10,12,.6); }
+.nt { width: min(620px, 100%); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 8px; background: #2f373e; border: 1px solid var(--edge); box-shadow: 0 18px 50px rgba(0,0,0,.6); }
+.nt h2 { margin: 0; font-size: 15px; letter-spacing: .08em; text-transform: uppercase; }
+.nt-types { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.nt-type { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 10px; border-radius: 6px; border: 1px solid var(--edge); background: #252c32; color: var(--ink); text-align: center; cursor: pointer; }
+.nt-type.on { border-color: var(--orange, #ff9b3d); box-shadow: 0 0 0 1px var(--orange, #ff9b3d); background: #343c43; }
+.nt-ico { font-size: 28px; line-height: 1; }
+.nt-type b { font-size: 13px; }
+.nt-type small { font-size: 11px; color: var(--ink-dim); line-height: 1.35; }
+.nt-details { display: flex; flex-direction: column; gap: 8px; min-height: 60px; }
+.nt-row { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 10px; font-size: 13px; }
+.nt-row select, .nt-row input { height: 32px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--edge); background: #1b2025; color: var(--ink); font: inherit; }
+.nt-info, .nt-none { margin: 0; font-size: 13px; color: var(--ink-dim); }
+.nt-check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.nt-btns { display: flex; justify-content: flex-end; gap: 8px; }
+.nt-btns .btn { min-width: 96px; }
+@media (max-width: 560px) { .nt-types { grid-template-columns: 1fr; } .nt-row { grid-template-columns: 1fr; } }
+.browser.lib-flash { animation: libflash .9s ease-out; }
+@keyframes libflash { from { box-shadow: inset 0 0 0 2px var(--orange, #ff9b3d); } to { box-shadow: inset 0 0 0 2px transparent; } }
+.bw-item.cur { box-shadow: inset 3px 0 0 var(--orange, #ff9b3d); }

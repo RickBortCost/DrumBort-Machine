@@ -200,8 +200,9 @@ export function initSynthUI(app) {
     $$('#ssliders input').forEach((inp) => {
       const d = SPARAMS.find((x) => x.k === inp.dataset.sparam);
       if (d.k === 'len') inp.max = t.steps.length;
-      inp.value = t[d.k];
-      inp.nextElementSibling.textContent = d.fmt(t[d.k]);
+      const v = app.paramGet(SYNTH_CH + ui.ssel, t, d.k);
+      inp.value = v;
+      inp.nextElementSibling.textContent = d.fmt(v);
     });
   }
 
@@ -427,8 +428,8 @@ export function initSynthUI(app) {
     let v = parseFloat(inp.value);
     if (key === 'len') v = Math.round(v);
     if (key === 'crush') v = v < 4 ? 0 : Math.round(v);
-    t[key] = v;
-    inp.nextElementSibling.textContent = SPARAMS.find((d) => d.k === key).fmt(t[key]);
+    app.paramSet(SYNTH_CH + ui.ssel, t, key, v);
+    inp.nextElementSibling.textContent = SPARAMS.find((d) => d.k === key).fmt(v);
     if (key === 'len') { renderRow(ui.ssel); renderLabels(); }
     else if (MIX_KEYS.includes(key) && app.isPlayingPattern(app.pat())) engine.setChannel(SYNTH_CH + ui.ssel, t);
     app.save();

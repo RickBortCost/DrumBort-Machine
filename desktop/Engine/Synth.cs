@@ -259,7 +259,7 @@ public static class Synth
         }
 
         AudioNode dest = f;
-        if (pr.Drive > 0) { var ws = ctx.Shaper(DriveCurve(pr.Drive)); ws.Connect(f); dest = ws; }
+        if (pr.Drive > 0) { var ws = ctx.Shaper(DriveCurve(pr.Drive), 4); ws.Connect(f); dest = ws; }
 
         if (pr.Formants != null)
         {

@@ -2,6 +2,17 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.15.0] - 2026-11-18
+
+### Aggiunto
+- **Device View come Ableton Live**: catena di effetti audio per traccia in ordine libero, con 10 device (EQ Three, Auto Filter con LFO, Compressor, Limiter, Saturator, Bit Reduction, Delay, Reverb, Chorus, Utility). Barra del titolo con attivatore, piega, menu (Rinomina, Duplica, Copia, Incolla, Ripristina valori, Elimina); riordino trascinando; inserimento dal browser (scheda EFFETTI) trascinando nella catena o su una traccia, doppio clic o Invio; Canc e Ctrl/Cmd+D; Dry/Wet; curve di EQ, filtro, compressore e saturazione. Stessi device nel motore desktop C#.
+- **Nuove tracce come Logic Pro**: dialogo *Nuove tracce* (＋ TRACCIA, Ctrl+Alt+N, doppio clic nello spazio vuoto) con tipo (strumento software, voce di batteria, kit completo), numero di tracce e *Apri Libreria*; la Libreria si apre a sinistra sui suoni adatti alla traccia. Doppio clic sul nome di una traccia apre la sua Libreria.
+
+### Modificato
+- **Qualità audio del motore desktop**: riverbero a convoluzione reale (stessa risposta e normalizzazione del browser, al posto del riverbero algoritmico); oscillatori con tabelle a 1/6 di ottava (più brillanti, senza aliasing); saturazione con sovracampionamento ×4; voci in cache in stereo (unisono e spread conservati), cache fino a 768 MB; interpolazione cubica per i suoni intonati; frequenza di campionamento nativa della scheda audio (niente conversione del sistema).
+- Wavetable con 256 armoniche (prima 64) e saturazione ×4 anche nel browser.
+- Gli effetti per traccia delle versioni precedenti (drive, crush, EQ, filtro, compressore) sono convertiti in device; i cursori FX del telefono e le macro li controllano ancora.
+
 ## [1.14.0] - 2026-11-18
 
 ### Modificato

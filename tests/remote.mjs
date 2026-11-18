@@ -124,6 +124,14 @@ const browser = await chromium.launch();
     await pc.page.click('.bw-item[data-usound]');
     check('kit con il suono del Lab in uso sul motore', await waitFor(async () => (await status(port)).engine.kit.startsWith('u:')));
 
+    // Device aggiunto dal PC (Device View) → catena nel motore C#
+    const d0 = (await status(port)).engine.devices;
+    await pc.page.click('[data-sxv="tracks"]');
+    await pc.page.click('.tv-hdr[data-i="1"] .tv-name');
+    await pc.page.click('#fxbar [data-add]');
+    await pc.page.click('.dv-pop [data-m="reverb"]');
+    check('device dal PC → catena del motore C#', await waitFor(async () => (await status(port)).engine.devices === d0 + 1));
+
     const errs = [...pc.errors, ...ph.errors, ...lab.errors];
     check('nessun errore JS', errs.length === 0, errs.join(' | '));
     await pc.ctx.close(); await ph.ctx.close(); await lab.ctx.close();

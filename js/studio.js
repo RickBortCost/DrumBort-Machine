@@ -10,6 +10,8 @@ import { SYNTH_TRACKS } from './synth.js';
 import { SYNTH_CH } from './engine.js';
 import { initTracksView } from './tracks.js';
 import { initFxChain } from './fxchain.js';
+import { initNewTrack } from './newtrack.js';
+import { DEVICES, CATEGORIES } from './devices.js';
 import { DRUM_TRACKS, SESSION_TRACKS, hasClip, QUANTS, FOLLOW, FOLLOW_BARS, MAX_ARR_BARS } from './session.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -252,7 +254,31 @@ export function initStudio(app) {
     app.save();
   });
 
-  const tracks = initTracksView({ ...app, mixHTML, openLibrary: () => app.openLibrary(), setBottom: (m) => setBottom(m) }, $('#sxTracks'), COLORS);
+  // ===================================================================
+  // Nuove tracce e Libreria (come in Logic Pro): dialogo, poi la Libreria a sinistra
+  // ===================================================================
+  const newTrack = initNewTrack({ ...app, addTracks: (list, o) => tracks.addTracks(list, o) });
+  /** Libreria per la traccia i: browser a sinistra sulla scheda dei suoni adatti alla traccia. */
+  function openLib(i) {
+    selTrack = i;
+    state.panels.browser = true;
+    applyPanels();
+    bTab = isSynth(i) ? 'sounds' : 'kits';
+    bCat = null;
+    $('#bwSearch').value = '';
+    renderBrowser();
+    browser.classList.remove('lib-flash'); void browser.offsetWidth; browser.classList.add('lib-flash');
+    const cur = $('.bw-item.cur', browser) || $('.bw-item', browser);
+    if (cur) { cur.scrollIntoView({ block: 'nearest' }); cur.focus({ preventScroll: true }); }
+    app.save();
+  }
+  document.addEventListener('keydown', (e) => {
+    if (!active || !(e.ctrlKey || e.metaKey) || !e.altKey || (e.key !== 'n' && e.key !== 'N' && e.code !== 'KeyN')) return;
+    e.preventDefault();
+    newTrack.open();
+  });
+
+  const tracks = initTracksView({ ...app, mixHTML, newTrack: () => newTrack.open(), openLib: (i) => openLib(i), openLibrary: () => app.openLibrary(), setBottom: (m) => setBottom(m) }, $('#sxTracks'), COLORS);
 
   // ===================================================================
   // Pannelli: browser e pannello laterale nascondibili; in basso effetti o note
@@ -538,10 +564,22 @@ export function initStudio(app) {
     $$('#browser .bw-tabs .btn').forEach((b) => app.setToggle(b, b.dataset.btab === bTab));
     const list = $('#bwList'), q = $('#bwSearch').value.trim();
     $('#bwCats').hidden = bTab !== 'sounds';
+    if (bTab === 'fx') {
+      // Effetti audio (come la categoria Audio Effects di Live): trascina sulla catena o su una traccia, doppio clic = accoda
+      const ql = q.toLowerCase();
+      list.innerHTML = `<div class="bw-hint">Trascina un effetto nella catena in basso o su una traccia · doppio clic o Invio: aggiungi a ${esc(trackShort(selTrack))}</div>`
+        + CATEGORIES.map((c) => {
+          const items = Object.entries(DEVICES).filter(([, d]) => d.cat === c && (!ql || d.name.toLowerCase().includes(ql) || d.desc.toLowerCase().includes(ql)));
+          return items.length ? `<div class="bw-sep">${esc(c.toUpperCase())}</div>` + items.map(([t, d]) => `<button class="bw-item bw-dev" draggable="true" data-devtype="${t}" title="${esc(d.desc)}"><b>${esc(d.name)}</b><small>${esc(d.desc)}</small></button>`).join('') : '';
+        }).join('');
+      return;
+    }
     if (bTab === 'sounds') {
       $('#bwCats').innerHTML = ['Tutti', ...categories()].map((c) => `<button class="btn sm chip-cat${(c === 'Tutti' ? !bCat : c === bCat) ? ' on' : ''}" data-bcat="${esc(c)}">${esc(c)}</button>`).join('');
       const items = findPresets({ cat: q ? null : bCat, text: q });
-      list.innerHTML = items.map((p) => `<button class="bw-item" data-preset="${p.id}" title="${esc(p.tags.join(', '))}"><b>${esc(p.name)}</b><small>${esc(p.cat)}</small></button>`).join('');
+      const k = isSynth(selTrack) ? selTrack - DRUM_TRACKS : 0, curP = app.pat().synth.tracks[k].preset;
+      list.innerHTML = `<div class="bw-hint">LIBRERIA → ${esc(SYNTH_TRACKS[k].name)}: clic per scegliere il suono</div>`
+        + items.map((p) => `<button class="bw-item${p.id === curP ? ' cur' : ''}" data-preset="${p.id}" title="${esc(p.tags.join(', '))}"><b>${esc(p.name)}</b><small>${esc(p.cat)}</small></button>`).join('');
     } else {
       const kits = allKits().filter((k) => !q || k.name.toLowerCase().includes(q.toLowerCase()));
       const cur = app.kitOf(app.pat()).id;
@@ -592,6 +630,39 @@ export function initStudio(app) {
     }
   });
   $('#bwSearch').addEventListener('input', renderBrowser);
+  // Effetti: doppio clic o Invio → accodati alla traccia selezionata; trascinamento → punto voluto
+  const addToSel = (type) => { chain.addDevice(type, channel(selTrack)); setBottom('fx'); };
+  browser.addEventListener('dblclick', (e) => { const d = e.target.closest('[data-devtype]'); if (d) addToSel(d.dataset.devtype); });
+  browser.addEventListener('keydown', (e) => { const d = e.target.closest('[data-devtype]'); if (d && e.key === 'Enter') { e.preventDefault(); addToSel(d.dataset.devtype); } });
+  browser.addEventListener('dragstart', (e) => {
+    const d = e.target.closest('[data-devtype]');
+    if (!d) return;
+    e.dataTransfer.setData('text/x-drumbort-newdev', d.dataset.devtype);
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+  // Rilascio di un effetto su una traccia (intestazione o corsia) nella vista TRACCE o sulle colonne della SESSION
+  panel.addEventListener('dragover', (e) => {
+    if (![...e.dataTransfer.types].includes('text/x-drumbort-newdev')) return;
+    const t = e.target.closest('.tv-hdr[data-i], .tv-lane[data-i], .sx-th[data-sel]');
+    if (!t) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    $$('.drop-on', panel).forEach((x) => x.classList.remove('drop-on'));
+    t.classList.add('drop-on');
+  });
+  panel.addEventListener('dragleave', (e) => { const t = e.target.closest('.drop-on'); if (t && !t.contains(e.relatedTarget)) t.classList.remove('drop-on'); });
+  panel.addEventListener('drop', (e) => {
+    const type = e.dataTransfer.getData('text/x-drumbort-newdev');
+    const t = e.target.closest('.tv-hdr[data-i], .tv-lane[data-i], .sx-th[data-sel]');
+    $$('.drop-on', panel).forEach((x) => x.classList.remove('drop-on'));
+    if (!type || !t) return;
+    e.preventDefault();
+    const i = +(t.dataset.i ?? t.dataset.sel);
+    pick(i, state.slot);
+    chain.addDevice(type, channel(i));
+    setBottom('fx');
+    app.renderAll();
+  });
 
   buildSession();
   buildMixer();

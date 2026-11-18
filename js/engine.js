@@ -10,6 +10,7 @@
  * Funziona sia con AudioContext (live) sia con OfflineAudioContext (export WAV).
  */
 
+import { DEVICES, buildDevice } from './devices.js';
 import { KITS } from './kits.js';
 import { PRESETS, SYNTH_TRACKS as SYNTH_DEFS, playVoice, voiceParams, releaseTime, presetOf } from './synth.js';
 import { VoiceCache } from './voicecache.js';
@@ -33,18 +34,6 @@ export const DEFAULT_FX = Object.freeze({
   sc: 0,          // sidechain: quanto la cassa abbassa i synth (0-1)
   scRel: 0.18,    // sidechain: tempo di ritorno (s)
 });
-
-const driveCache = new Map();
-/** Curva di saturazione tanh normalizzata (insert per traccia). */
-function driveCurve(amount) {
-  const key = Math.round(amount * 20);
-  if (!driveCache.has(key)) {
-    const n = 2048, c = new Float32Array(n), k = 1 + amount * 12;
-    for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = Math.tanh(x * k) / Math.tanh(k); }
-    driveCache.set(key, c);
-  }
-  return driveCache.get(key);
-}
 
 const crushCache = new Map();
 /** Curva di quantizzazione a N bit per il WaveShaper. */
@@ -91,6 +80,7 @@ export class Engine {
     this.fx = { ...DEFAULT_FX };
     this.bpm = 120;
     this.silent = false;   // controller remoto: nessuna voce (l'audio lo produce il motore)
+    this._devs = Array.from({ length: TRACKS + SYNTH_TRACKS }, () => []);   // catene di device per canale
   }
 
   // -------------------------------------------------------------------
@@ -168,12 +158,13 @@ export class Engine {
       dly.gain.value = 0;
       post.connect(rev).connect(this.revIn);
       post.connect(dly).connect(this.dlyIn);
-      this.channels.push({ gain, pan: pan.pan ? pan : null, out: pan, ins: [], nodes: {}, shape: '' });
+      this.channels.push({ gain, pan: pan.pan ? pan : null, out: pan, built: new Map(), devKey: '' });
       this.channels[i].rev = rev;
       this.channels[i].dly = dly;
     }
     this._buildKitChain();
     this.setFx(this.fx, this.bpm, true);
+    this._devs.forEach((c, i) => this.setDevices(i, c));
     return ctx;
   }
 
@@ -247,59 +238,38 @@ export class Engine {
     if (ch.pan && typeof tr.pan === 'number') ch.pan.pan.setTargetAtTime(tr.pan, t, 0.01);
     ch.rev.gain.setTargetAtTime(tr.rev || 0, t, 0.01);
     ch.dly.gain.setTargetAtTime(tr.dly || 0, t, 0.01);
-    this._setInserts(ch, tr, t);
   }
 
   /**
-   * Insert per traccia: drive → bit crusher → EQ (shelf basso 200 Hz, alto 5 kHz) → filtro
-   * (LP ← → HP) → compressore. La catena si ricostruisce solo se cambia la sua struttura;
-   * i valori si aggiornano sui nodi esistenti.
+   * Catena di device della traccia (devices.js), tra il guadagno del canale e il pan. I device
+   * esistenti si riusano (code di riverbero e delay continuano); la catena si ricollega solo se
+   * cambiano ordine, presenza o attivazione dei device; i parametri si aggiornano sui nodi.
    */
-  _setInserts(ch, tr, t) {
-    const drv = Math.round((tr.drv || 0) * 20) / 20, crush = tr.crush || 0;
-    const lo = tr.lo || 0, hi = tr.hi || 0, flt = tr.flt || 0, cmp = tr.cmp || 0;
-    const eq = lo !== 0 || hi !== 0, fl = Math.abs(flt) > 0.02, cp = cmp > 0;
-    const shape = `${drv}|${crush}|${eq}|${fl}|${cp}`;
-    if (ch.shape !== shape) {
-      ch.shape = shape;
+  setDevices(i, chain) {
+    this._devs[i] = chain || [];
+    if (!this.ctx) return;
+    const ch = this.channels[i], t = this.ctx.currentTime;
+    const act = this._devs[i].filter((d) => d.on && DEVICES[d.type]);
+    const key = act.map((d) => `${d.id}:${d.type}`).join('|');
+    if (ch.devKey !== key) {
+      ch.devKey = key;
       ch.gain.disconnect();
-      ch.ins.forEach((n) => n.disconnect());
-      ch.ins = [];
-      ch.nodes = {};
-      const ctx = this.ctx;
+      for (const b of ch.built.values()) b.output.disconnect();
+      for (const [id, b] of ch.built) if (!act.some((d) => d.id === id && d.type === b.type)) { b.stop(); ch.built.delete(id); }
       let node = ch.gain;
-      const add = (n) => { node.connect(n); node = n; ch.ins.push(n); return n; };
-      if (drv > 0) {
-        const ws = ctx.createWaveShaper();
-        ws.curve = driveCurve(drv);
-        ws.oversample = '2x';
-        add(ws);
-        const comp = ctx.createGain();
-        comp.gain.value = 1 / (1 + drv * 1.5);     // compensa il volume
-        add(comp);
-      }
-      if (crush > 0) { const ws = ctx.createWaveShaper(); ws.curve = crushCurve(crush); add(ws); }
-      if (eq) {
-        ch.nodes.lo = add(ctx.createBiquadFilter()); ch.nodes.lo.type = 'lowshelf'; ch.nodes.lo.frequency.value = 200;
-        ch.nodes.hi = add(ctx.createBiquadFilter()); ch.nodes.hi.type = 'highshelf'; ch.nodes.hi.frequency.value = 5000;
-      }
-      if (fl) { ch.nodes.flt = add(ctx.createBiquadFilter()); ch.nodes.flt.Q.value = 1; }
-      if (cp) {
-        const c = add(ctx.createDynamicsCompressor());
-        c.knee.value = 6; c.attack.value = 0.005; c.release.value = 0.15;
-        ch.nodes.cmp = c;
+      for (const d of act) {
+        let b = ch.built.get(d.id);
+        if (!b) { b = buildDevice(this.ctx, d, this); ch.built.set(d.id, b); }
+        node.connect(b.input);
+        node = b.output;
       }
       node.connect(ch.out);
     }
-    const n = ch.nodes;
-    if (n.lo) { n.lo.gain.setTargetAtTime(lo, t, 0.02); n.hi.gain.setTargetAtTime(hi, t, 0.02); }
-    if (n.flt) {
-      const { lp, hp } = filterFreqs(flt);
-      n.flt.type = flt < 0 ? 'lowpass' : 'highpass';
-      n.flt.frequency.setTargetAtTime(flt < 0 ? lp : hp, t, 0.02);
-    }
-    if (n.cmp) { n.cmp.threshold.setTargetAtTime(-6 - 30 * cmp, t, 0.02); n.cmp.ratio.setTargetAtTime(1.5 + 8.5 * cmp, t, 0.02); }
+    for (const d of act) ch.built.get(d.id).set(d.p, t, { bpm: this.bpm });
   }
+
+  /** Tutte le catene (progetto). */
+  setAllDevices(devs) { for (let i = 0; i < TRACKS + SYNTH_TRACKS; i++) this.setDevices(i, (devs && devs[i]) || []); }
 
   /** Applica il mixer di un intero pattern. */
   applyMix(pattern, time) {
@@ -324,6 +294,10 @@ export class Engine {
     this.dlyOut.gain.setTargetAtTime(f.dly, t, tc);
     this.dlyFb.gain.setTargetAtTime(Math.min(0.9, f.fb), t, tc);
     this.delay.delayTime.setTargetAtTime(Math.min(4, (60 / this.bpm / 4) * f.div), t, immediate ? 0.001 : 0.05);
+    if (bpm && bpm !== this._devBpm) {
+      this._devBpm = bpm;
+      this._devs.forEach((c, i) => { if (c.some((d) => d.type === 'delay')) this.setDevices(i, c); });
+    }
     if (Math.abs(f.size - this._revSize) > 0.05) {
       this._revSize = f.size;
       this.conv.buffer = impulse(this.ctx, f.size);

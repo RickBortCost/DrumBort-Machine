@@ -12,6 +12,7 @@ public sealed class Project
     public Pattern[] Slots = Enumerable.Range(0, 8).Select(_ => Pattern.Parse(null)).ToArray();
     public int Slot;
     public Fx Fx = new();
+    public DeviceDef[][] Devs = Enumerable.Range(0, Mixer.Channels).Select(_ => Array.Empty<DeviceDef>()).ToArray();
     public (int slot, int rep)[] Chain = Array.Empty<(int, int)>();
     public bool SongOn;
     public string? Lock;
@@ -32,6 +33,7 @@ public sealed class Project
         for (int i = 0; i < 8; i++) if (parts[$"p{i}"] is JsonObject p) Slots[i] = Pattern.Parse(p);
         if (parts["slot"] is JsonValue sv && sv.TryGetValue(out double sd)) Slot = Math.Clamp((int)sd, 0, 7);
         if (parts["fx"] is JsonObject fx) Fx = Fx.Parse(fx);
+        if (parts["devs"] is JsonArray devs) for (int i = 0; i < Devs.Length; i++) Devs[i] = DeviceDef.ParseChain(i < devs.Count ? devs[i] : null);
         if (parts["song"] is JsonObject song)
         {
             SongOn = J.B(song, "on");
@@ -49,6 +51,12 @@ public sealed class Project
             Arr = (arr["bars"] as JsonArray ?? new JsonArray()).Select(b => (J.Nums(b?["m"]).Select(x => (int)x).Concat(Enumerable.Repeat(-1, 12)).Take(12).ToArray(), J.I(b, "s", 0))).ToArray();
         }
         if (parts["mode"] is JsonValue mv && mv.TryGetValue(out string? m)) Mode = m ?? "pattern";
+        // Progetti delle versioni precedenti (render da file): effetti per traccia → device
+        if (parts["devs"] == null && parts["p0"] != null && Devs.All(c => c.Length == 0))
+        {
+            var p = Slots[Slot];
+            for (int i = 0; i < Mixer.Channels; i++) Devs[i] = Devices.Legacy(i < 8 ? p.Tracks[i].Mix : p.Synth.Tracks[i - 8].Mix);
+        }
     }
 
     public KitDef KitOf(Pattern p) => Kits.ById(Lock ?? p.Kit);
@@ -138,6 +146,7 @@ public sealed class Sequencer
         mx.SetKit(P.KitOf(Pattern));
         mx.ApplyMix(Pattern, ctx.CurrentTime);
         mx.SetFx(P.Fx, Pattern.Bpm);
+        for (int i = 0; i < Mixer.Channels; i++) mx.SetDevices(i, P.Devs[i]);
         Prewarm();
     }
 

@@ -12,7 +12,7 @@ import { getNoise } from './kits.js';
 
 const mtof = (n) => 440 * Math.pow(2, (n - 69) / 12);
 const EPS = 0.0001;
-const H = 64;          // armoniche per frame
+const H = 256;         // armoniche per frame
 const F = 4;           // frame per tabella
 const num = (v) => typeof v === 'number' && isFinite(v);
 const clamp = (v, lo, hi, def) => (num(v) ? Math.min(hi, Math.max(lo, v)) : def);
@@ -22,7 +22,7 @@ const clamp = (v, lo, hi, def) => (num(v) ? Math.min(hi, Math.max(lo, v)) : def)
 // =====================================================================
 
 /** Coefficienti (real, imag) da una forma d'onda campionata su un periodo. */
-function dft(fn, N = 512) {
+function dft(fn, N = 1024) {
   const xs = new Float32Array(N);
   for (let i = 0; i < N; i++) xs[i] = fn(i / N);
   const real = new Float32Array(H), imag = new Float32Array(H);
@@ -300,6 +300,7 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
   if (W.drive > 0) {
     const ws = ctx.createWaveShaper();
     ws.curve = driveCurve(W.drive);
+    ws.oversample = '4x';
     const comp = ctx.createGain();
     comp.gain.value = 1 / (1 + W.drive);
     pre.connect(ws).connect(comp);

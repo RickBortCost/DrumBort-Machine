@@ -15,7 +15,7 @@ public sealed class VoiceCache : IDisposable
     readonly ConcurrentQueue<string> order = new();
     readonly Thread worker;
     long bytes;
-    const long MaxBytes = 256L << 20;     // 256 MB
+    const long MaxBytes = 768L << 20;     // 768 MB: più voci pronte, meno sintesi dal vivo
     public int Count => map.Count;
     public long Rendered;
 
@@ -44,24 +44,28 @@ public sealed class VoiceCache : IDisposable
                 var ctx = new AudioContext(sampleRate);
                 play(ctx, ctx.Destination);
                 int frames = (int)Math.Ceiling(dur * sampleRate / AudioContext.Block) * AudioContext.Block;
-                var data = new float[frames];
+                var data = new float[frames]; var dataR = new float[frames];
                 var l = new float[AudioContext.Block]; var r = new float[AudioContext.Block];
+                bool stereo = false;
                 for (int f = 0; f < frames; f += AudioContext.Block)
                 {
                     ctx.RenderBlock(l, r, 0);
                     Array.Copy(l, 0, data, f, AudioContext.Block);
+                    Array.Copy(r, 0, dataR, f, AudioContext.Block);
+                    if (!stereo) for (int i = 0; i < AudioContext.Block; i++) if (l[i] != r[i]) { stereo = true; break; }
                 }
-                // Coda silenziosa tagliata (−90 dB)
+                // Coda silenziosa tagliata (−90 dB); voci stereo (unisono, spread) conservate in stereo
                 int end = frames;
-                while (end > 0 && Math.Abs(data[end - 1]) < 3e-5f) end--;
-                var buf = new AudioBuf(1, Math.Max(1, end), sampleRate);
+                while (end > 0 && Math.Abs(data[end - 1]) < 3e-5f && Math.Abs(dataR[end - 1]) < 3e-5f) end--;
+                var buf = new AudioBuf(stereo ? 2 : 1, Math.Max(1, end), sampleRate);
                 Array.Copy(data, buf.Data[0], buf.Length);
+                if (stereo) Array.Copy(dataR, buf.Data[1], buf.Length);
                 map[key] = buf;
                 order.Enqueue(key);
                 Rendered++;
-                if (Interlocked.Add(ref bytes, buf.Length * 4L) > MaxBytes)
+                if (Interlocked.Add(ref bytes, buf.Length * 4L * buf.Data.Length) > MaxBytes)
                     while (Interlocked.Read(ref bytes) > MaxBytes * 3 / 4 && order.TryDequeue(out var old))
-                        if (map.TryRemove(old, out var ob)) Interlocked.Add(ref bytes, -ob.Length * 4L);
+                        if (map.TryRemove(old, out var ob)) Interlocked.Add(ref bytes, -ob.Length * 4L * ob.Data.Length);
             }
             catch (Exception e) { Console.Error.WriteLine($"[cache] {key}: {e.Message}"); }
             finally { pending.TryRemove(key, out _); }

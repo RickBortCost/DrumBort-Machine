@@ -9,6 +9,7 @@
  */
 
 import { SYNTH_TRACKS } from './synth.js';
+import { LEGACY_KEYS, quickSet } from './devices.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -72,6 +73,7 @@ export function initMacros(app) {
       const [who, p] = x.t.split('.');
       if (who === 'fx') { fx = fx || {}; fx[p] = v; state.fx[p] = v; continue; }
       const { tr, ch } = trackOf(who);
+      if (LEGACY_KEYS.includes(p)) { quickSet(state.devs[ch], p, v); engine.setDevices(ch, state.devs[ch]); continue; }
       tr[p] = p === 'tune' ? Math.round(v) : +v.toFixed(3);
       engine.setChannel(ch, tr);
     }

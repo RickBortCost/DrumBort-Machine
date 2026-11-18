@@ -75,7 +75,7 @@ const { out: web, comp: wComp, rev: wRev, eq: wEq } = await page.evaluate(async 
   }
   // EQ per traccia: filtri shelf
   const eq = {};
-  for (const [type, fc, g] of [['lowshelf', 200, 6], ['highshelf', 5000, -9]]) {
+  for (const [type, fc, g] of [['lowshelf', 200, 6], ['highshelf', 5000, -9], ['peaking', 1000, 8]]) {
     for (const f of [60, 200, 1000, 5000, 12000]) {
       const ctx = new OfflineAudioContext(1, SR, SR);
       const o = ctx.createOscillator(); o.frequency.value = f;

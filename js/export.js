@@ -10,10 +10,10 @@ import { scheduleTick, stepDuration, swingOffset, STEPS } from './sequencer.js';
 /**
  * Renderizza una sequenza di battute.
  * @param {object[]} bars     un pattern per battuta (16 step)
- * @param {object}   o        { fx, samples, lockKit, sampleRate, tail, cache }
+ * @param {object}   o        { fx, samples, lockKit, sampleRate, tail, cache, devs (catene di device) }
  * @returns {Promise<AudioBuffer>}
  */
-export async function renderBars(bars, { fx, samples = [], lockKit = null, sampleRate = 44100, tail = 2.5, cache = null } = {}) {
+export async function renderBars(bars, { fx, samples = [], lockKit = null, sampleRate = 44100, tail = 2.5, cache = null, devs = null } = {}) {
   const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   const start = 0.02;
   const dur = bars.reduce((a, p) => a + STEPS * stepDuration(p.bpm), start) + tail;
@@ -33,6 +33,7 @@ export async function renderBars(bars, { fx, samples = [], lockKit = null, sampl
       eng.setKit(kit);
       eng.setFx(fx, p.bpm, true);
       eng.applyMix(p, 0);
+      if (devs) eng.setAllDevices(devs);
     } else {
       eng.applyMix(p, time);
       // Catena lo-fi e tempo del delay cambiano esattamente all'inizio della battuta

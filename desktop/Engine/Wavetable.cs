@@ -58,10 +58,10 @@ public sealed class WtOscNode : SourceNode
 
 public static class Wavetable
 {
-    const int H = 64, F = 4;
+    const int H = 256, F = 4;
     const float EPS = 0.0001f;
 
-    static (float[] re, float[] im) Dft(Func<double, double> fn, int N = 512)
+    static (float[] re, float[] im) Dft(Func<double, double> fn, int N = 1024)
     {
         var xs = new double[N];
         for (int i = 0; i < N; i++) xs[i] = fn((double)i / N);
@@ -229,7 +229,7 @@ public static class Wavetable
         if (W.Drive > 0)
         {
             var comp = ctx.Gain((float)(1 / (1 + W.Drive)));
-            pre.Connect(ctx.Shaper(DriveCurve(W.Drive))).Connect(comp);
+            pre.Connect(ctx.Shaper(DriveCurve(W.Drive), 4)).Connect(comp);
             entry = comp;
         }
         if (f2 == null) entry.Connect(f1).Connect(amp);

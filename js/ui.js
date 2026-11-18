@@ -4,6 +4,7 @@
  * La sezione SYNTH è in synthui.js.
  */
 
+import { normalizeChain, legacyChain, LEGACY_KEYS, quickGet, quickSet } from './devices.js';
 import { KITS, USER_KITS, kitById, findKit, setUserKits, setUserSounds, normalizeSound, USER_SOUNDS, kitWithSound } from './kits.js';
 import { setUserPresets } from './presets.js';
 import { Engine, DEFAULT_FX } from './engine.js';
@@ -70,6 +71,7 @@ const state = {
   userPresets: [],                  // preset synth salvati dall'editor wavetable
   userSounds: [],                   // suoni di batteria creati nel Sound Lab
   macros: defaultMacros(),          // 4 macro di progetto (macros.js)
+  devs: emptyDevs(),                // catene di device per canale (devices.js)
   tracks: [],                       // canali attivi, in ordine (0-7 batteria, 8-11 synth): vista TRACCE
   projectName: '',                  // progetto aperto
   layout: null,                     // 'compact' | 'studio' (null = scelta automatica al primo avvio)
@@ -128,6 +130,31 @@ function normalizeTracks(t) {
   return used;
 }
 
+/** Parametro di una traccia: gli effetti rapidi (drv, crush, lo, hi, flt, cmp) vivono nella catena di device. */
+function paramGet(ch, tr, k) { return LEGACY_KEYS.includes(k) ? +quickGet(state.devs[ch], k).toFixed(3) : tr[k]; }
+function paramSet(ch, tr, k, v) {
+  if (LEGACY_KEYS.includes(k)) { quickSet(state.devs[ch], k, v); engine.setDevices(ch, state.devs[ch]); return; }
+  tr[k] = v;
+}
+
+/** Catene vuote per i 12 canali. */
+function emptyDevs() { return Array.from({ length: 12 }, () => []); }
+/**
+ * Catene di device. Progetti delle versioni precedenti (nessun elenco): gli effetti per traccia
+ * drv/crush/lo/hi/flt/cmp del pattern corrente diventano device equivalenti.
+ */
+function normalizeDevs(d) {
+  if (Array.isArray(d)) return emptyDevs().map((_, i) => normalizeChain(d[i]));
+  const p = state.slots[state.slot] || state.slots[0];
+  const out = emptyDevs().map((_, i) => legacyChain(i < 8 ? p.tracks[i] : p.synth.tracks[i - 8]));
+  stripLegacy();
+  return out;
+}
+/** Azzera gli effetti per traccia delle versioni precedenti (ora sono device). */
+function stripLegacy() {
+  for (const p of state.slots) for (const t of [...p.tracks, ...p.synth.tracks]) for (const k of LEGACY_KEYS) if (t[k]) t[k] = 0;
+}
+
 function loadState() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORE_KEY));
@@ -152,6 +179,7 @@ function loadState() {
       state.arr = normalizeArr(raw.arr);
       state.macros = normalizeMacros(raw.macros);
       state.tracks = normalizeTracks(raw.tracks);
+      state.devs = normalizeDevs(raw.devs);
       if (raw.panels && typeof raw.panels === 'object') state.panels = { browser: raw.panels.browser !== false, side: raw.panels.side !== false, bottom: raw.panels.bottom === 'fx' ? 'fx' : 'editor', ...(Number.isFinite(raw.panels.h) ? { h: raw.panels.h } : {}) };
       if (raw.midi && raw.midi.opts) {
         state.midi = { opts: { ...state.midi.opts, ...raw.midi.opts }, input: raw.midi.input || '', output: raw.midi.output || '' };
@@ -163,6 +191,7 @@ function loadState() {
   if (new URLSearchParams(location.search).has('demo')) {
     state.slots = Array.from({ length: SLOTS }, (_, i) => createPattern(KITS[i % KITS.length].id, true, i % 3));
     state.tracks = normalizeTracks(null);
+    state.devs = normalizeDevs(null);
   } else {
     state.slots = Array.from({ length: SLOTS }, () => createPattern(KITS[0].id, false, null));
     state.tracks = [];
@@ -178,7 +207,7 @@ function save() {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         slot: state.slot, slots: state.slots, fx: state.fx, song: state.song, lock: state.lock, midi: state.midi, view: state.view,
         favs: state.favs, userKits: state.userKits, userPresets: state.userPresets, userSounds: state.userSounds, projectName: state.projectName,
-        layout: state.layout, session: state.session, arr: state.arr, macros: state.macros, tracks: state.tracks, panels: state.panels,
+        layout: state.layout, session: state.session, arr: state.arr, macros: state.macros, tracks: state.tracks, panels: state.panels, devs: state.devs,
       }));
     } catch (_) { /* quota / navigazione privata */ }
     // Le modifiche cambiano le voci: pre-renderizza in background quelle nuove
@@ -232,7 +261,7 @@ const undoStack = [];
 const redoStack = [];
 
 function snapshot() {
-  undoStack.push({ slot: state.slot, p: JSON.stringify(pat()) });
+  undoStack.push({ slot: state.slot, p: JSON.stringify(pat()), d: JSON.stringify(state.devs) });
   if (undoStack.length > 100) undoStack.shift();
   redoStack.length = 0;
   renderUndo();
@@ -241,9 +270,10 @@ function snapshot() {
 function restore(from, to) {
   const e = from.pop();
   if (!e) return;
-  to.push({ slot: e.slot, p: JSON.stringify(state.slots[e.slot]) });
+  to.push({ slot: e.slot, p: JSON.stringify(state.slots[e.slot]), d: JSON.stringify(state.devs) });
   const wasPlaying = isPlayingPattern(state.slots[e.slot]);
   state.slots[e.slot] = JSON.parse(e.p);
+  if (e.d) { state.devs = normalizeDevs(JSON.parse(e.d)); engine.setAllDevices(state.devs); }
   state.slot = e.slot;
   if (wasPlaying) seq.pattern = state.slots[e.slot];
   syncPlayback(); renderAll(); save();
@@ -471,8 +501,9 @@ function renderParams() {
   $$('#sliders input[data-param]').forEach((inp) => {
     const d = PARAMS.find((x) => x.k === inp.dataset.param);
     if (d.k === 'len') inp.max = patSteps(p);
-    inp.value = tr[d.k];
-    inp.nextElementSibling.textContent = d.fmt(tr[d.k]);
+    const v = paramGet(t, tr, d.k);
+    inp.value = v;
+    inp.nextElementSibling.textContent = d.fmt(v);
   });
 }
 
@@ -496,7 +527,7 @@ function renderTools() {
   vb.setAttribute('aria-label', `Vista ${{ drum: 'batteria', synth: 'synth', perf: 'performance' }[ui.view]}; tocca per ${{ drum: 'batteria', synth: 'synth', perf: 'performance' }[next]}`);
   vb.classList.toggle('on', ui.view !== 'drum');
   $('[data-cmd="song"]').classList.toggle('on', state.song.on);
-  const fxOn = state.fx.filter !== 0 || state.fx.sc > 0 || pat().tracks.some((t) => t.rev > 0 || t.dly > 0 || t.drv > 0 || t.crush > 0);
+  const fxOn = state.fx.filter !== 0 || state.fx.sc > 0 || pat().tracks.some((t) => t.rev > 0 || t.dly > 0) || state.devs.some((c) => c.some((d) => d.on));
   $('[data-cmd="fx"]').classList.toggle('on', fxOn);
   $('[data-cmd="paste"]').disabled = !ui.clip;
   grid.classList.toggle('editing', ui.edit);
@@ -730,10 +761,10 @@ $('#sliders').addEventListener('input', (e) => {
   let v = parseFloat(inp.value);
   if (k === 'len') v = Math.round(v);
   if (k === 'crush') v = v < 4 ? 0 : Math.round(v);
-  tr[k] = v;
+  paramSet(state.sel, tr, k, v);
   $$(`#sliders input[data-param="${k}"]`).forEach((x) => {
     if (x !== inp) x.value = inp.value;
-    x.nextElementSibling.textContent = PARAMS.find((d) => d.k === k).fmt(tr[k]);
+    x.nextElementSibling.textContent = PARAMS.find((d) => d.k === k).fmt(v);
   });
   if (isPlayingPattern(p)) engine.setChannel(state.sel, tr);
   if (k === 'len') { renderRow(state.sel); renderTrackLabels(); }
@@ -1483,7 +1514,7 @@ async function deliver(file) {
 async function exportAudio(bars, name) {
   toast('Rendering audio…');
   try {
-    const buf = await renderBars(bars, { fx: state.fx, samples: engine.samples, lockKit: state.lock });
+    const buf = await renderBars(bars, { fx: state.fx, samples: engine.samples, lockKit: state.lock, devs: state.devs });
     const blob = encodeWav(buf);
     await deliver(new File([blob], `drumbort-${name}-${bars[0].bpm}bpm.wav`, { type: 'audio/wav' }));
     toast(`WAV pronto (${buf.duration.toFixed(1)} s)`);
@@ -1515,7 +1546,7 @@ async function exportStems(bars, name) {
         made.set(src, p);
         return p;
       });
-      const buf = await renderBars(solo, { fx: state.fx, samples: engine.samples, lockKit: state.lock });
+      const buf = await renderBars(solo, { fx: state.fx, samples: engine.samples, lockKit: state.lock, devs: state.devs });
       const label = i < TRACKS ? kitOf(bars[0]).tracks[i].name : SY[i - TRACKS];
       const fname = `${String(n + 1).padStart(2, '0')}-${label.replace(/[^A-Za-z0-9]+/g, '_')}.wav`;
       files.push({ name: fname, data: new Uint8Array(await encodeWav(buf).arrayBuffer()) });
@@ -1533,7 +1564,7 @@ function exportData() {
     app: 'drumbort', version: 3, appVersion: APP_VERSION,
     slot: state.slot, slots: state.slots, song: state.song, fx: state.fx, lock: state.lock, userKits: state.userKits,
     userPresets: state.userPresets, userSounds: state.userSounds, session: state.session, arr: state.arr, macros: state.macros,
-    tracks: state.tracks,
+    tracks: state.tracks, devs: state.devs,
   };
 }
 
@@ -1555,6 +1586,8 @@ function importData(o) {
   if (o.session) state.session = normalizeSession(o.session);
   if (o.macros) state.macros = normalizeMacros(o.macros);
   state.tracks = normalizeTracks(o.tracks);
+  state.devs = normalizeDevs(o.devs);
+  engine.setAllDevices(state.devs);
   state.arr = normalizeArr(o.arr);
   undoStack.length = 0; redoStack.length = 0;
   if (seq.playing) stopPlayback();
@@ -1620,6 +1653,8 @@ function newProject() {
   for (let i = 0; i < SLOTS; i++) state.slots[i] = createPattern(KITS[0].id, false, null);
   state.tracks = [];
   state.macros = defaultMacros();
+  state.devs = emptyDevs();
+  engine.setAllDevices(state.devs);
   ui.arrStart = 0;
   state.song = normalizeSong(null);
   state.fx = { ...DEFAULT_FX };
@@ -1825,7 +1860,7 @@ function remoteParts() {
     session: { quant: state.session.quant, follow: state.session.follow },
     arr: state.arr, userKits: state.userKits, userPresets: state.userPresets,
     mode: sessionActive() ? 'session' : 'pattern',
-    tracks: state.tracks,
+    tracks: state.tracks, devs: state.devs,
   };
   state.slots.forEach((p, i) => { parts[`p${i}`] = p; });
   parts.userSounds = state.userSounds;
@@ -1848,6 +1883,7 @@ function applyRemoteParts(parts, full) {
   if (typeof parts.slot === 'number') state.slot = clamp(parts.slot | 0, 0, SLOTS - 1);
   if (parts.fx) state.fx = normalizeFx(parts.fx);
   if (parts.tracks) state.tracks = normalizeTracks(parts.tracks);
+  if (parts.devs) { state.devs = normalizeDevs(parts.devs); engine.setAllDevices(state.devs); }
   if (parts.song) state.song = normalizeSong(parts.song);
   if ('lock' in parts) state.lock = parts.lock && findKit(parts.lock) ? parts.lock : null;
   if (parts.session) {
@@ -1937,6 +1973,7 @@ function renderRemote(s) {
 // =====================================================================
 
 loadState();
+engine.setAllDevices(state.devs);
 $('#version').textContent = `DrumBort Machine v${APP_VERSION}`;
 buildSelects();
 buildGrid();
@@ -1945,12 +1982,13 @@ buildSliders();
 buildFx();
 synthUI = initSynthUI({
   engine, seq, ui, state, pat, save, snapshot, toast, setToggle, isPlayingPattern, remoteOp,
-  openSheet, closeSheet, setPage: (n) => setPage(n),
+  openSheet, closeSheet, setPage: (n) => setPage(n), paramGet, paramSet,
   onSoundChange: (kind) => { if (lab) lab.render(kind); },
 });
 const app = {
   engine, seq, ui, state, pat, kitOf, save, snapshot, toast, setToggle, isPlayingPattern, remoteOp,
   openSheet, closeSheet, deliver, syncPlayback, renderAll, buildKitSelect, exportData, importData, newProject,
+  paramGet, paramSet,
 };
 panels = initPanels(app);
 auto = initAutomation(app);
@@ -1993,7 +2031,7 @@ remote = initRemote({ getParts: remoteParts, applyParts: applyRemoteParts, onOp:
 if (remote) remote.onStatus(renderRemote);
 
 // Esposto per debug/test
-window.drumbort = { engine, seq, state, ui, midi, version: APP_VERSION, undo, redo, panels, get remote() { return remote; } };
+window.drumbort = { engine, seq, state, ui, midi, version: APP_VERSION, undo, redo, panels, renderAll, get remote() { return remote; } };
 if (!LAB) panels.handleShareHash();
 handleSoundHash();
 window.addEventListener('hashchange', () => { if (!LAB) panels.handleShareHash(); handleSoundHash(); });

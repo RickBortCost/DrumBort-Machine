@@ -45,6 +45,8 @@ bool native = Arg("--mode", "native") != "browser";
 AudioEngine? engine = null;
 if (native)
 {
+    // Frequenza nativa del dispositivo (niente conversione del sistema), salvo --rate
+    if (!args.Contains("--rate") && !Flag("--no-audio")) rate = AudioEngine.PreferredRate(rate);
     engine = new AudioEngine(rate, int.Parse(Arg("--buffer", "1024")));
     try
     {

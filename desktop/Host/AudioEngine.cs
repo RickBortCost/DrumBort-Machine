@@ -294,7 +294,35 @@ public sealed class AudioEngine : IDisposable
         steps = Seq.P.Slots[Seq.P.Slot].Steps.Sum(r => r.Count(v => v > 0)),
         kit = Seq.P.Slots[Seq.P.Slot].Kit,
         sounds = Kits.UserSoundCount,
+        devices = Seq.P.Devs.Sum(c => c.Length),
     };
+
+    /// <summary>Frequenza di campionamento del dispositivo che verrà aperto (44,1–96 kHz), altrimenti `fallback`.</summary>
+    public static int PreferredRate(int fallback)
+    {
+        try
+        {
+            PortAudio.Initialize();
+            try
+            {
+                var saved = Settings.Load("device");
+                int api = OperatingSystem.IsWindows() ? PaHost.Index(PaHost.WASAPI) : -1;
+                int dev = -1;
+                for (int i = 0; i < PortAudio.DeviceCount && !string.IsNullOrEmpty(saved); i++)
+                {
+                    var d = PortAudio.GetDeviceInfo(i);
+                    if (d.maxOutputChannels >= 2 && (api < 0 || d.hostApi == api) && SameName(d.name, saved!)) { dev = i; break; }
+                }
+                if (dev < 0 && api >= 0) dev = PaHost.DefaultOutput(api);
+                if (dev < 0) dev = PortAudio.DefaultOutputDevice;
+                if (dev < 0 || dev == PortAudio.NoDevice) return fallback;
+                int sr = (int)Math.Round(PortAudio.GetDeviceInfo(dev).defaultSampleRate);
+                return sr is >= 44100 and <= 96000 ? sr : fallback;
+            }
+            finally { PortAudio.Terminate(); }
+        }
+        catch { return fallback; }
+    }
 
     public static void ListDevices()
     {

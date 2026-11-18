@@ -40,7 +40,7 @@ public sealed class AudioContext
     public GainNode Gain(float v = 1) { var g = new GainNode(this); g.GainParam.Value = v; return g; }
     public OscillatorNode Oscillator(string type = "sine") => new(this, type);
     public BiquadFilterNode Biquad(string type = "lowpass") => new(this, type);
-    public WaveShaperNode Shaper(float[] curve) => new(this, curve);
+    public WaveShaperNode Shaper(float[] curve, int oversample = 1) => new(this, curve) { Oversample = oversample };
     public BufferSourceNode BufferSource(AudioBuf buf) => new(this, buf);
     public ConstantSourceNode Constant(float v = 1) { var c = new ConstantSourceNode(this); c.Offset.Value = v; return c; }
     public StereoPannerNode Panner() => new(this);

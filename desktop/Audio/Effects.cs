@@ -1,4 +1,4 @@
-// Effects.cs — FFT, riverbero algoritmico (al posto del ConvolverNode), compressore master
+// Effects.cs — FFT e compressore master
 // con la stessa impostazione e il guadagno di compensazione del DynamicsCompressor di Chrome.
 
 namespace DrumBort.Audio;
@@ -33,83 +33,6 @@ public static class Fft
                 }
             }
         }
-    }
-}
-
-/// <summary>
-/// Riverbero stereo (8 comb + 4 all-pass per canale, schema Freeverb). La durata segue il
-/// parametro "size" della web app (secondi di coda), il livello è tarato sul convolver originale.
-/// </summary>
-public sealed class ReverbNode : AudioNode
-{
-    static readonly int[] CombT = { 1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617 };
-    static readonly int[] ApT = { 556, 441, 341, 225 };
-    const int Spread = 23;
-    readonly Comb[] cl, cr;
-    readonly Allpass[] al, ar;
-    readonly float[] inL = new float[AudioContext.Block], inR = new float[AudioContext.Block];
-    public static double RtFactor = double.TryParse(Environment.GetEnvironmentVariable("DRUMBORT_RT"), System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 1.2;
-    public static float Cal = float.TryParse(Environment.GetEnvironmentVariable("DRUMBORT_CAL"), System.Globalization.CultureInfo.InvariantCulture, out var c) ? c : 0.88f;
-
-    sealed class Comb
-    {
-        readonly float[] b; int i; float store;
-        public float Feedback, Damp = 0.25f;
-        public Comb(int n) { b = new float[n]; }
-        public float Run(float x)
-        {
-            float y = b[i];
-            store = y * (1 - Damp) + store * Damp;
-            b[i] = x + store * Feedback;
-            if (++i >= b.Length) i = 0;
-            return y;
-        }
-    }
-    sealed class Allpass
-    {
-        readonly float[] b; int i;
-        public Allpass(int n) { b = new float[n]; }
-        public float Run(float x)
-        {
-            float bo = b[i];
-            b[i] = x + bo * 0.5f;
-            if (++i >= b.Length) i = 0;
-            return bo - x;
-        }
-    }
-
-    public ReverbNode(AudioContext c) : base(c)
-    {
-        double k = c.SampleRate / 44100.0;
-        cl = CombT.Select(t => new Comb((int)(t * k))).ToArray();
-        cr = CombT.Select(t => new Comb((int)((t + Spread) * k))).ToArray();
-        al = ApT.Select(t => new Allpass((int)(t * k))).ToArray();
-        ar = ApT.Select(t => new Allpass((int)((t + Spread) * k))).ToArray();
-        SetSize(2.2);
-    }
-
-    /// <summary>Coda in secondi (RT60 approssimato): feedback dei comb dalla loro lunghezza media.</summary>
-    public void SetSize(double seconds)
-    {
-        double avg = CombT.Average() / 44100.0;
-        // La IR originale decade come (1 - t/len)^3: tempo "percepito" ≈ metà della durata
-        double rt = Math.Max(0.2, seconds * RtFactor);
-        float fb = (float)Math.Pow(10, -3 * avg / rt);
-        foreach (var c in cl.Concat(cr)) c.Feedback = Math.Min(0.985f, fb);
-    }
-
-    protected override void Process()
-    {
-        SumInputs(inL, inR, out bool st);
-        for (int i = 0; i < AudioContext.Block; i++)
-        {
-            float x = (st ? (inL[i] + inR[i]) * 0.5f : inL[i]) * 0.03f;
-            float l = 0, r = 0;
-            for (int k = 0; k < 8; k++) { l += cl[k].Run(x); r += cr[k].Run(x); }
-            for (int k = 0; k < 4; k++) { l = al[k].Run(l); r = ar[k].Run(r); }
-            L[i] = l * Cal; R[i] = r * Cal;
-        }
-        Stereo = true;
     }
 }
 

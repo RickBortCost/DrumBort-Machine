@@ -296,6 +296,7 @@ export function playVoice(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = 
   if (pr.drive) {
     const ws = ctx.createWaveShaper();
     ws.curve = driveCurve(pr.drive);
+    ws.oversample = '4x';
     ws.connect(f);
     dest = ws;
   }

@@ -77,7 +77,7 @@ export function initTracksView(app, root, COLORS) {
     const act = state.tracks;
     const W = nBars() * BW;
     let html = `<div class="tv-scroll" id="tvScroll"><div class="tv-grid" style="--bw:${BW}px; width:${W + 210}px">`;
-    html += `<div class="tv-corner"><button class="btn sm tv-add" id="tvAdd" aria-haspopup="menu" title="Aggiungi traccia">＋ TRACCIA</button></div>`;
+    html += `<div class="tv-corner"><button class="btn sm tv-add" id="tvAdd" aria-haspopup="dialog" title="Nuove tracce (Ctrl+Alt+N)">＋ TRACCIA</button></div>`;
     html += `<div class="tv-ruler" style="width:${W}px">${Array.from({ length: nBars() }, (_, b) => `<button class="tv-bar${b === ui.arrStart ? ' start' : ''}${b < bars().length ? ' used' : ''}" data-rb="${b}">${b + 1}</button>`).join('')}</div>`;
     for (const i of act) {
       const p = params(i);
@@ -97,7 +97,7 @@ export function initTracksView(app, root, COLORS) {
     // Master in fondo, come l'ultima traccia di una DAW
     if (act.length) html += `<div class="tv-hdr tv-master" style="--tc:#d9d2bd"><span class="tv-ico">◆</span><span class="tv-name"><b>MASTER</b><i>Uscita principale</i></span>
         <div class="tv-mix">${app.mixHTML('m')}</div></div><div class="tv-lane-m" style="width:${W}px"></div>`;
-    if (!act.length) html += `<div class="tv-empty">Nessuna traccia. Premi <b>＋ TRACCIA</b> per aggiungere un canale di batteria o un synth.</div>`;
+    if (!act.length) html += `<div class="tv-empty">Nessuna traccia. Premi <b>＋ TRACCIA</b> (Ctrl+Alt+N) o fai doppio clic qui per creare una traccia: strumento software, voce di batteria o kit completo.</div>`;
     html += `<div class="tv-ph" id="tvPh" hidden></div></div></div>`;
     const keep = $('#tvScroll', root) ? [$('#tvScroll', root).scrollLeft, $('#tvScroll', root).scrollTop] : [0, 0];
     root.innerHTML = html;
@@ -133,36 +133,18 @@ export function initTracksView(app, root, COLORS) {
   // ---------------------------------------------------------------
   // Tracce: aggiungi, togli, seleziona, mute/solo
   // ---------------------------------------------------------------
-  function addMenu(anchor) {
-    const old = $('.tv-menu');
-    if (old) { old.remove(); return; }
-    const kit = app.kitOf(app.pat());
-    const m = document.createElement('div');
-    m.className = 'tv-menu';
-    m.setAttribute('role', 'menu');
-    m.innerHTML = '<h4>BATTERIA</h4>' + kit.tracks.map((t, i) => `<button class="btn sm" data-addt="${i}" ${state.tracks.includes(i) ? 'disabled' : ''}><b>${esc(t.short)}</b> ${esc(t.name)}</button>`).join('')
-      + '<h4>SYNTH</h4>' + SYNTH_TRACKS.map((t, k) => `<button class="btn sm" data-addt="${DRUM_TRACKS + k}" ${state.tracks.includes(DRUM_TRACKS + k) ? 'disabled' : ''}><b>${t.short}</b> ${t.name}</button>`).join('');
-    const r = anchor.getBoundingClientRect();
-    m.style.left = `${r.left}px`; m.style.top = `${r.bottom + 4}px`;
-    document.body.appendChild(m);
-    m.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-addt]');
-      if (!b) return;
-      addTrack(+b.dataset.addt);
-      m.remove();
-    });
-    setTimeout(() => document.addEventListener('pointerdown', function off(e) { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
-  }
-
-  function addTrack(i) {
+  /** Aggiunge le tracce (dialogo Nuove tracce); con `library` apre la Libreria sulla prima. */
+  function addTracks(list, { library = false } = {}) {
     app.snapshot();
-    if (!state.tracks.includes(i)) state.tracks.push(i);
-    // La traccia torna udibile in tutti i pattern
-    state.slots.forEach((p) => { (isSynth(i) ? p.synth.tracks[i - DRUM_TRACKS] : p.tracks[i]).mute = false; });
-    pick(i);
+    for (const i of list) {
+      if (!state.tracks.includes(i)) state.tracks.push(i);
+      // La traccia torna udibile in tutti i pattern
+      state.slots.forEach((p) => { (isSynth(i) ? p.synth.tracks[i - DRUM_TRACKS] : p.tracks[i]).mute = false; });
+    }
+    pick(list[0]);
     app.save();
     app.renderAll();
-    if (isSynth(i)) app.openLibrary();          // come in una DAW: scegli subito lo strumento
+    if (library) app.openLib(list[0]);
   }
 
   function removeTrack(i) {
@@ -180,7 +162,7 @@ export function initTracksView(app, root, COLORS) {
   }
 
   root.addEventListener('click', (e) => {
-    if (e.target.closest('#tvAdd')) { addMenu(e.target.closest('#tvAdd')); return; }
+    if (e.target.closest('#tvAdd')) { app.newTrack(); return; }
     if (e.target.closest('.tv-mix')) return;           // volume e pan: gestiti da studio.js
     const hdr = e.target.closest('.tv-hdr:not(.tv-master)');
     if (hdr) {
@@ -303,5 +285,12 @@ export function initTracksView(app, root, COLORS) {
     ph.style.transform = `translateX(${210 + pos * BW}px)`;
   }
 
-  return { render, tick, clearPlayhead() { const ph = $('#tvPh', root); if (ph) ph.hidden = true; } };
+  // Doppio clic: sul nome della traccia apre la Libreria, nello spazio vuoto crea una traccia (come in Logic)
+  root.addEventListener('dblclick', (e) => {
+    const nm = e.target.closest('.tv-hdr[data-i] .tv-name');
+    if (nm) { const i = +nm.closest('.tv-hdr').dataset.i; pick(i); app.openLib(i); return; }
+    if (e.target.matches('.tv-grid, .tv-empty, .tv-scroll')) app.newTrack();
+  });
+
+  return { render, tick, addTracks, clearPlayhead() { const ph = $('#tvPh', root); if (ph) ph.hidden = true; } };
 }

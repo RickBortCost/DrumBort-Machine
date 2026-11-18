@@ -416,8 +416,8 @@ async function featureTests(browser, url) {
   await page.tap('.pad.c3');
   await page.tap('#pgBtn'); await page.tap('#pgBtn');
   await page.evaluate(() => { const i = document.querySelector('#sliders input[data-param="crush"]'); i.value = 6; i.dispatchEvent(new Event('input', { bubbles: true })); });
-  const ins = await page.evaluate(() => [drumbort.state.slots[drumbort.state.slot].tracks[3].crush, drumbort.engine.channels[3].ins.length]);
-  check('bit crusher per traccia', ins[0] === 6 && ins[1] === 1, ins.join());
+  const ins = await page.evaluate(() => { const d = drumbort.state.devs[3].find((x) => x.type === 'redux'); return [d && d.on && d.p.bits, drumbort.engine.channels[3].built.size]; });
+  check('bit crusher per traccia (device Bit Reduction)', ins[0] === 6 && ins[1] >= 1, ins.join());
   await page.tap('#menuBtn'); await page.tap('[data-act="gen"]');
   await page.evaluate(() => { const h = document.querySelector('#genHits'); h.value = 5; h.dispatchEvent(new Event('input')); });
   await page.tap('[data-act="gen-euclid"]');
@@ -528,6 +528,20 @@ async function studioTests(browser, url) {
   check('layout Studio automatico su PC', L.layout === 'studio' && L.vis, L.layout);
   check('Studio senza scroll', L.sw <= 1440 && L.sh <= 900, `${L.sw}×${L.sh}`);
 
+  // Nuove tracce come in Logic (Ctrl+Alt+N): tipo, numero, Libreria aperta a sinistra
+  {
+    const before = await page.evaluate(() => drumbort.state.tracks.slice());
+    await page.evaluate(() => { drumbort.state.tracks = drumbort.state.tracks.filter((i) => i !== 11); drumbort.state.panels.browser = false; drumbort.renderAll(); });
+    await page.keyboard.press('Control+Alt+KeyN');
+    await page.waitForSelector('.nt');
+    await page.click('.nt [data-nt="inst"]');
+    await page.selectOption('#ntWhich', '11');
+    await page.click('#ntCreate');
+    const nt = await page.evaluate(() => [drumbort.state.tracks.includes(11), drumbort.state.panels.browser, document.querySelector('#browser .bw-tabs [data-btab="sounds"]').classList.contains('on'), !!document.querySelector('.nt')]);
+    check('Nuove tracce: strumento software + Libreria a sinistra', nt[0] && nt[1] && nt[2] && !nt[3], JSON.stringify(nt));
+    await page.evaluate((t) => { drumbort.state.tracks = t; drumbort.renderAll(); }, before);
+  }
+
   // Vista TRACCE predefinita (stile Logic): tracce attive del progetto dimostrativo
   const tv = await page.evaluate(() => [!document.querySelector('#sxTracks').hidden, document.querySelectorAll('.tv-hdr:not(.tv-master)').length, drumbort.state.tracks.length]);
   check('vista TRACCE predefinita con le tracce attive', tv[0] && tv[1] === tv[2] && tv[2] > 0, JSON.stringify(tv));
@@ -537,19 +551,40 @@ async function studioTests(browser, url) {
   await page.click('#sxBrowser'); await page.click('#sxSide');
   await page.click('.tv-hdr[data-i="1"] .tv-name');
   const pn = await page.evaluate(() => [document.querySelector('.browser').offsetParent === null, document.querySelector('.side').offsetParent === null, document.querySelector('#fxbar').offsetParent !== null]);
-  // Catena di device: un riquadro per effetto, manopola dei bassi trascinata in verticale
-  const dvs = await page.evaluate(() => [...document.querySelectorAll('#fxbar .dv')].map((d) => d.dataset.dev).join(','));
-  check('catena effetti con un riquadro per device', dvs === 'inst,drv,crush,eq,flt,cmp,send,mix', dvs);
-  const kb = await page.locator('.kb[data-k="lo"] .kb-dial').boundingBox();
+  // Device View stile Live: strumento, device audio in ordine libero, mixer
+  const n0 = await page.evaluate(() => drumbort.state.devs[1].length);
+  const fixed = await page.evaluate(() => [...document.querySelectorAll('#fxbar .dv-fixed')].map((d) => d.dataset.dev).join(','));
+  await page.click('#fxbar [data-add]');
+  await page.click('.dv-pop [data-m="eq"]');
+  await page.click('#fxbar [data-add]');
+  await page.click('.dv-pop [data-m="sat"]');
+  const added = await page.evaluate(() => [drumbort.state.devs[1].slice(-2).map((d) => d.type).join(','), drumbort.engine.channels[1].built.size]);
+  check('device aggiunti alla catena (strumento → effetti → mixer)', fixed === 'inst,mix' && added[0] === 'eq,sat' && added[1] >= 2, JSON.stringify([fixed, added]));
+  const eqBox = '#fxbar .dv[data-type="eq"]';
+  const kb = await page.locator(`${eqBox} .kb[data-k="lg"] .kb-dial`).boundingBox();
   await page.mouse.move(kb.x + kb.width / 2, kb.y + kb.height / 2); await page.mouse.down();
   await page.mouse.move(kb.x + kb.width / 2, kb.y + kb.height / 2 - 40, { steps: 5 }); await page.mouse.up();
-  const lo = await page.evaluate(() => [drumbort.state.slots.every((s) => s.tracks[1].lo === 6), !!drumbort.engine.channels[1].nodes.lo, document.querySelector('[data-dev="eq"]').classList.contains('off')]);
-  check('browser e pannello nascosti, effetti della traccia in basso', pn.every(Boolean) && lo[0] && lo[1] && !lo[2], JSON.stringify([pn, lo]));
-  await page.click('[data-pw="eq"]');
-  const pw = await page.evaluate(() => [drumbort.state.slots[0].tracks[1].lo, document.querySelector('[data-dev="eq"]').classList.contains('off')]);
-  await page.click('[data-pw="eq"]');
-  const pw2 = await page.evaluate(() => drumbort.state.slots[0].tracks[1].lo);
-  check('interruttore del device spegne e ripristina', pw[0] === 0 && pw[1] && pw2 === 6, JSON.stringify([pw, pw2]));
+  const lo = await page.evaluate(() => drumbort.state.devs[1].find((d) => d.type === 'eq').p.lg);
+  check('browser e pannello nascosti, manopola del device', pn.every(Boolean) && Math.abs(lo - 7.5) < 0.11, JSON.stringify([pn, lo]));
+  // Riordino: il Saturator trascinato prima dell'EQ
+  await page.dragAndDrop('#fxbar .dv[data-type="sat"] .dv-h', eqBox, { targetPosition: { x: 4, y: 40 } });
+  const ord = await page.evaluate(() => drumbort.state.devs[1].slice(-2).map((d) => d.type).join(','));
+  check('riordino dei device trascinando la barra del titolo', ord === 'sat,eq', ord);
+  // Attivatore: spento = escluso dal motore, parametri conservati
+  await page.click(`${eqBox} [data-pw]`);
+  const pw = await page.evaluate(() => { const d = drumbort.state.devs[1].find((x) => x.type === 'eq'); return [d.on, d.p.lg, drumbort.engine.channels[1].built.has(d.id), document.querySelector('#fxbar .dv[data-type="eq"]').classList.contains('off')]; });
+  await page.click(`${eqBox} [data-pw]`);
+  check('attivatore del device', !pw[0] && Math.abs(pw[1] - 7.5) < 0.11 && !pw[2] && pw[3], JSON.stringify(pw));
+  // Piega (doppio clic sul titolo) e menu: Duplica; Canc elimina il device selezionato
+  await page.dblclick(`${eqBox} .dv-name`);
+  const folded = await page.evaluate(() => drumbort.state.devs[1].find((x) => x.type === 'eq').fold === true);
+  await page.dblclick(`${eqBox} .dv-name`);
+  await page.click(`${eqBox} [data-menu]`);
+  await page.click('.dv-pop [data-m="dup"]');
+  const nd = await page.evaluate(() => drumbort.state.devs[1].length);
+  await page.keyboard.press('Delete');
+  const nd2 = await page.evaluate(() => drumbort.state.devs[1].length);
+  check('piega, duplica e Canc', folded && nd === n0 + 3 && nd2 === n0 + 2, JSON.stringify([folded, n0, nd, nd2]));
   // Barra inferiore ridimensionabile
   const h0 = await page.evaluate(() => document.querySelector('#fxbar').getBoundingClientRect().height);
   const sp = await page.locator('.sx-split').boundingBox();
@@ -684,11 +719,11 @@ async function studioTests(browser, url) {
   await page.click('[data-mact="link"]');
   await page.evaluate(() => { const r = document.querySelector('[data-mv="0"]'); r.value = 1; r.dispatchEvent(new Event('input', { bubbles: true })); });
   const mac = await page.evaluate(() => {
-    const m = drumbort.state.slots, map = drumbort.state.session.map[0], slot = map >= 0 ? map : drumbort.state.session.master;
-    const tr = m[slot].tracks[0], ch = drumbort.engine.channels[0];
-    return [drumbort.state.macros[0].map.length, tr.flt, tr.cmp, !!ch.nodes.flt, !!ch.nodes.cmp];
+    const c = drumbort.state.devs[0], ch = drumbort.engine.channels[0];
+    const f = c.find((d) => d.type === 'filter'), k = c.find((d) => d.type === 'comp');
+    return [drumbort.state.macros[0].map.length, f && f.p.type, f && Math.round(f.p.f), k && k.p.thr, !!f && ch.built.has(f.id), !!k && ch.built.has(k.id)];
   });
-  check('macro collegata a filtro e compressore della traccia', mac[0] === 2 && mac[1] === 1 && mac[2] === 1 && mac[3] && mac[4], JSON.stringify(mac));
+  check('macro collegata a filtro e compressore (device)', mac[0] === 2 && mac[1] === 'highpass' && mac[2] === 6000 && mac[3] === -36 && mac[4] && mac[5], JSON.stringify(mac));
   await page.keyboard.press('Escape');
 
   // Piano roll: P apre, clic+trascina crea una nota lunga, clic la elimina

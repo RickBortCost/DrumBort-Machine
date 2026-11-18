@@ -373,6 +373,13 @@ async function audioTests(browser, url) {
     return pk;
   });
   check('export WAV include il synth', wav > 0.05, `picco ${wav.toFixed(3)}`);
+
+  // Prestazioni: in riproduzione le voci arrivano dalla cache pre-renderizzata
+  await page.tap('#play');
+  await page.waitForTimeout(5000);
+  const st = await page.evaluate(() => ({ ...drumbort.engine.cache.stats }));
+  await page.tap('#play');
+  check('cache voci usata in riproduzione', st.rendered > 0 && st.hit > st.miss, `hit ${st.hit}, miss ${st.miss}, render ${st.rendered}`);
   await context.close();
 }
 
@@ -397,6 +404,15 @@ async function pwaTests(browser, url) {
       return out;
     });
     check('tutti i file in cache', missing.length === 0, missing.join(', '));
+    // Ogni modulo JS caricato dalla pagina deve essere nell'elenco del service worker
+    const notListed = await page.evaluate(async () => {
+      const src = await (await fetch('./sw.js')).text();
+      return performance.getEntriesByType('resource').map((e) => new URL(e.name))
+        .filter((u) => u.origin === location.origin && /\/js\/[^/]+\.js$/.test(u.pathname))
+        .map((u) => './js/' + u.pathname.split('/').pop())
+        .filter((f) => !src.includes(`'${f}'`));
+    });
+    check('moduli JS tutti precaricati', notListed.length === 0, notListed.join(', '));
     // Reload offline reale: solo Chromium (in WebKit di Playwright setOffline + reload va in errore interno)
     if (browser.browserType().name() === 'chromium') {
       await context.setOffline(true);

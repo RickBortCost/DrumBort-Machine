@@ -8,7 +8,8 @@
     "test": "node tests/check-version.mjs && node tests/e2e.mjs",
     "test:all": "node tests/check-version.mjs && BROWSERS=chromium,webkit node tests/e2e.mjs",
     "test:live": "BASE_URL=https://rickbortcost.github.io/DrumBort-Machine/ BROWSERS=chromium,webkit node tests/e2e.mjs",
-    "version:check": "node tests/check-version.mjs"
+    "version:check": "node tests/check-version.mjs",
+    "perf": "node tests/perf.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"

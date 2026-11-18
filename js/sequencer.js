@@ -6,10 +6,12 @@
  *   steps[8][16]  0 off, 1 normale, 2 accento
  *   opts[8][16]   null | { p: probabilità 0-100, r: ratchet 1-4, f: flam 0/1, n: nudge -50..50 (% step) }
  *   tracks[8]     { vol, tune, decay, pan, mute, solo, len (1-16), rev, dly (mandate 0-1) }
+ *   synth         sezione melodica (vedi synthpattern.js)
  * }
  */
 
 import { KITS, kitById } from './kits.js';
+import { demoSynth, emptySynth, normalizeSynth } from './synthpattern.js';
 
 export const STEPS = 16;
 export const TRACKS = 8;
@@ -43,8 +45,11 @@ export function defaultTrack(kit, t) {
 }
 export const defaultTracks = (kit) => kit.tracks.map((_, t) => defaultTrack(kit, t));
 
-/** Nuovo pattern per un kit, con il suo groove demo. */
-export function createPattern(kitId, withDemo = true) {
+/**
+ * Nuovo pattern per un kit, con il suo groove demo.
+ * @param {number|null} synthDemo  indice del groove synth demo (null = synth vuoto)
+ */
+export function createPattern(kitId, withDemo = true, synthDemo = null) {
   const kit = kitById(kitId);
   return {
     kit: kit.id,
@@ -53,6 +58,7 @@ export function createPattern(kitId, withDemo = true) {
     steps: withDemo ? parseRows(kit.demo) : emptySteps(),
     opts: emptyOpts(),
     tracks: defaultTracks(kit),
+    synth: synthDemo === null ? emptySynth() : demoSynth(synthDemo),
   };
 }
 
@@ -102,6 +108,7 @@ export function normalizePattern(o) {
     steps,
     opts,
     tracks,
+    synth: normalizeSynth(o.synth),
   };
 }
 
@@ -146,6 +153,28 @@ export function scheduleTick(engine, pat, tick, time, opt = {}) {
       engine.trigger(t, tt + (k * sd) / r, kv, tr);
       played.push({ t, time: tt + (k * sd) / r, vel: kv });
     }
+  }
+
+  // ----- Sezione synth (BASS, LEAD, PAD) -----
+  const syn = pat.synth;
+  if (syn && engine.playSynth) {
+    const anySynthSolo = syn.tracks.some((t) => t.solo);
+    syn.tracks.forEach((tr, k) => {
+      if (anySynthSolo ? !tr.solo : tr.mute) return;
+      const len = tr.len || STEPS;
+      const s = tick % len;
+      const st = tr.steps[s];
+      if (!st) return;
+      if (skip && skip.delete(`s${k}:${s}`)) return;
+      const prev = tr.steps[(s - 1 + len) % len];
+      const glideFrom = k < 2 && prev && prev.sl && len > 1 ? prev.n : null;
+      const notes = st.ch ? st.ch.map((x) => st.n + x) : [st.n];
+      // Gate: le note con slide si sovrappongono alla successiva (legato)
+      const dur = st.g * sd * (st.sl ? 1.15 : 0.92);
+      const vel = st.a ? 1 : 0.7;
+      engine.playSynth(k, time, dur, notes, vel, tr, glideFrom);
+      played.push({ synth: k, notes, time, dur, vel });
+    });
   }
   return played;
 }

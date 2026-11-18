@@ -16,7 +16,7 @@ import { APP_VERSION } from './version.js';
 import { initSynthUI } from './synthui.js';
 import { initPanels } from './panels.js';
 import { initPerformance } from './performance.js';
-import { composePattern, SESSION_TRACKS } from './session.js';
+import { composePattern, SESSION_TRACKS, normalizeSession, normalizeArr, followTarget, songToArr, MAX_ARR_BARS } from './session.js';
 import { initStudio } from './studio.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -49,7 +49,8 @@ const state = {
   userPresets: [],                  // preset synth salvati dall'editor wavetable
   projectName: '',                  // progetto aperto
   layout: null,                     // 'compact' | 'studio' (null = scelta automatica al primo avvio)
-  session: { map: new Array(SESSION_TRACKS).fill(-1), master: 0 },   // clip in riproduzione per traccia
+  session: normalizeSession(null),  // clip in riproduzione per traccia, quantizzazione, follow action
+  arr: normalizeArr(null),          // arrangiamento: { on, bars: [{ m: clip per traccia, s: pattern principale }] }
 };
 
 /** Stato solo di interfaccia (non salvato). */
@@ -58,6 +59,13 @@ let synthUI = null;
 let panels = null;      // fogli secondari (panels.js)
 let studio = null;      // layout Studio (studio.js)
 ui.queued = new Array(SESSION_TRACKS).fill(null);    // clip in attesa del prossimo giro (-1 = stop)
+ui.pendingMaster = null;  // scena in attesa (diventa il pattern principale)
+ui.curScene = null;       // ultima scena lanciata (per le follow action)
+ui.sceneBars = 0;         // battute suonate dalla scena corrente
+ui.arrBar = 0;            // battuta corrente dell'arrangiamento (avanza anche se non lo si ascolta)
+ui.arrStart = 0;          // battuta da cui parte la riproduzione dell'arrangiamento
+ui.arrRec = false;        // registrazione session → arrangiamento armata
+ui.arrRecOn = false;      // registrazione in corso (prima battuta già scritta)
 let perf = null;        // vista performance (performance.js)
 
 function normalizeFx(o) {
@@ -98,9 +106,8 @@ function loadState() {
       state.lock = KITS.some((k) => k.id === raw.lock) ? raw.lock : null;
       state.view = ['synth', 'perf'].includes(raw.view) ? raw.view : 'drum';
       state.layout = ['compact', 'studio'].includes(raw.layout) ? raw.layout : null;
-      if (raw.session && Array.isArray(raw.session.map) && raw.session.map.length === SESSION_TRACKS) {
-        state.session = { map: raw.session.map.map((v) => (Number.isInteger(v) && v >= -1 && v < SLOTS ? v : -1)), master: clamp(raw.session.master | 0, 0, SLOTS - 1) };
-      }
+      state.session = normalizeSession(raw.session);
+      state.arr = normalizeArr(raw.arr);
       if (raw.midi && raw.midi.opts) {
         state.midi = { opts: { ...state.midi.opts, ...raw.midi.opts }, input: raw.midi.input || '', output: raw.midi.output || '' };
       }
@@ -119,7 +126,7 @@ function save() {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         slot: state.slot, slots: state.slots, fx: state.fx, song: state.song, lock: state.lock, midi: state.midi, view: state.view,
         favs: state.favs, userKits: state.userKits, userPresets: state.userPresets, projectName: state.projectName,
-        layout: state.layout, session: state.session,
+        layout: state.layout, session: state.session, arr: state.arr,
       }));
     } catch (_) { /* quota / navigazione privata */ }
     // Le modifiche cambiano le voci: pre-renderizza in background quelle nuove
@@ -680,8 +687,17 @@ function startPlayback() {
   if (!engine.ctx || seq.playing) return;
   if (sessionActive()) {
     // Clip in attesa partono subito; senza clip si lancia la scena del pattern selezionato
-    applyQueued();
-    if (state.session.map.every((v) => v < 0)) { state.session.map.fill(state.slot); state.session.master = state.slot; }
+    ui.sceneBars = 0;
+    if (state.arr.on && state.arr.bars.length && !ui.arrRec) {
+      ui.queued.fill(null); ui.pendingMaster = null;
+      ui.arrBar = clamp(ui.arrStart, 0, state.arr.bars.length - 1);
+      loadArrBar(ui.arrBar);
+    } else {
+      ui.arrBar = 0;
+      applyQueued();
+      if (state.session.map.every((v) => v < 0)) { state.session.map.fill(state.slot); state.session.master = state.slot; }
+    }
+    if (ui.arrRec) recordBar();
     seq.meta = null;
   } else if (state.song.on && state.song.chain.length) {
     ui.songPos = { i: 0, r: 0 };
@@ -702,6 +718,9 @@ function startPlayback() {
 
 function stopPlayback() {
   seq.stop();
+  ui.queued.fill(null);
+  ui.pendingMaster = null;
+  if (ui.arrRec) endArrRec();
   ui.songIdx = -1;
   setToggle($('#play'), false);
   $('#play').setAttribute('aria-label', 'Play');
@@ -722,6 +741,7 @@ document.addEventListener('keydown', (e) => {
   if (sessionActive() && !e.ctrlKey && !e.metaKey && !e.target.closest('input, select, textarea')) {
     if (/^[1-8]$/.test(e.key)) { e.preventDefault(); launchScene(+e.key - 1); }
     else if (e.key === '.') { e.preventDefault(); stopAllClips(); }
+    else if (e.key === 'Tab' && !e.shiftKey && !e.target.closest('.sheet')) { e.preventDefault(); studio.toggleView(); }
   }
 });
 
@@ -1003,11 +1023,24 @@ function applyQueued() {
     ui.queued[i] = null;
     changed = true;
   });
+  if (ui.pendingMaster != null) {
+    state.session.master = ui.curScene = ui.pendingMaster;
+    ui.pendingMaster = null;
+    ui.sceneBars = 0;
+    changed = true;
+  }
   return changed;
+}
+const hasQueued = () => ui.pendingMaster != null || ui.queued.some((q) => q !== null);
+
+/** Un lancio manuale durante la riproduzione dell'arrangiamento torna alla session (come in Live). */
+function leaveArr() {
+  if (state.arr.on && seq.playing) { state.arr.on = false; toast('Session: arrangiamento in pausa (▶ ARR per tornare)'); }
 }
 
 /** Lancia la clip `slot` sulla traccia `i` (-1 = ferma la traccia). */
 function launchClip(i, slot) {
+  leaveArr();
   if (!seq.playing) {
     state.session.map[i] = slot;
     if (slot >= 0 && state.session.map.filter((v) => v >= 0).length === 1) state.session.master = slot;
@@ -1021,9 +1054,11 @@ function launchClip(i, slot) {
 
 /** Lancia la scena `slot` (stessa riga su tutte le tracce); diventa il pattern principale. */
 function launchScene(slot) {
+  leaveArr();
   if (!seq.playing) {
     state.session.map.fill(slot);
-    state.session.master = slot;
+    state.session.master = ui.curScene = slot;
+    ui.sceneBars = 0;
     startPlayback();
   } else {
     ui.queued.fill(slot);
@@ -1034,26 +1069,94 @@ function launchScene(slot) {
 }
 
 function stopAllClips() {
+  leaveArr();
+  ui.curScene = null;
+  ui.pendingMaster = null;
   if (!seq.playing) state.session.map.fill(-1); else ui.queued.fill(-1);
   save();
   if (studio) studio.render();
 }
 
-seq.onBar = (tick, time) => {
-  if (sessionActive()) {
-    const changed = applyQueued();
-    if (ui.pendingMaster != null) { state.session.master = ui.pendingMaster; ui.pendingMaster = null; }
-    const next = composeSession();
-    engine.setVoiceKit(kitById(next.kit));
-    engine.applyMix(next, time);
-    engine.setFx({}, next.bpm);
-    setTimeout(() => {
-      engine.setChainKit(kitById(next.kit));
-      if (changed && studio) studio.render();
-      if (changed) save();
-    }, Math.max(0, (time - engine.ctx.currentTime) * 1000));
-    return next;
+// ----- Arrangiamento -----
+
+function loadArrBar(b) {
+  const e = state.arr.bars[b];
+  if (!e) return;
+  e.m.forEach((v, i) => { state.session.map[i] = v; });
+  state.session.master = e.s;
+}
+
+/** Scrive la battuta corrente della session nell'arrangiamento. */
+function recordBar() {
+  if (!ui.arrRecOn) { state.arr.bars = []; state.arr.on = false; ui.arrRecOn = true; }
+  if (state.arr.bars.length >= MAX_ARR_BARS) { endArrRec(); return; }
+  state.arr.bars.push({ m: [...state.session.map], s: state.session.master });
+}
+
+function endArrRec() {
+  const n = ui.arrRecOn ? state.arr.bars.length : 0;
+  ui.arrRec = ui.arrRecOn = false;
+  if (n) { state.arr.on = true; ui.arrStart = 0; toast(`Arrangiamento registrato: ${n} battute`); }
+  save();
+  if (studio) studio.render();
+}
+
+function setArrRec(on) {
+  ui.arrRec = on;
+  if (!on && ui.arrRecOn) endArrRec();
+  if (studio) studio.render();
+}
+
+/** ▶ ARR: riproduce l'arrangiamento (durante la riproduzione riprende dalla battuta successiva). */
+function toggleArr() {
+  if (!state.arr.bars.length) { toast('Arrangiamento vuoto: registra con ● REC ARR o disegna le battute'); return; }
+  state.arr.on = !state.arr.on;
+  if (state.arr.on) { ui.queued.fill(null); ui.pendingMaster = null; }
+  save();
+  if (studio) studio.render();
+}
+
+/** Ogni step (session): arrangiamento, follow action, lanci quantizzati, registrazione. */
+seq.onStep = (tick, time) => {
+  if (!sessionActive()) return null;
+  let changed = false;
+  const bar = tick > 0 && tick % STEPS === 0;
+  if (bar) {
+    const len = state.arr.bars.length;
+    ui.arrBar = len ? (ui.arrBar + 1) % len : 0;
+    if (state.arr.on && len) {
+      loadArrBar(ui.arrBar);
+      changed = true;
+    } else {
+      ui.sceneBars++;
+      const sc = ui.curScene, f = sc != null ? state.session.follow[sc] : null;
+      if (f && f.a !== 'none' && ui.sceneBars >= f.n && !hasQueued()) {
+        const t = followTarget(f.a, sc, state.slots);
+        if (t === -1) { ui.queued.fill(-1); ui.curScene = null; } else if (t != null) { ui.queued.fill(t); ui.pendingMaster = t; }
+        changed = applyQueued() || changed;
+        ui.sceneBars = 0;
+      }
+    }
   }
+  if (hasQueued() && tick % Math.max(1, state.session.quant) === 0) changed = applyQueued() || changed;
+  if (bar && ui.arrRec) recordBar();
+  const delay = Math.max(0, (time - engine.ctx.currentTime) * 1000);
+  if (bar && studio) setTimeout(() => studio.barTick(), delay);
+  if (!changed) return null;
+  const next = composeSession();
+  engine.setVoiceKit(kitById(next.kit));
+  engine.applyMix(next, time);
+  engine.setFx({}, next.bpm);
+  setTimeout(() => {
+    engine.setChainKit(kitById(next.kit));
+    if (studio) studio.render();
+    save();
+  }, delay);
+  return next;
+};
+
+seq.onBar = (tick, time) => {
+  if (sessionActive()) return null;
   const chain = state.song.chain;
   if (!state.song.on || !chain.length || !ui.songPos) return null;
   const pos = ui.songPos;
@@ -1230,7 +1333,7 @@ function exportData() {
   return {
     app: 'drumbort', version: 3, appVersion: APP_VERSION,
     slot: state.slot, slots: state.slots, song: state.song, fx: state.fx, lock: state.lock, userKits: state.userKits,
-    userPresets: state.userPresets,
+    userPresets: state.userPresets, session: state.session, arr: state.arr,
   };
 }
 
@@ -1248,6 +1351,8 @@ function importData(o) {
   state.fx = normalizeFx(o.fx);
   state.lock = o.lock && kitById(o.lock).id === o.lock ? o.lock : null;
   state.slot = clamp(o.slot | 0, 0, SLOTS - 1);
+  if (o.session) state.session = normalizeSession(o.session);
+  state.arr = normalizeArr(o.arr);
   undoStack.length = 0; redoStack.length = 0;
   if (seq.playing) stopPlayback();
   syncPlayback(); renderAll(); save();
@@ -1267,6 +1372,9 @@ function newProject() {
   state.fx = { ...DEFAULT_FX };
   state.lock = null;
   state.slot = 0;
+  state.session = normalizeSession(null);
+  state.session.map.fill(0);
+  state.arr = normalizeArr(null);
   undoStack.length = 0; redoStack.length = 0;
   if (seq.playing) stopPlayback();
   syncPlayback(); renderAll(); save();
@@ -1469,7 +1577,8 @@ const app = {
   openSheet, closeSheet, deliver, syncPlayback, renderAll, buildKitSelect, exportData, importData, newProject,
 };
 panels = initPanels(app);
-studio = initStudio({ ...app, launchClip, launchScene, stopAllClips, setView, selectTrack: (t) => selectTrack(t), tempoPattern });
+studio = initStudio({ ...app, launchClip, launchScene, stopAllClips, setView, selectTrack: (t) => selectTrack(t), tempoPattern,
+  toggleArr, setArrRec, songToArr, startPlayback });
 if (state.layout === null) state.layout = matchMedia('(pointer: fine) and (min-width: 1200px)').matches ? 'studio' : 'compact';
 if (state.layout === 'studio' && state.session.map.every((v) => v < 0)) { state.session.map.fill(state.slot); state.session.master = state.slot; }
 $('#layoutBtn').addEventListener('click', toggleLayout);

@@ -314,6 +314,7 @@ export class Sequencer {
     this.meta = null;         // dato opaco copiato nelle voci di coda (es. posizione song)
     // Hook
     this.onBar = null;        // (tick, time) → pattern successivo | null  (song mode)
+    this.onStep = null;       // (tick, time) → pattern successivo | null  (session: lancio quantizzato)
     this.onTick = null;       // (tick, time, stepDur, played) → MIDI out/clock
     this.onStart = null;      // (time)
     this.onStop = null;       // ()
@@ -354,6 +355,10 @@ export class Sequencer {
     while (this.nextTime < ctx.currentTime + SCHEDULE_AHEAD) {
       if (this.tick > 0 && this.tick % STEPS === 0 && this.onBar) {
         const np = this.onBar(this.tick, this.nextTime);
+        if (np) this.pattern = np;
+      }
+      if (this.onStep) {
+        const np = this.onStep(this.tick, this.nextTime);
         if (np) this.pattern = np;
       }
       const sd = this.stepDur;

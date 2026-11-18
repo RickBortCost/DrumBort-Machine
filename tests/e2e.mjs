@@ -569,6 +569,48 @@ async function studioTests(browser, url) {
   check('scorciatoie 1-8 e "."', q2 && (await page.evaluate(() => drumbort.ui.queued.every((v) => v === -1) || drumbort.state.session.map.every((v) => v === -1))));
   await page.click('#play');
 
+  // Quantizzazione del lancio: "Nessuna" → la clip parte allo step successivo
+  await page.selectOption('#sxQuant', '0');
+  await page.click('.sx-scene[data-scene="0"]');
+  await page.click('.sx-cell[data-t="1"][data-s="6"] [data-launch]');
+  await page.waitForFunction(() => drumbort.state.session.map[1] === 6, null, { timeout: 1500 }).catch(() => {});
+  check('quantizzazione "Nessuna": lancio immediato', (await page.evaluate(() => drumbort.state.session.map[1])) === 6);
+  await page.selectOption('#sxQuant', '16');
+
+  // Follow action: P1 → successiva dopo 1 battuta
+  await page.selectOption('[data-fa="0"]', 'next');
+  await page.selectOption('[data-fn="0"]', '1');
+  await page.click('.sx-scene[data-scene="0"]');
+  await page.waitForFunction(() => drumbort.state.session.master !== 0, null, { timeout: 9000 }).catch(() => {});
+  const fol = await page.evaluate(() => [drumbort.state.session.master, drumbort.state.session.follow[0].a]);
+  check('follow action passa alla scena successiva', fol[0] > 0 && fol[1] === 'next', fol.join(' '));
+  await page.selectOption('[data-fa="0"]', 'none');
+  await page.click('#play');
+
+  // Arrangiamento: registrazione dai lanci, vista, riproduzione
+  await page.click('#arrRec');
+  await page.click('.sx-scene[data-scene="2"]');
+  await page.waitForFunction(() => drumbort.state.arr.bars.length >= 2, null, { timeout: 12000 }).catch(() => {});
+  await page.click('#play');
+  const ar = await page.evaluate(() => [drumbort.state.arr.bars.length, drumbort.state.arr.on, drumbort.state.arr.bars[0].m.join(''), drumbort.ui.arrRec]);
+  check('REC ARR registra le battute della session', ar[0] >= 2 && ar[1] && ar[2] === '222222222222' && !ar[3], ar.join(' '));
+  await page.keyboard.press('Tab');
+  const av = await page.evaluate(() => [!document.querySelector('#sxArr').hidden, document.querySelectorAll('#arGrid .ar-cell.on').length]);
+  check('Tab apre la vista arrangiamento', av[0] && av[1] >= 24, av.join(' '));
+  await page.click('[data-ar="add"]');
+  const nb = await page.evaluate(() => drumbort.state.arr.bars.length);
+  await page.click(`#arGrid .ar-cell[data-ab="${nb - 1}"][data-at="0"]`);
+  const pc = await page.evaluate((b) => drumbort.state.arr.bars[b].m[0] === drumbort.state.slot, nb - 1);
+  check('+ BAR e pittura delle celle', nb === ar[0] + 1 && pc, `${nb} ${pc}`);
+  await page.evaluate(() => { drumbort.state.arr.bars[1].m.fill(4); drumbort.state.arr.bars[1].s = 4; });
+  await page.click('#play');
+  await page.waitForFunction(() => drumbort.state.session.master === 4, null, { timeout: 9000 }).catch(() => {});
+  check('riproduzione dell\'arrangiamento', await page.evaluate(() => drumbort.state.arr.on && drumbort.state.session.map.every((v) => v === 4)));
+  await page.keyboard.press('2');
+  check('lancio manuale esce dall\'arrangiamento', (await page.evaluate(() => drumbort.state.arr.on)) === false);
+  await page.click('#play');
+  await page.keyboard.press('Tab');
+
   // Menu a sezioni e cambio layout
   await page.click('#menuBtn');
   const secs = await page.evaluate(() => [...document.querySelectorAll('#menu .msec h3')].map((h) => h.textContent).join('|'));

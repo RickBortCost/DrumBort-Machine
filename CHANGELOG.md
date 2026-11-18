@@ -2,6 +2,18 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.6.0] - 2026-11-18
+
+### Aggiunto
+- **Arrangement view** nel layout Studio (ARRANGE o Tab): timeline tracce × battute fino a 256 battute, con pittura delle celle, riga del pattern principale, punto di partenza e indicatore di riproduzione. Strumenti + BAR, − BAR, ×2, DA SONG, SVUOTA.
+- **Registrazione session → arrangement** (● REC ARR) e riproduzione dell'arrangiamento (▶ ARR); un lancio manuale torna alla session.
+- **Quantizzazione del lancio** selezionabile: nessuna, 1/4, 1/2, 1, 2, 4 battute.
+- **Follow action per scena**: successiva, precedente, prima, casuale, altra, stop dopo 1-16 battute.
+- Il progetto esportato include session e arrangiamento.
+
+### Corretto
+- Lo stop del trasporto annulla i lanci in coda (prima potevano applicarsi al play successivo).
+
 ## [1.5.0] - 2026-11-18
 
 ### Aggiunto

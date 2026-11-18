@@ -8,7 +8,7 @@ import { allKits, kitById } from './kits.js';
 import { PRESETS, categories, findPresets } from './presets.js';
 import { SYNTH_TRACKS } from './synth.js';
 import { SYNTH_CH } from './engine.js';
-import { DRUM_TRACKS, SESSION_TRACKS, hasClip } from './session.js';
+import { DRUM_TRACKS, SESSION_TRACKS, hasClip, QUANTS, FOLLOW, FOLLOW_BARS, MAX_ARR_BARS } from './session.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -23,6 +23,7 @@ export function initStudio(app) {
   const { engine, seq, state, ui } = app;
   let active = false;
   let selTrack = 0;        // traccia selezionata (0-11)
+  let view = 'session';    // 'session' | 'arrange' (Tab)
 
   const isSynth = (i) => i >= DRUM_TRACKS;
   const trackName = (i, p = app.pat()) => (isSynth(i) ? SYNTH_TRACKS[i - DRUM_TRACKS].name : app.kitOf(p).tracks[i].name);
@@ -38,11 +39,35 @@ export function initStudio(app) {
   // ===================================================================
   // Griglia delle clip
   // ===================================================================
-  const grid = $('#session');
+  const panel = $('#session');
+  panel.innerHTML = `<div class="sx-tool">
+      <div class="seg sx-views"><button class="btn sm" data-sxv="session">SESSION</button><button class="btn sm" data-sxv="arrange">ARRANGE</button></div>
+      <label class="sx-q">LANCIO <select id="sxQuant" aria-label="Quantizzazione del lancio">${QUANTS.map((q) => `<option value="${q.v}">${q.label}</option>`).join('')}</select></label>
+      <button id="arrPlay" class="btn sm" aria-pressed="false" title="Riproduci l'arrangiamento">▶ ARR</button>
+      <button id="arrRec" class="btn sm" aria-pressed="false" title="Registra i lanci della session nell'arrangiamento">● REC ARR</button>
+      <span class="sx-info" id="sxInfo"></span>
+    </div>
+    <div class="sx-sess" id="sxSess"></div>
+    <div class="sx-arr" id="sxArr" hidden>
+      <div class="ar-tools">
+        <span class="ar-brush">PENNELLO <b id="arBrush">P1</b></span>
+        <button class="btn sm" data-ar="add" title="Aggiungi una battuta (copia dell'ultima)">+ BAR</button>
+        <button class="btn sm" data-ar="del" title="Togli l'ultima battuta">− BAR</button>
+        <button class="btn sm" data-ar="dup" title="Duplica tutto l'arrangiamento">×2</button>
+        <button class="btn sm" data-ar="song" title="Converti la catena del song mode">DA SONG</button>
+        <button class="btn sm" data-ar="clear">SVUOTA</button>
+        <small class="ar-hint">Clic: dipingi con il pattern selezionato · di nuovo: svuota · righello: punto di partenza</small>
+      </div>
+      <div class="ar-scroll" id="arScroll"><div class="ar-grid" id="arGrid"></div><div class="ar-head" id="arHead"></div></div>
+    </div>`;
+  const grid = $('#sxSess');
+  const followSel = (s) => `<div class="sx-fol">
+      <select data-fa="${s}" aria-label="Follow action P${s + 1}">${FOLLOW.map((f) => `<option value="${f.v}">${f.label}</option>`).join('')}</select>
+      <select data-fn="${s}" aria-label="Battute prima della follow action P${s + 1}">${FOLLOW_BARS.map((n) => `<option value="${n}">${n}</option>`).join('')}</select></div>`;
   function buildSession() {
     let html = '<div class="sx-row sx-head"><div class="sx-corner">PATTERN</div>';
     for (let i = 0; i < SESSION_TRACKS; i++) html += `<button class="sx-th" data-sel="${i}" style="--tc:${COLORS[i]}"><b></b><i></i></button>`;
-    html += '<div class="sx-scene-h">SCENA</div></div>';
+    html += '<div class="sx-scene-h">SCENA</div><div class="sx-scene-h">FOLLOW</div></div>';
     for (let s = 0; s < SLOTS; s++) {
       html += `<div class="sx-row"><div class="sx-rh">P${s + 1}</div>`;
       for (let i = 0; i < SESSION_TRACKS; i++) {
@@ -50,11 +75,11 @@ export function initStudio(app) {
           <button class="sx-launch" data-launch aria-label="Lancia clip"><span>▶</span></button>
           <button class="sx-body" data-pick aria-label="Modifica clip"><canvas width="64" height="18"></canvas></button></div>`;
       }
-      html += `<button class="sx-scene" data-scene="${s}" aria-label="Lancia scena P${s + 1}">▶ P${s + 1}</button></div>`;
+      html += `<button class="sx-scene" data-scene="${s}" aria-label="Lancia scena P${s + 1}">▶ P${s + 1}</button>${followSel(s)}</div>`;
     }
     html += '<div class="sx-row sx-foot"><div class="sx-rh"></div>';
     for (let i = 0; i < SESSION_TRACKS; i++) html += `<button class="sx-stop" data-stop="${i}" aria-label="Ferma traccia">■</button>`;
-    html += '<button class="sx-stopall" data-stopall aria-label="Ferma tutte le clip">■ STOP</button></div>';
+    html += '<button class="sx-stopall" data-stopall aria-label="Ferma tutte le clip">■ STOP</button><div></div></div>';
     grid.innerHTML = html;
   }
 
@@ -94,8 +119,149 @@ export function initStudio(app) {
       c.classList.toggle('edit', s === state.slot);
       drawClip(c.querySelector('canvas'), p, i);
     });
-    $$('.sx-scene', grid).forEach((b) => b.classList.toggle('master', +b.dataset.scene === state.session.master));
+    $$('.sx-scene', grid).forEach((b) => {
+      const s = +b.dataset.scene;
+      b.classList.toggle('master', s === state.session.master);
+      b.classList.toggle('queued', ui.pendingMaster === s);
+    });
+    state.session.follow.forEach((f, s) => {
+      $(`[data-fa="${s}"]`, grid).value = f.a;
+      const n = $(`[data-fn="${s}"]`, grid);
+      n.value = f.n;
+      n.disabled = f.a === 'none';
+    });
   }
+
+  grid.addEventListener('change', (e) => {
+    const t = e.target, f = t.dataset.fa ?? t.dataset.fn;
+    if (f === undefined) return;
+    const fo = state.session.follow[+f];
+    if (t.dataset.fa !== undefined) fo.a = t.value; else fo.n = +t.value;
+    app.save(); renderSession();
+  });
+
+  // ===================================================================
+  // Barra: vista, quantizzazione, arrangiamento
+  // ===================================================================
+  function renderTool() {
+    $$('[data-sxv]', panel).forEach((b) => app.setToggle(b, b.dataset.sxv === view));
+    $('#sxQuant').value = state.session.quant;
+    app.setToggle($('#arrPlay'), state.arr.on);
+    app.setToggle($('#arrRec'), ui.arrRec);
+    const n = state.arr.bars.length;
+    $('#sxInfo').textContent = n ? `${n} bar${state.arr.on && seq.playing ? ` · ${ui.arrBar + 1}/${n}` : ''}` : '';
+    $('#sxSess').hidden = view !== 'session';
+    $('#sxArr').hidden = view !== 'arrange';
+  }
+  panel.querySelector('.sx-tool').addEventListener('click', (e) => {
+    const v = e.target.closest('[data-sxv]');
+    if (v) { setView(v.dataset.sxv); return; }
+    if (e.target.closest('#arrPlay')) { app.toggleArr(); return; }
+    if (e.target.closest('#arrRec')) {
+      app.setArrRec(!ui.arrRec);
+      if (ui.arrRec) app.toast(seq.playing ? 'Registrazione dalla prossima battuta' : 'REC ARR armato: premi play');
+    }
+  });
+  $('#sxQuant').addEventListener('change', (e) => { state.session.quant = +e.target.value; app.save(); e.target.blur(); });
+  function setView(v) {
+    view = v;
+    renderTool();
+    if (v === 'arrange') renderArr(); else renderSession();
+  }
+
+  // ===================================================================
+  // Arrangiamento: tracce × battute; ogni cella = pattern da cui suona la clip
+  // ===================================================================
+  const arrGrid = $('#arGrid'), arrHead = $('#arHead');
+  const CELL = 30, LABEL = 64;
+  function renderArr() {
+    const bars = state.arr.bars, n = bars.length;
+    $('#arBrush').textContent = `P${state.slot + 1}`;
+    arrGrid.style.gridTemplateColumns = `${LABEL}px repeat(${Math.max(n, 1)}, ${CELL}px)`;
+    let html = '<div class="ar-lbl">BAR</div>';
+    for (let b = 0; b < n; b++) html += `<button class="ar-ruler${b === ui.arrStart ? ' start' : ''}" data-rb="${b}">${b + 1}</button>`;
+    if (!n) html += '<div></div>';
+    for (let i = 0; i < SESSION_TRACKS; i++) {
+      html += `<div class="ar-lbl" style="--tc:${COLORS[i]}">${esc(trackShort(i))}</div>`;
+      for (let b = 0; b < n; b++) {
+        const v = bars[b].m[i];
+        html += `<div class="ar-cell${v >= 0 ? ' on' : ''}" data-ab="${b}" data-at="${i}" style="--tc:${COLORS[i]}">${v >= 0 ? v + 1 : ''}</div>`;
+      }
+      if (!n) html += '<div></div>';
+    }
+    html += '<div class="ar-lbl">TEMPO</div>';
+    for (let b = 0; b < n; b++) html += `<div class="ar-cell ar-master" data-ab="${b}" data-at="m" title="Pattern principale (tempo, swing, tonalità)">${bars[b].s + 1}</div>`;
+    arrGrid.innerHTML = html;
+    barTick();
+  }
+  function barTick() {
+    if (!active) return;
+    renderTool();
+    if (view !== 'arrange') return;
+    const show = seq.playing && state.arr.bars.length;
+    arrHead.hidden = !show;
+    if (show) arrHead.style.transform = `translateX(${LABEL + 2 + ui.arrBar * (CELL + 2)}px)`;
+  }
+
+  // Pittura con trascinamento: il primo clic decide se scrivere il pattern o svuotare
+  let paint = null;
+  function paintCell(el) {
+    const b = +el.dataset.ab, bar = state.arr.bars[b];
+    if (!bar) return;
+    if (el.dataset.at === 'm') { bar.s = state.slot; el.textContent = state.slot + 1; return; }
+    const i = +el.dataset.at;
+    if (paint.v === undefined) paint.v = bar.m[i] === state.slot ? -1 : state.slot;
+    bar.m[i] = paint.v;
+    el.classList.toggle('on', paint.v >= 0);
+    el.textContent = paint.v >= 0 ? paint.v + 1 : '';
+  }
+  arrGrid.addEventListener('pointerdown', (e) => {
+    const c = e.target.closest('.ar-cell');
+    if (c) { e.preventDefault(); paint = {}; paintCell(c); return; }
+    const r = e.target.closest('[data-rb]');
+    if (r) {
+      ui.arrStart = +r.dataset.rb;
+      if (seq.playing && state.arr.on) ui.arrBar = (ui.arrStart - 1 + state.arr.bars.length) % state.arr.bars.length;
+      renderArr();
+    }
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (!paint) return;
+    const c = document.elementFromPoint(e.clientX, e.clientY);
+    const cell = c && c.closest && c.closest('.ar-cell');
+    if (cell && arrGrid.contains(cell)) paintCell(cell);
+  });
+  window.addEventListener('pointerup', () => { if (paint) { paint = null; app.save(); } });
+
+  $('#sxArr .ar-tools').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ar]');
+    if (!b) return;
+    const bars = state.arr.bars;
+    switch (b.dataset.ar) {
+      case 'add': {
+        if (bars.length >= MAX_ARR_BARS) break;
+        const last = bars[bars.length - 1];
+        bars.push(last ? { m: [...last.m], s: last.s } : { m: new Array(SESSION_TRACKS).fill(state.slot), s: state.slot });
+        break;
+      }
+      case 'del': bars.pop(); break;
+      case 'dup': state.arr.bars = bars.concat(bars.map((x) => ({ m: [...x.m], s: x.s }))).slice(0, MAX_ARR_BARS); break;
+      case 'song':
+        if (!state.song.chain.length) { app.toast('Catena song vuota'); return; }
+        if (bars.length && !confirm('Sostituire l\'arrangiamento con la catena del song mode?')) return;
+        state.arr.bars = app.songToArr(state.song.chain);
+        break;
+      case 'clear':
+        if (bars.length && !confirm('Svuotare l\'arrangiamento?')) return;
+        state.arr.bars = [];
+        break;
+      default: return;
+    }
+    if (!state.arr.bars.length) state.arr.on = false;
+    ui.arrStart = Math.min(ui.arrStart, Math.max(0, state.arr.bars.length - 1));
+    app.save();
+    renderArr();
+  });
 
   grid.addEventListener('click', (e) => {
     const cell = e.target.closest('.sx-cell');
@@ -270,6 +436,8 @@ export function initStudio(app) {
   buildMixer();
 
   return {
+    barTick,
+    toggleView() { setView(view === 'session' ? 'arrange' : 'session'); },
     setActive(on) {
       const was = active;
       active = on;
@@ -278,7 +446,8 @@ export function initStudio(app) {
     render() {
       if (!active) return;
       selTrack = ui.view === 'synth' ? DRUM_TRACKS + (ui.ssel || 0) : state.sel;
-      renderSession();
+      renderTool();
+      if (view === 'arrange') renderArr(); else renderSession();
       renderMixer();
       renderBrowser();
     },

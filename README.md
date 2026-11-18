@@ -42,6 +42,18 @@ Drum machine e groovebox per il web: step sequencer 16 × 8, pad live, una libre
 
 Il nome del suono nella testa dei parametri synth apre la **libreria**: 59 strumenti in 13 categorie (Bass, Lead, Pad, Keys, Piano, Organ, Strings, Brass, Pluck, Mallet, Bell, Choir, FX), ricerca per nome o tag (es. *warm*, *fm*, *vintage*), preferiti ★ e ascolto al tocco. I suoni sono tutti sintetizzati: piano additivo, corde pizzicate (Karplus-Strong), organo a drawbar, cori a formanti, FM, sottrattiva con LFO e rumore. La libreria si ispira al flusso di lavoro dei *rompler* (sfoglia, ascolta, assegna) senza riprodurne nomi, grafica o suoni.
 
+## Layout Studio (PC)
+
+Su computer (finestra di almeno 1000×600) l'app si apre nel layout **Studio**, pensato per mouse e tastiera e organizzato come una *session view*:
+
+- **Browser** (sinistra): suoni per categoria e ricerca; kit. Un clic assegna il suono alla traccia synth selezionata o il kit al pattern.
+- **Clip** (centro): colonne = 12 tracce (8 batteria + 4 synth), righe = 8 pattern. ▶ lancia la clip di quella traccia, ▶ P1…P8 lancia la scena intera, ■ ferma una traccia o tutte. I lanci partono al giro di battuta. Un clic sul corpo della clip la apre nell'editor sottostante (doppio clic: lancia).
+- **Editor** (sotto le clip): la griglia step della batteria o le corsie note del synth per la clip selezionata.
+- **Parametri e pad** (destra), **mixer** (in basso) con fader, pan, mandate, mute/solo e indicatori di livello.
+- Tastiera: **1-8** lanciano le scene, **.** ferma tutto, **Spazio** play/stop, **Ctrl/Cmd+Z** annulla.
+
+Il pulsante **▦** nella barra (o Menu → Layout) passa tra Studio e layout compatto.
+
 ## Synth wavetable
 
 Il motore wavetable (categoria **Wavetable** della libreria, editor ✎ nei parametri synth) segue l'approccio dei grandi synth wavetable software con un'implementazione e un'interfaccia originali:
@@ -140,6 +152,8 @@ js/midifile.js          export MIDI
 js/projects.js          progetti e link di condivisione
 js/wavetable.js         motore wavetable, tabelle e preset
 js/waveeditor.js        editor wavetable
+js/session.js           modalità session (clip per traccia, scene)
+js/studio.js            layout Studio: browser, clip, mixer
 js/ui.js                interfaccia, salvataggio, undo, song, PWA
 js/export.js            render offline e codifica WAV
 js/midi.js              Web MIDI (note e clock)

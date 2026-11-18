@@ -2,7 +2,18 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
-## [1.4.0] - 2026-11-18
+## [1.5.0] - 2026-11-18
+
+### Aggiunto
+- **Layout Studio per PC** (finestre ≥ 1000×600; automatico su computer, pulsante ▦ o Menu → Layout): browser di suoni e kit a sinistra, griglia delle clip al centro, editor della clip selezionata, parametri e pad a destra, mixer in basso.
+- **Modalità session**: ogni traccia (8 batteria + 4 synth) suona la propria clip, cioè la sua parte in uno degli 8 pattern. Lancio di clip e di scene quantizzato alla battuta, stop per traccia e stop totale; il pattern della scena lanciata fornisce tempo, swing e kit del bus.
+- **Mixer**: 12 strisce con fader, pan, mandate riverbero/delay, mute/solo e indicatori di livello, più master.
+- **Scorciatoie da tastiera** nel layout Studio: 1-8 lanciano le scene, "." ferma tutte le clip, Spazio play/stop, Ctrl/Cmd+Z annulla.
+
+### Modificato
+- **Menu riorganizzato** in quattro sezioni con icone e descrizioni (Progetto, Pattern, Suoni, Esporta e registra); su PC si apre come pannello a tendina.
+
+
 
 ### Aggiunto
 - **Synth wavetable** (nuovo motore): 3 oscillatori con morph continuo della posizione in 7 tabelle generate (Analog, Sync, Vocal, Digital, Additive, Growl, FM), unisono fino a 3 voci, rumore, 2 filtri LP/BP/HP/Notch in serie o parallelo con drive, inviluppo di modulazione, 2 LFO liberi o a tempo, step sequencer di modulazione a 16 passi e matrice a 6 slot (posizione wavetable, cutoff, pitch, volume, risonanza).
@@ -118,6 +129,7 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); vers
 - Layout touch per iPhone e iPad (portrait/landscape), PWA offline.
 - Deploy automatico su GitHub Pages.
 
+[1.5.0]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.2.0...v1.2.1

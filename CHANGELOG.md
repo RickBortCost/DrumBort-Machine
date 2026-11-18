@@ -2,6 +2,13 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.9.1] - 2026-11-18
+
+### Modificato
+- **DrumBort Host si apre come un programma**: all'avvio apre l'interfaccia in una finestra dedicata (Edge o Chrome in modalità app, senza barre del browser; altrimenti il browser predefinito). Chiudendo la finestra si chiude anche l'host. `--no-browser` per non aprirla.
+- Pacchetti desktop come eseguibile singolo: nella cartella c'è solo `DrumBortHost.exe` (più le cartelle `Assets` e `wwwroot`).
+- Ogni pacchetto desktop viene allegato alla release appena pronto, senza attendere gli altri sistemi.
+
 ## [1.9.0] - 2026-11-18
 
 ### Aggiunto

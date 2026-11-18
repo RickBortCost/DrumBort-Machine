@@ -5,6 +5,7 @@
 //   DrumBortHost --mode browser        relay: l'audio lo produce il browser del PC
 //   DrumBortHost --port 9000 --device 3 --buffer 512 --rate 44100
 //   DrumBortHost --no-audio                motore nativo senza scheda audio (test, server)
+//   DrumBortHost --no-browser              non apre la finestra dell'interfaccia
 //   DrumBortHost --list-devices
 //   DrumBortHost --render-voices out.json     (test: picco/RMS di ogni voce, offline)
 //   DrumBortHost --render project.json 8 out.wav   (test: rendering offline di un progetto)
@@ -103,6 +104,21 @@ app.Lifetime.ApplicationStarted.Register(() =>
         using var qr = new QRCodeGenerator().CreateQrCode($"http://{ips[0]}:{port}/", QRCodeGenerator.ECCLevel.L);
         Console.WriteLine(new AsciiQRCode(qr).GetGraphic(1, "██", "  "));
         Console.WriteLine("Inquadra il QR con il telefono (stessa rete Wi-Fi).");
+    }
+    if (!Flag("--no-browser"))
+    {
+        // Finestra dell'interfaccia: chiudendola si chiude anche l'host
+        var win = Launcher.Open($"http://localhost:{port}/");
+        if (win != null)
+        {
+            Console.WriteLine("Chiudi la finestra di DrumBort (o questa console) per uscire.");
+            Task.Run(async () =>
+            {
+                await win.WaitForExitAsync();
+                // Edge/Chrome già aperti con lo stesso profilo: il processo lanciato termina subito, l'host resta attivo
+                if (DateTime.Now - win.StartTime > TimeSpan.FromSeconds(5)) app.Lifetime.StopApplication();
+            });
+        }
     }
 });
 Console.CancelKeyPress += (_, _) => engine?.Dispose();

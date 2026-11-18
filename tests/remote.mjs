@@ -22,7 +22,7 @@ const check = (name, ok, info = '') => {
 };
 
 async function startHost(args, port) {
-  const p = spawn(BIN, [...args, '--port', String(port), '--no-qr'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const p = spawn(BIN, [...args, '--port', String(port), '--no-qr', '--no-browser'], { stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
   p.stdout.on('data', (d) => { log += d; });
   p.stderr.on('data', (d) => { log += d; });

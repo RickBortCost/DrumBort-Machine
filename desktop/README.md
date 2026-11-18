@@ -9,7 +9,7 @@ Applicazione per PC (Windows, macOS, Linux) che:
 
 1. Scarica dalla [pagina Release](https://github.com/RickBortCost/DrumBort-Machine/releases) lo zip per il tuo sistema (`win-x64`, `osx-arm64` per Mac Apple Silicon, `osx-x64` per Mac Intel, `linux-x64`) ed estrailo.
 2. Avvia `DrumBortHost` (Windows: `DrumBortHost.exe`, l'unico programma nella cartella; accanto ci sono solo le cartelle `Assets` e `wwwroot`, da lasciare dove sono). Non serve installare .NET.
-3. Nella finestra compaiono l'indirizzo per il PC (`http://localhost:8765/`), quello per il telefono e un **QR code**.
+3. Si apre la finestra di **DrumBort** (l'interfaccia: drum machine, layout Studio, mixer) e, dietro, una console con l'indirizzo per il telefono e un **QR code**. La console è il motore audio: chiudendo la finestra di DrumBort si chiude tutto. Se la finestra non compare, apri `http://localhost:8765/` nel browser.
 4. Sul telefono, collegato alla **stessa rete Wi-Fi**, inquadra il QR (o apri l'indirizzo): si apre il **Sound Lab** (badge **⇄ PC**) e i suoni che salvi arrivano nella libreria del PC. Con `?full` il telefono diventa invece il controller della drum machine (badge **CTRL·C#**) e l'audio esce dal PC.
 
 Il primo dispositivo con la drum machine che si collega porta il proprio progetto sull'host; quelli successivi lo ricevono, sostituendo il progetto locale. Un telefono in **Sound Lab** invia solo i suoni che crei (synth e batteria): arrivano nella libreria del PC e al motore senza toccare il progetto. Per usare il telefono come controller della drum machine apri l'indirizzo con `?full`.
@@ -29,6 +29,7 @@ Il primo dispositivo con la drum machine che si collega porta il proprio progett
 | `--rate 48000` | Frequenza di campionamento |
 | `--no-audio` | Motore attivo senza scheda audio (test, server) |
 | `--no-qr` | Non stampa il QR code |
+| `--no-browser` | Non apre la finestra dell'interfaccia |
 
 Se la scheda audio non è disponibile l'host passa da solo alla modalità browser.
 

@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <!-- WinExe: su Windows nessuna console all'avvio (finestra di programma); da terminale si collega alla sua -->
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -11,12 +12,13 @@
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <TieredPGO>true</TieredPGO>
-    <Version>1.15.0</Version>
+    <Version>1.16.0</Version>
     <Product>DrumBort Host</Product>
     <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Photino.NET" Version="4.0.16" />
     <PackageReference Include="PortAudioSharp2" Version="1.0.6" />
     <PackageReference Include="QRCoder" Version="1.8.1" />
   </ItemGroup>

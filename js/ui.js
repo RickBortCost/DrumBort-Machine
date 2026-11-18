@@ -1475,6 +1475,7 @@ $('#menu').addEventListener('click', async (e) => {
     case 'kits': panels.openKits(); return;
     case 'macro': macros.open(); return;
     case 'audioout': audioOut.open(); return;
+    case 'phone': openPhone(); return;
     case 'auto': auto.open(ui.view === 'synth' ? `s${ui.ssel || 0}.cut` : `d${state.sel}.vol`); return;
     case 'wt': synthUI.openEditor(); return;
     case 'recout': panels.recordOutput(); return;
@@ -1781,10 +1782,31 @@ function toast(msg) {
 }
 
 // =====================================================================
+/** QR code e indirizzi per collegare il telefono (solo con l'app per PC). */
+async function openPhone() {
+  try {
+    const r = await fetch('./connect.json', { cache: 'no-store' });
+    if (!r.ok) throw new Error();
+    const { urls } = await r.json();
+    if (!urls.length) { toast('Nessuna rete locale: collega il PC al Wi-Fi'); return; }
+    $('#phoneQr').src = `./qr.svg?t=${Date.now()}`;
+    $('#phoneUrls').innerHTML = urls.map((u) => `<code>${u.replace(/[<>&"]/g, '')}</code>`).join('');
+    openSheet($('#phoneSheet'));
+  } catch (_) {
+    toast("Disponibile nell'app DrumBort per PC");
+  }
+}
+
 // Avvio audio (overlay "Tocca per iniziare") e ripresa su iOS
 // =====================================================================
 
 const overlay = $('#overlay');
+/**
+ * Finestra di programma dell'app per PC (?app, motore audio nativo C#): l'interfaccia non produce
+ * audio, quindi niente schermata "Tocca per iniziare".
+ */
+const APP_WINDOW = new URLSearchParams(location.search).has('app')
+  && (document.querySelector('meta[name="drumbort-host"]') || {}).content === 'native';
 let unlocked = false;
 
 async function startAudio() {
@@ -1797,15 +1819,15 @@ async function startAudio() {
       if (audioOut) audioOut.restore();
       engine.ctx.addEventListener('statechange', () => {
         // iOS può sospendere/interrompere il contesto (chiamate, background)
-        if (engine.ctx.state !== 'running' && document.visibilityState === 'visible') overlay.hidden = false;
+        if (engine.ctx.state !== 'running' && document.visibilityState === 'visible' && !APP_WINDOW) overlay.hidden = false;
       });
       if (midi.supported && (state.midi.input || state.midi.output)) {
         midi.enable().then(() => { midi.setInput(state.midi.input); midi.setOutput(state.midi.output); }).catch(() => {});
       }
     }
-    if (engine.ctx.state === 'running') overlay.hidden = true;
+    if (engine.ctx.state === 'running' || APP_WINDOW) overlay.hidden = true;
   } catch (_) {
-    overlay.hidden = false;
+    overlay.hidden = APP_WINDOW;
   }
 }
 overlay.addEventListener('pointerup', startAudio);
@@ -1815,10 +1837,15 @@ overlay.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && engine.ctx && engine.ctx.state !== 'running') {
     engine.ctx.resume().catch(() => {}).finally(() => {
-      if (engine.ctx.state !== 'running') overlay.hidden = false;
+      if (engine.ctx.state !== 'running' && !APP_WINDOW) overlay.hidden = false;
     });
   }
 });
+if (APP_WINDOW) {
+  overlay.hidden = true;
+  startAudio();
+  document.addEventListener('pointerdown', () => { if (engine.ctx && engine.ctx.state !== 'running') engine.ctx.resume().catch(() => {}); }, { once: true });
+}
 
 // =====================================================================
 // Blocco zoom (iOS Safari ignora user-scalable=no)

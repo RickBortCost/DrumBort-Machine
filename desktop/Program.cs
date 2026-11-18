@@ -6,6 +6,7 @@
 //   DrumBortHost --port 9000 --device 3 --buffer 512 --rate 44100
 //   DrumBortHost --no-audio                motore nativo senza scheda audio (test, server)
 //   DrumBortHost --no-browser              non apre la finestra dell'interfaccia
+//   DrumBortHost --browser-window          interfaccia in Edge/Chrome invece della finestra nativa
 //   DrumBortHost --list-devices
 //   DrumBortHost --render-voices out.json     (test: picco/RMS di ogni voce, offline)
 //   DrumBortHost --render project.json 8 out.wav   (test: rendering offline di un progetto)
@@ -18,6 +19,8 @@ using DrumBort.Audio;
 using DrumBort.Engine;
 using DrumBort.Host;
 using QRCoder;
+
+AppWindow.SetupConsole();
 
 string Arg(string name, string def)
 {
@@ -86,6 +89,15 @@ app.MapGet("/host.json", () => Results.Json(new
     native = hub.Native, clients = hub.Count, version = typeof(Hub).Assembly.GetName().Version?.ToString(3),
     engine = engine?.Status(),
 }));
+// Collegamento del telefono: indirizzi nella rete locale e QR code (menu "Collega telefono")
+app.MapGet("/connect.json", () => Results.Json(new { urls = LanAddresses().Select(ip => $"http://{ip}:{port}/").ToArray() }));
+app.MapGet("/qr.svg", () =>
+{
+    var ip = LanAddresses().FirstOrDefault();
+    if (ip == null) return Results.NotFound();
+    using var qr = new QRCodeGenerator().CreateQrCode($"http://{ip}:{port}/", QRCodeGenerator.ECCLevel.M);
+    return Results.Content(new SvgQRCode(qr).GetGraphic(8), "image/svg+xml");
+});
 // Uscita audio del motore nativo: elenco, scelta, nuova lettura dei dispositivi
 bool realAudio = engine != null && !Flag("--no-audio");
 app.MapGet("/audio", () => !realAudio ? Results.Json(new { available = false }) : Results.Json(new
@@ -129,14 +141,28 @@ app.Lifetime.ApplicationStarted.Register(() =>
         Console.WriteLine(new AsciiQRCode(qr).GetGraphic(1, "██", "  "));
         Console.WriteLine("Inquadra il QR con il telefono (stessa rete Wi-Fi).");
     }
+});
+Console.CancelKeyPress += (_, _) => engine?.Dispose();
+app.Start();
+
+string ui = $"http://localhost:{port}/";
+bool done = false;
+if (!Flag("--no-browser") && !Flag("--browser-window"))
+{
+    // Finestra di programma nativa: chiudendola si chiude il programma
+    done = AppWindow.Run(ui + "?app", $"DrumBort Machine {typeof(Hub).Assembly.GetName().Version?.ToString(3)}");
+    if (done) app.StopAsync().Wait(TimeSpan.FromSeconds(3));
+}
+if (!done)
+{
     if (!Flag("--no-browser"))
     {
-        // Finestra dell'interfaccia: chiudendola si chiude anche l'host
-        var win = Launcher.Open($"http://localhost:{port}/");
+        // Ripiego: Edge/Chrome in modalità app (chiudendola si chiude anche l'host)
+        var win = Launcher.Open(ui);
         if (win != null)
         {
-            Console.WriteLine("Chiudi la finestra di DrumBort (o questa console) per uscire.");
-            Task.Run(async () =>
+            Console.WriteLine("Chiudi la finestra di DrumBort per uscire.");
+            _ = Task.Run(async () =>
             {
                 await win.WaitForExitAsync();
                 // Edge/Chrome già aperti con lo stesso profilo: il processo lanciato termina subito, l'host resta attivo
@@ -144,9 +170,8 @@ app.Lifetime.ApplicationStarted.Register(() =>
             });
         }
     }
-});
-Console.CancelKeyPress += (_, _) => engine?.Dispose();
-app.Run();
+    app.WaitForShutdown();
+}
 engine?.Dispose();
 
 static IEnumerable<string> LanAddresses() =>

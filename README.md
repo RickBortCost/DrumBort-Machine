@@ -94,9 +94,9 @@ La drum machine completa resta su tablet e PC; sul telefono si apre con `?full` 
 
 App desktop per **Windows, macOS e Linux** (cartella [`desktop/`](desktop/README.md), zip nella pagina Release): un **motore audio nativo C#** genera gli stessi suoni della web app e il **telefono fa da controller** sulla rete Wi-Fi.
 
-1. Avvia `DrumBortHost` sul PC: compaiono gli indirizzi e un QR code.
-2. Inquadra il QR con il telefono: in alto appare **CTRL·C#**. Tutto ciò che fai sul telefono (step, suoni, editor wavetable, mixer, pad, lanci, play/stop) suona sul PC.
-3. Anche il browser del PC (`http://localhost:8765/`) può comandare l'host, con il layout Studio.
+1. Avvia `DrumBortHost` sul PC: si apre la finestra del programma (nativa, senza browser).
+2. **Menu → 📱 Collega telefono** mostra il QR code: inquadralo con il telefono in alto appare **CTRL·C#**. Tutto ciò che fai sul telefono (step, suoni, editor wavetable, mixer, pad, lanci, play/stop) suona sul PC.
+3. Si può comandare l'host anche da un browser del PC (`http://localhost:8765/`), con il layout Studio.
 
 Con `--mode browser` l'audio lo produce invece il browser del PC (badge **AUDIO**) e il telefono lo comanda (badge **CTRL**).
 

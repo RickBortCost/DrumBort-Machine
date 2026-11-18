@@ -2,6 +2,15 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.16.0] - 2026-11-18
+
+### Modificato
+- **App per PC in una finestra di programma nativa**, senza browser e senza console: l'interfaccia è mostrata dal motore web del sistema (WebView2 su Windows, WebKit su macOS e Linux) e si apre direttamente, senza "Tocca per iniziare". Ripiego automatico su Edge/Chrome se il componente manca; `--browser-window` per sceglierlo.
+- Su Windows niente finestra della console; lanciato da un terminale il programma vi scrive i messaggi; registro in `%LOCALAPPDATA%\DrumBort\host.log`.
+
+### Aggiunto
+- **Menu → 📱 Collega telefono**: QR code e indirizzi per il telefono (prima solo nella console).
+
 ## [1.15.0] - 2026-11-18
 
 ### Aggiunto

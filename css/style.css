@@ -1351,3 +1351,9 @@ input.mxi-vol::-moz-range-thumb, input.mxi-pan::-moz-range-thumb { width: 8px; h
 .browser.lib-flash { animation: libflash .9s ease-out; }
 @keyframes libflash { from { box-shadow: inset 0 0 0 2px var(--orange, #ff9b3d); } to { box-shadow: inset 0 0 0 2px transparent; } }
 .bw-item.cur { box-shadow: inset 3px 0 0 var(--orange, #ff9b3d); }
+
+/* ----- Collega telefono ----- */
+.phone-qr { display: flex; justify-content: center; padding: 8px; }
+.phone-qr img { width: 220px; height: 220px; padding: 10px; border-radius: 8px; background: #fff; image-rendering: pixelated; }
+.phone-urls { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.phone-urls code { font-size: 14px; color: var(--lcd-ink); user-select: all; }

@@ -8,7 +8,7 @@ Applicazione per PC (Windows, macOS, Linux) che:
 ## Avvio
 
 1. Scarica dalla [pagina Release](https://github.com/RickBortCost/DrumBort-Machine/releases) lo zip per il tuo sistema (`win-x64`, `osx-arm64` per Mac Apple Silicon, `osx-x64` per Mac Intel, `linux-x64`) ed estrailo.
-2. Avvia `DrumBortHost` (Windows: `DrumBortHost.exe`). Non serve installare .NET.
+2. Avvia `DrumBortHost` (Windows: `DrumBortHost.exe`, l'unico programma nella cartella; accanto ci sono solo le cartelle `Assets` e `wwwroot`, da lasciare dove sono). Non serve installare .NET.
 3. Nella finestra compaiono l'indirizzo per il PC (`http://localhost:8765/`), quello per il telefono e un **QR code**.
 4. Sul telefono, collegato alla **stessa rete Wi-Fi**, inquadra il QR (o apri l'indirizzo): si apre il **Sound Lab** (badge **⇄ PC**) e i suoni che salvi arrivano nella libreria del PC. Con `?full` il telefono diventa invece il controller della drum machine (badge **CTRL·C#**) e l'audio esce dal PC.
 

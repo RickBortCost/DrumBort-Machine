@@ -336,3 +336,42 @@ public sealed class UtilityNode : AudioNode
         Stereo = true;
     }
 }
+
+/// <summary>Track Stack: tracce che passano per un bus comune (device, volume, mute).</summary>
+public sealed class StackDef
+{
+    public string Name = "Stack";
+    public int[] Tracks = Array.Empty<int>();
+    public double Vol = 0.8;
+    public bool Mute;
+    public DeviceDef[] Devs = Array.Empty<DeviceDef>();
+}
+
+/// <summary>
+/// Parte "buses" del progetto: { ret: [{devs}, {devs}], master: {devs}, stacks: [{name, tracks, vol, mute, devs}] }.
+/// La web app la conserva senza usarla.
+/// </summary>
+public sealed class BusesDef
+{
+    public DeviceDef[][] Ret = { Array.Empty<DeviceDef>(), Array.Empty<DeviceDef>() };
+    public DeviceDef[] Master = Array.Empty<DeviceDef>();
+    public StackDef[] Stacks = Array.Empty<StackDef>();
+
+    public static BusesDef Parse(System.Text.Json.Nodes.JsonNode? n)
+    {
+        var b = new BusesDef();
+        if (n == null) return b;
+        for (int i = 0; i < 2; i++) b.Ret[i] = DeviceDef.ParseChain(n["ret"]?[i]?["devs"]);
+        b.Master = DeviceDef.ParseChain(n["master"]?["devs"]);
+        if (n["stacks"] is System.Text.Json.Nodes.JsonArray st)
+            b.Stacks = st.Take(Mixer.Stacks).Select(x => new StackDef
+            {
+                Name = J.S(x, "name", "Stack"),
+                Tracks = J.Nums(x?["tracks"]).Select(v => (int)v).Where(v => v >= 0 && v < Mixer.Channels).ToArray(),
+                Vol = Math.Clamp(J.D(x, "vol", 0.8), 0, 1),
+                Mute = J.B(x, "mute"),
+                Devs = DeviceDef.ParseChain(x?["devs"]),
+            }).ToArray();
+        return b;
+    }
+}

@@ -55,12 +55,15 @@ static class PaHost
     const uint AutoConvert = 1 << 6;       // paWinWasapiAutoConvert: conversione di frequenza in modalità condivisa
 
     /// <summary>Struttura WASAPI (memoria non gestita, da liberare con Marshal.FreeHGlobal).</summary>
-    public static IntPtr WasapiInfo()
+    const uint Exclusive = 1;              // paWinWasapiExclusive: accesso esclusivo, latenza minima
+    const uint ThreadPriority = 1 << 4;    // paWinWasapiThreadPriority
+    public static IntPtr WasapiInfo(bool exclusive = false)
     {
         var s = new WasapiStreamInfo
         {
             size = (uint)Marshal.SizeOf<WasapiStreamInfo>(), hostApiType = WASAPI, version = 1,
-            flags = AutoConvert,
+            flags = exclusive ? Exclusive | ThreadPriority : AutoConvert,
+            threadPriority = exclusive ? 5 : 0,   // eThreadPriorityProAudio
         };
         var p = Marshal.AllocHGlobal(Marshal.SizeOf<WasapiStreamInfo>());
         Marshal.StructureToPtr(s, p, false);

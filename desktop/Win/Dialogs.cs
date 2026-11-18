@@ -136,44 +136,108 @@ public sealed class NewTrackDialog : DarkDialog
     }
 }
 
-/// <summary>Scelta dell'uscita audio (cuffie, casse, scheda).</summary>
+/// <summary>
+/// Audio e MIDI (come le impostazioni di FL Studio e Logic): driver (WASAPI condiviso o esclusivo,
+/// ASIO), uscita, buffer e latenza, ingressi MIDI e assegnazioni MIDI Learn.
+/// </summary>
 public sealed class AudioDialog : DarkDialog
 {
-    public AudioDialog(Window owner) : base(owner, "Uscita audio", 460)
+    readonly StackPanel box = new();
+    public AudioDialog(Window owner) : base(owner, "Audio e MIDI", 560)
     {
+        Body.Children.Add(box);
+        var close = new Btn("Chiudi"); close.Click += Close;
+        Buttons(close);
+        Fill();
+    }
+
+    static TextBlock Head(string t) { var h = Txt.Make(t, 11, Theme.Orange, true); h.Margin = new Thickness(0, 12, 0, 4); return h; }
+    void Fill()
+    {
+        box.Children.Clear();
         var e = Program.Engine;
         if (e == null || !Program.RealAudio)
+            box.Children.Add(Txt.Make("Scheda audio non disponibile.", 13, Theme.Dim));
+        else
         {
-            Body.Children.Add(Txt.Make("Scheda audio non disponibile.", 13, Theme.Dim));
-            var c = new Btn("Chiudi"); c.Click += Close; Buttons(c);
-            return;
-        }
-        var info = Txt.Make($"In uso: {e.CurrentDevice}", 12, Theme.Dim);
-        info.TextWrapping = TextWrapping.Wrap;
-        Body.Children.Add(info);
-        var list = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
-        void Fill()
-        {
-            list.Children.Clear();
-            var def = new Btn("Predefinito di sistema (segue le cuffie collegate)") { IsOn = e.FollowDefault, HorizontalAlignment = HorizontalAlignment.Stretch };
-            def.Click += () => { Try(() => e.SelectDevice(null)); Fill(); };
-            list.Children.Add(def);
-            foreach (var d in e.Devices())
+            double ms = 1000.0 * (Asio.Driver != null ? Asio.Frames : e.BufferFrames) / e.Ctx.SampleRate;
+            var info = Txt.Make($"In uso: {e.CurrentDevice}{(e.ExclusiveActive ? " · esclusivo" : "")} · {e.Ctx.SampleRate} Hz · buffer {ms:0.0} ms · interruzioni {e.Underruns}", 12, Theme.Dim);
+            info.TextWrapping = TextWrapping.Wrap;
+            box.Children.Add(info);
+
+            // Driver
+            box.Children.Add(Head("DRIVER"));
+            var drv = new WrapPanel();
+            var win = new Btn("Windows (WASAPI)") { IsOn = Asio.Driver == null };
+            win.Click += () => { Try(() => Asio.Stop(e)); Fill(); };
+            drv.Children.Add(win);
+            foreach (var d in Asio.Drivers())
             {
-                var b = new Btn(d.name + (d.isDefault ? "  (predefinito)" : "")) { IsOn = !e.FollowDefault && d.name == e.CurrentDevice, HorizontalAlignment = HorizontalAlignment.Stretch };
-                string n = d.name;
-                b.Click += () => { Try(() => e.SelectDevice(n)); Fill(); };
-                list.Children.Add(b);
+                var b = new Btn("ASIO · " + d) { IsOn = Asio.Driver == d };
+                string n = d;
+                b.Click += () => { Try(() => Asio.Start(e, n)); Fill(); };
+                drv.Children.Add(b);
             }
-            info.Text = $"In uso: {e.CurrentDevice}";
+            box.Children.Add(drv);
+            if (Asio.Drivers().Length == 0) box.Children.Add(Txt.Make("Nessun driver ASIO installato (le schede audio professionali lo includono; in alternativa ASIO4ALL).", 11, Theme.Dim));
+
+            if (Asio.Driver != null)
+            {
+                var panel = new Btn("Pannello del driver ASIO (buffer, uscite)");
+                panel.Click += () => { Asio.ShowPanel(); };
+                box.Children.Add(panel);
+            }
+            else
+            {
+                box.Children.Add(Head("USCITA"));
+                var def = new Btn("Predefinito di sistema (segue le cuffie collegate)") { IsOn = e.FollowDefault, HorizontalAlignment = HorizontalAlignment.Stretch };
+                def.Click += () => { Try(() => e.SelectDevice(null)); Fill(); };
+                box.Children.Add(def);
+                foreach (var d in e.Devices())
+                {
+                    var b = new Btn(d.name + (d.isDefault ? "  (predefinito)" : "")) { IsOn = !e.FollowDefault && d.name == e.CurrentDevice, HorizontalAlignment = HorizontalAlignment.Stretch };
+                    string n = d.name;
+                    b.Click += () => { Try(() => e.SelectDevice(n)); Fill(); };
+                    box.Children.Add(b);
+                }
+                box.Children.Add(Head("MODALITÀ E BUFFER"));
+                var mode = new WrapPanel();
+                var sh = new Btn("Condivisa") { IsOn = !e.Exclusive };
+                var ex = new Btn("Esclusiva (latenza minima)") { IsOn = e.Exclusive, ToolTip = "L'app usa la scheda da sola: gli altri programmi restano muti finché DrumBort è aperto" };
+                sh.Click += () => { Try(() => e.SetLatency(e.BufferFrames, false)); Fill(); };
+                ex.Click += () => { Try(() => e.SetLatency(e.BufferFrames, true)); Fill(); };
+                mode.Children.Add(sh); mode.Children.Add(ex);
+                box.Children.Add(mode);
+                var buf = new WrapPanel();
+                foreach (int f in new[] { 128, 256, 512, 1024, 2048 })
+                {
+                    var b = new Btn($"{f} ({1000.0 * f / e.Ctx.SampleRate:0.#} ms)") { IsOn = e.BufferFrames == f };
+                    int ff = f;
+                    b.Click += () => { Try(() => e.SetLatency(ff, e.Exclusive)); Fill(); };
+                    buf.Children.Add(b);
+                }
+                box.Children.Add(buf);
+                box.Children.Add(Txt.Make("Buffer piccolo = meno ritardo suonando dal vivo; se senti crepitii, aumentalo.", 11, Theme.Dim));
+                if (e.Exclusive && !e.ExclusiveActive) box.Children.Add(Txt.Make("La scheda non accetta la modalità esclusiva a questa frequenza: in uso la condivisa.", 11, Theme.Red));
+            }
         }
-        Fill();
-        Body.Children.Add(list);
-        var refresh = new Btn("Rileggi dispositivi"); refresh.Click += () => { Try(e.Refresh); Fill(); };
-        var close = new Btn("Chiudi"); close.Click += Close;
-        Buttons(refresh, close);
+
+        // MIDI
+        box.Children.Add(Head("INGRESSI MIDI"));
+        if (MidiInput.Names.Count == 0) box.Children.Add(Txt.Make("Nessuna tastiera o controller MIDI collegato.", 12, Theme.Dim));
+        foreach (var n in MidiInput.Names) box.Children.Add(Txt.Make("● " + n, 12, Theme.Green));
+        box.Children.Add(Txt.Make("Le note suonano la traccia selezionata (synth) o i pad della batteria (note 36–43 = tracce 1–8). Con ● REC e play attivo le note si scrivono negli step.", 11, Theme.Dim));
+        var mw = new WrapPanel();
+        var rl = new Btn("Rileggi dispositivi MIDI"); rl.Click += () => { MidiInput.Refresh(); Fill(); };
+        mw.Children.Add(rl);
+        var fg = new Btn($"Dimentica le assegnazioni MIDI Learn ({MidiLearn.Count})") { Enabled = MidiLearn.Count > 0 };
+        fg.Click += () => { MidiLearn.Forget(); Fill(); };
+        mw.Children.Add(fg);
+        box.Children.Add(mw);
+        box.Children.Add(Txt.Make("MIDI Learn: tasto destro su una manopola o un cursore, poi muovi un controllo del controller.", 11, Theme.Dim));
+        foreach (var t in box.Children.OfType<TextBlock>()) t.TextWrapping = TextWrapping.Wrap;
     }
-    void Try(Action a) { try { a(); } catch (Exception x) { MessageBox.Show(this, x.Message, "Uscita audio"); } }
+    void Try(Action a) { try { a(); } catch (Exception x) { MessageBox.Show(this, x.Message, "Audio"); } }
 }
 
 /// <summary>QR code e indirizzo per collegare il telefono.</summary>
@@ -316,4 +380,28 @@ public sealed class ExportDialog : DarkDialog
         finally { cts = null; go.Enabled = true; cancel.Text = "Chiudi"; }
     }
     static string Safe(string s) => string.Concat(s.Select(c => char.IsLetterOrDigit(c) ? c : '_')).Trim('_');
+}
+
+/// <summary>Richiesta di un testo (rinomina).</summary>
+public sealed class Prompt : DarkDialog
+{
+    readonly TextBox box;
+    string? result;
+    Prompt(Window owner, string title, string value) : base(owner, title, 380)
+    {
+        box = new TextBox { Text = value, FontSize = 14, Background = Theme.Dark, Foreground = Theme.Ink, CaretBrush = Theme.Ink, BorderBrush = Theme.Edge, Padding = new Thickness(6, 4, 6, 4) };
+        Body.Children.Add(box);
+        var ok = new Btn("OK") { IsOn = true }; var no = new Btn("Annulla");
+        ok.Click += () => { result = box.Text.Trim(); Close(); };
+        no.Click += Close;
+        Buttons(no, ok);
+        box.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) { result = box.Text.Trim(); Close(); } };
+        Loaded += (_, _) => { box.Focus(); box.SelectAll(); };
+    }
+    public static string? Ask(Window? owner, string title, string value)
+    {
+        var p = new Prompt(owner ?? Application.Current.MainWindow, title, value);
+        p.ShowDialog();
+        return string.IsNullOrEmpty(p.result) ? null : p.result;
+    }
 }

@@ -21,7 +21,9 @@ public static class Theme
     public static readonly string[] TrackColors = { "#e5432f", "#f08a24", "#f2c230", "#d9d2bd", "#a8c7c0", "#6aa9d8", "#9b8ad6", "#d47bb0", "#f08a24", "#5fd3e6", "#a98be0", "#6fd08c" };
     public static SolidColorBrush Track(int i)
     {
-        var c = (Color)ColorConverter.ConvertFromString(TrackColors[Math.Clamp(i, 0, 11)]);
+        // 12-13 ritorni, 14 master, 16-19 stack
+        string hex = i < 12 ? TrackColors[Math.Max(0, i)] : i == 12 ? "#5fd3e6" : i == 13 ? "#a98be0" : i == 14 ? "#d9d2bd" : "#8fd3a0";
+        var c = (Color)ColorConverter.ConvertFromString(hex);
         var b = new SolidColorBrush(c); b.Freeze(); return b;
     }
     public static readonly FontFamily Font = new("Segoe UI");
@@ -151,7 +153,10 @@ public sealed class HSlider : FrameworkElement
         Min = min; Max = max; Def = def; Value = value;
         Height = 16; MinWidth = 40; Cursor = Cursors.SizeWE; Focusable = true;
         Bipolar = min < 0 && max > 0;
+        MidiLearn.Attach(this, () => LearnId, () => Begin?.Invoke(), f => { Value = Math.Round(Min + f * (Max - Min), 3); InvalidateVisual(); Changed?.Invoke(Value); }, () => End?.Invoke());
     }
+    /// <summary>Identificativo per il MIDI Learn (tasto destro); null = non assegnabile.</summary>
+    public string? LearnId;
     double F => (Value - Min) / (Max - Min);
     protected override void OnRender(DrawingContext dc)
     {
@@ -161,6 +166,7 @@ public sealed class HSlider : FrameworkElement
         double x0 = Bipolar ? (0 - Min) / (Max - Min) * w : 0, x1 = F * w;
         dc.DrawRectangle(Color, null, new Rect(Math.Min(x0, x1), y - 2, Math.Abs(x1 - x0), 4));
         dc.DrawRoundedRectangle(Color, new Pen(Theme.Dark, 1), new Rect(Math.Clamp(x1 - 4, 0, w - 8), 1, 8, h - 2), 2, 2);
+        if (MidiLearn.Learning(LearnId)) dc.DrawRectangle(null, new Pen(Theme.Cyan, 2) { DashStyle = DashStyles.Dash }, new Rect(0, 0, w, h));
     }
     void SetFrom(double x)
     {
@@ -208,8 +214,11 @@ public sealed class Knob : FrameworkElement
     {
         Label = label; Min = min; Max = max; Def = def; Value = value; Format = fmt; Log = log;
         Width = 62; Height = 74; Cursor = Cursors.SizeNS; Focusable = true;
-        ToolTip = $"{label}: trascina in verticale (Shift = fine), doppio clic = valore iniziale";
+        ToolTip = $"{label}: trascina in verticale (Shift = fine), doppio clic = valore iniziale, tasto destro = MIDI Learn";
+        MidiLearn.Attach(this, () => LearnId, () => Begin?.Invoke(), f => Set(Denorm(f)), () => End?.Invoke());
     }
+    /// <summary>Identificativo per il MIDI Learn (tasto destro); null = non assegnabile.</summary>
+    public string? LearnId;
     double Norm(double v) => Log ? Math.Log(v / Min) / Math.Log(Max / Min) : (v - Min) / (Max - Min);
     double Denorm(double f) => Log ? Min * Math.Pow(Max / Min, f) : Min + f * (Max - Min);
     double Round(double v)
@@ -244,6 +253,8 @@ public sealed class Knob : FrameworkElement
         var val = Fmt(Format(Value), 10.5, Theme.Lcd);
         dc.DrawText(val, new Point(cx - val.Width / 2, cy + r + 5));
         if (IsKeyboardFocused) dc.DrawEllipse(null, new Pen(Color, 1), new Point(cx, cy), r + 6, r + 6);
+        if (MidiLearn.Learning(LearnId)) dc.DrawEllipse(null, new Pen(Theme.Cyan, 2) { DashStyle = DashStyles.Dash }, new Point(cx, cy), r + 7, r + 7);
+        else if (MidiLearn.Mapped(LearnId)) dc.DrawEllipse(Theme.Cyan, null, new Point(w - 6, 6), 2.5, 2.5);
     }
     static void DrawArc(DrawingContext dc, double cx, double cy, double r, double f0, double f1, Brush b, double th)
     {
@@ -297,19 +308,83 @@ public sealed class Knob : FrameworkElement
     protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e) => InvalidateVisual();
 }
 
-/// <summary>Indicatore di livello orizzontale (verde, giallo, rosso).</summary>
+/// <summary>Indicatore di livello orizzontale (verde, giallo, rosso); verticale se Vertical.</summary>
 public sealed class Meter : FrameworkElement
 {
     double v;
+    public bool Vertical;
     public Meter() { Height = 3; }
     public void Set(double level) { level = Math.Clamp(level, 0, 1); if (Math.Abs(level - v) < 0.004) return; v = level; InvalidateVisual(); }
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
+        if (Vertical)
+        {
+            dc.DrawRectangle(Theme.Dark, null, new Rect(0, 0, w, h));
+            double y = v * h;
+            dc.DrawRectangle(Theme.Green, null, new Rect(0, h - Math.Min(y, h * 0.7), w, Math.Min(y, h * 0.7)));
+            if (y > h * 0.7) dc.DrawRectangle(Brushes.Gold, null, new Rect(0, h - Math.Min(y, h * 0.9), w, Math.Min(y, h * 0.9) - h * 0.7));
+            if (y > h * 0.9) dc.DrawRectangle(Theme.Red, null, new Rect(0, h - y, w, y - h * 0.9));
+            return;
+        }
         dc.DrawRectangle(Theme.Dark, null, new Rect(0, 0, w, h));
         double x = v * w;
         dc.DrawRectangle(Theme.Green, null, new Rect(0, 0, Math.Min(x, w * 0.7), h));
         if (x > w * 0.7) dc.DrawRectangle(Brushes.Gold, null, new Rect(w * 0.7, 0, Math.Min(x, w * 0.9) - w * 0.7, h));
         if (x > w * 0.9) dc.DrawRectangle(Theme.Red, null, new Rect(w * 0.9, 0, x - w * 0.9, h));
     }
+}
+
+/// <summary>Fader verticale del mixer: trascina, rotella, doppio clic = valore iniziale, tasto destro = MIDI Learn.</summary>
+public sealed class VFader : FrameworkElement
+{
+    public double Min, Max, Def, Value;
+    public Brush Color = Theme.Orange;
+    public string? LearnId;
+    public event Action<double>? Changed;
+    public event Action? Begin, End;
+    bool drag;
+    public VFader(double min, double max, double def, double value)
+    {
+        Min = min; Max = max; Def = def; Value = value;
+        Width = 22; Cursor = Cursors.SizeNS; Focusable = true;
+        MidiLearn.Attach(this, () => LearnId, () => Begin?.Invoke(), f => { Value = Math.Round(Min + f * (Max - Min), 3); InvalidateVisual(); Changed?.Invoke(Value); }, () => End?.Invoke());
+    }
+    double F => (Value - Min) / (Max - Min);
+    protected override void OnRender(DrawingContext dc)
+    {
+        double w = ActualWidth, h = ActualHeight, x = w / 2;
+        dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, w, h));
+        dc.DrawRoundedRectangle(Theme.Dark, null, new Rect(x - 2, 6, 4, h - 12), 2, 2);
+        double y = 6 + (1 - F) * (h - 12);
+        dc.DrawRectangle(Color, null, new Rect(x - 2, y, 4, h - 6 - y));
+        // Unità (0 dB = 0,8) come riferimento
+        double y0 = 6 + (1 - (0.8 - Min) / (Max - Min)) * (h - 12);
+        if (Max >= 0.8) dc.DrawRectangle(Theme.Dim, null, new Rect(0, y0, 4, 1));
+        dc.DrawRoundedRectangle(Theme.Panel3, new Pen(Color, 1.5), new Rect(1, y - 6, w - 2, 12), 2, 2);
+        dc.DrawRectangle(Theme.Ink, null, new Rect(3, y - 0.5, w - 6, 1));
+        if (MidiLearn.Learning(LearnId)) dc.DrawRectangle(null, new Pen(Theme.Cyan, 2) { DashStyle = DashStyles.Dash }, new Rect(0, 0, w, h));
+    }
+    void SetFrom(double py)
+    {
+        double f = 1 - Math.Clamp((py - 6) / Math.Max(1, ActualHeight - 12), 0, 1);
+        Value = Math.Round(Min + f * (Max - Min), 3);
+        InvalidateVisual();
+        Changed?.Invoke(Value);
+    }
+    protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2) { Begin?.Invoke(); Value = Def; InvalidateVisual(); Changed?.Invoke(Value); End?.Invoke(); e.Handled = true; return; }
+        Begin?.Invoke(); drag = true; CaptureMouse(); Focus();
+        SetFrom(e.GetPosition(this).Y); e.Handled = true;
+    }
+    protected override void OnMouseMove(MouseEventArgs e) { if (drag) SetFrom(e.GetPosition(this).Y); }
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) { if (drag) { drag = false; ReleaseMouseCapture(); End?.Invoke(); } }
+    protected override void OnMouseWheel(MouseWheelEventArgs e)
+    {
+        Begin?.Invoke();
+        Value = Math.Clamp(Value + Math.Sign(e.Delta) * (Max - Min) / 50, Min, Max);
+        InvalidateVisual(); Changed?.Invoke(Value); End?.Invoke(); e.Handled = true;
+    }
+    public void Set(double v) { Value = v; InvalidateVisual(); }
 }

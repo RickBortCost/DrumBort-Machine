@@ -12,6 +12,7 @@ public sealed class Project
     public Pattern[] Slots = Enumerable.Range(0, 8).Select(_ => Pattern.Parse(null)).ToArray();
     public int Slot;
     public Fx Fx = new();
+    public BusesDef Buses = new();
     public DeviceDef[][] Devs = Enumerable.Range(0, Mixer.Channels).Select(_ => Array.Empty<DeviceDef>()).ToArray();
     public (int slot, int rep)[] Chain = Array.Empty<(int, int)>();
     public bool SongOn;
@@ -33,6 +34,7 @@ public sealed class Project
         for (int i = 0; i < 8; i++) if (parts[$"p{i}"] is JsonObject p) Slots[i] = Pattern.Parse(p);
         if (J.TryD(parts["slot"], out double sd)) Slot = Math.Clamp((int)sd, 0, 7);
         if (parts["fx"] is JsonObject fx) Fx = Fx.Parse(fx);
+        if (parts.ContainsKey("buses")) Buses = BusesDef.Parse(parts["buses"]);
         if (parts["devs"] is JsonArray devs) for (int i = 0; i < Devs.Length; i++) Devs[i] = DeviceDef.ParseChain(i < devs.Count ? devs[i] : null);
         if (parts["song"] is JsonObject song)
         {
@@ -153,6 +155,7 @@ public sealed class Sequencer
         mx.ApplyMix(Pattern, ctx.CurrentTime);
         mx.SetFx(P.Fx, Pattern.Bpm);
         for (int i = 0; i < Mixer.Channels; i++) mx.SetDevices(i, P.Devs[i]);
+        mx.SetBuses(P.Buses);
         Prewarm();
     }
 

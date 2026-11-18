@@ -19,7 +19,7 @@ public sealed class AudioEngine : IDisposable
     readonly ConcurrentQueue<Action> inbox = new();
     readonly float[] ringL, ringR;
     int capacity;                  // frame bufferizzati (latenza); il ring è più grande per poterla alzare
-    readonly int baseCapacity;
+    int baseCapacity;
     long written, read;            // contatori di frame (scrittura: render, lettura: callback)
     readonly AutoResetEvent wake = new(false);
     Thread? thread;
@@ -142,6 +142,58 @@ public sealed class AudioEngine : IDisposable
     Timer? watch;
 
 
+    // ---------------------------------------------------------------- latenza e uscite esterne
+    /// <summary>Windows: WASAPI esclusivo (latenza minima, l'app usa la scheda da sola).</summary>
+    public bool Exclusive { get; private set; } = Settings.Load("exclusive") == "1";
+    /// <summary>Buffer di uscita in campioni (latenza = buffer / frequenza).</summary>
+    public int BufferFrames => baseCapacity;
+    public bool ExclusiveActive { get; private set; }
+
+    /// <summary>Imposta buffer e modalità esclusiva e riapre l'uscita.</summary>
+    public void SetLatency(int frames, bool exclusive)
+    {
+        baseCapacity = Math.Clamp(frames, 64, 4096);
+        Exclusive = exclusive && OperatingSystem.IsWindows();
+        Settings.Save("buffer", baseCapacity.ToString());
+        Settings.Save("exclusive", Exclusive ? "1" : "0");
+        if (External == null) Reopen(); else capacity = baseCapacity;
+    }
+
+    /// <summary>Uscita esterna (ASIO): PortAudio chiuso, il driver chiama Pull().</summary>
+    public string? External { get; private set; }
+    public void AttachExternal(string name, int frames)
+    {
+        lock (paLock)
+        {
+            try { stream?.Stop(); stream?.Dispose(); } catch { }
+            stream = null;
+            External = name;
+            capacity = Math.Max(AudioContext.Block * 2, frames * 2);
+            CurrentDevice = name;
+        }
+        DeviceChanged?.Invoke(CurrentDevice);
+    }
+    public void DetachExternal()
+    {
+        if (External == null) return;
+        External = null;
+        Reopen();
+    }
+    /// <summary>Campioni stereo interlacciati per un'uscita esterna (thread del driver).</summary>
+    public void Pull(float[] dst, int frames)
+    {
+        long avail = Interlocked.Read(ref written) - read;
+        int n = (int)Math.Min(avail, frames);
+        for (int i = 0; i < n; i++)
+        {
+            int k = (int)((read + i) % ringL.Length);
+            dst[2 * i] = ringL[k]; dst[2 * i + 1] = ringR[k];
+        }
+        if (n < frames) { Array.Clear(dst, 2 * n, 2 * (frames - n)); Underruns++; }
+        Interlocked.Add(ref read, n);
+        wake.Set();
+    }
+
     /// <summary>API host usata: WASAPI su Windows (latenza bassa e stabile), altrimenti quella predefinita.</summary>
     int HostApi() => OperatingSystem.IsWindows() && !noWasapi ? PaHost.Index(PaHost.WASAPI) : -1;
     bool noWasapi;                       // WASAPI non ha aperto l'uscita: si usa l'API predefinita (MME)
@@ -187,24 +239,40 @@ public sealed class AudioEngine : IDisposable
         bool wasapi = api >= 0 && info.hostApi == api;
         // MME chiama la callback a raffiche: serve più margine nel buffer di rendering
         capacity = OperatingSystem.IsWindows() && !wasapi ? Math.Max(baseCapacity, 2048) : baseCapacity;
-        IntPtr extra = wasapi ? PaHost.WasapiInfo() : IntPtr.Zero;
-        try
+        ExclusiveActive = false;
+        if (wasapi && Exclusive)
         {
-            // Latenza: almeno 20 ms (WASAPI) o quella "alta" del driver (MME/DirectSound) per evitare crepitii
-            double lat = wasapi ? Math.Max(0.02, info.defaultLowOutputLatency)
-                : OperatingSystem.IsWindows() ? info.defaultHighOutputLatency : info.defaultLowOutputLatency;
-            var p = new StreamParameters
+            // Esclusivo: buffer del driver = buffer scelto; se il formato non è accettato si torna al condiviso
+            IntPtr ex = PaHost.WasapiInfo(true);
+            try
             {
-                device = dev, channelCount = 2, sampleFormat = SampleFormat.Float32,
-                suggestedLatency = lat, hostApiSpecificStreamInfo = extra,
-            };
-            stream = new PaStream(null, p, Ctx.SampleRate, wasapi ? 0u : 256u, StreamFlags.ClipOff, Callback, null!);
-            stream.Start();
+                var pe = new StreamParameters { device = dev, channelCount = 2, sampleFormat = SampleFormat.Float32, suggestedLatency = baseCapacity / (double)Ctx.SampleRate, hostApiSpecificStreamInfo = ex };
+                stream = new PaStream(null, pe, Ctx.SampleRate, (uint)Math.Min(baseCapacity, 1024), StreamFlags.ClipOff, Callback, null!);
+                stream.Start();
+                ExclusiveActive = true;
+            }
+            catch (Exception e) { try { stream?.Dispose(); } catch { } stream = null; Console.Error.WriteLine($"[audio] WASAPI esclusivo non disponibile: {e.Message} — uso il condiviso"); }
+            finally { Marshal.FreeHGlobal(ex); }
         }
-        catch { try { stream?.Dispose(); } catch { } stream = null; throw; }
-        finally { if (extra != IntPtr.Zero) Marshal.FreeHGlobal(extra); }
+        IntPtr extra = wasapi && !ExclusiveActive ? PaHost.WasapiInfo() : IntPtr.Zero;
+        if (!ExclusiveActive)
+            try
+            {
+                // Latenza: almeno 20 ms (WASAPI) o quella "alta" del driver (MME/DirectSound) per evitare crepitii
+                double lat = wasapi ? Math.Max(Math.Min(0.02, baseCapacity / (double)Ctx.SampleRate), info.defaultLowOutputLatency)
+                    : OperatingSystem.IsWindows() ? info.defaultHighOutputLatency : info.defaultLowOutputLatency;
+                var p = new StreamParameters
+                {
+                    device = dev, channelCount = 2, sampleFormat = SampleFormat.Float32,
+                    suggestedLatency = lat, hostApiSpecificStreamInfo = extra,
+                };
+                stream = new PaStream(null, p, Ctx.SampleRate, wasapi ? 0u : 256u, StreamFlags.ClipOff, Callback, null!);
+                stream.Start();
+            }
+            catch { try { stream?.Dispose(); } catch { } stream = null; throw; }
+            finally { if (extra != IntPtr.Zero) Marshal.FreeHGlobal(extra); }
         CurrentDevice = info.name;
-        Console.WriteLine($"Audio: {info.name}{(wasapi ? " · WASAPI" : "")} · {Ctx.SampleRate} Hz · buffer {capacity} frame ({1000.0 * capacity / Ctx.SampleRate:0} ms)");
+        Console.WriteLine($"Audio: {info.name}{(wasapi ? ExclusiveActive ? " · WASAPI esclusivo" : " · WASAPI" : "")} · {Ctx.SampleRate} Hz · buffer {capacity} frame ({1000.0 * capacity / Ctx.SampleRate:0} ms)");
     }
 
     /// <summary>MME tronca i nomi a 31 caratteri: un nome salvato da un'altra API resta riconoscibile.</summary>
@@ -213,6 +281,7 @@ public sealed class AudioEngine : IDisposable
     /// <summary>Chiude e riapre PortAudio (rilegge i dispositivi collegati nel frattempo) e l'uscita.</summary>
     void Reopen()
     {
+        if (External != null) return;
         lock (paLock)
         {
             try { stream?.Stop(); stream?.Dispose(); } catch { /* già chiuso */ }

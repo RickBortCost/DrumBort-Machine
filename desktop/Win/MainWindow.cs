@@ -28,6 +28,8 @@ public sealed class MainWindow : Window
     readonly Timeline timeline;
     readonly ScrollViewer tlScroll = new() { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled };
     readonly AutomationView autoView;
+    readonly MixerView mixerView;
+    int busSel = -1;              // ritorno, master o stack mostrato nel DEVICE (−1 = la traccia selezionata)
     ScrollViewer tracksSv = null!;
     StepRow? drumEditor;
     readonly StackPanel heads = new(), rows = new();
@@ -51,9 +53,15 @@ public sealed class MainWindow : Window
     readonly TextBlock swingTxt = Txt.Make("50 %", 12, Theme.Lcd);
     readonly Dropdown slotDd = new(64), barsDd = new(70), kitDd = new(190);
     readonly Btn met = new("MET", 0, "Metronomo"), undoB = new("↶", 0, "Annulla (Ctrl+Z)"), redoB = new("↷", 0, "Ripeti (Ctrl+Y)");
-    readonly Btn libB = new("◧", 0, "Mostra/nascondi la Libreria (B)"), devTab = new("DEVICE"), rollTab = new("EDITOR", 0, "Note del pattern della traccia selezionata"), autoTab = new("AUTOMAZIONE");
+    readonly Btn libB = new("◧", 0, "Mostra/nascondi la Libreria (B)"), devTab = new("DEVICE"), rollTab = new("EDITOR", 0, "Note del pattern della traccia selezionata"), autoTab = new("AUTOMAZIONE"), mixTab = new("MIXER", 0, "Strisce di tracce, Track Stack, ritorni e master (X)");
     readonly Btn stepB = new("STEP", 0, "Pattern: step di tutte le tracce (F6)"), arrB = new("ARRANGIAMENTO", 0, "Timeline: i pattern disposti sulle battute (F5) · Tab alterna le viste");
     bool metOn;
+    // MIDI
+    readonly Btn rec = new("● REC", 0, "Registra le note MIDI negli step mentre suona (R)");
+    readonly TextBlock midiStatus = Txt.Make("", 11, Theme.Cyan);
+    bool recOn, recSnap;
+    readonly Dictionary<int, (int ch, int step, long tick)> held = new();
+    DispatcherTimer? statusTimer;
 
     public MainWindow(string? selftest)
     {
@@ -69,6 +77,12 @@ public sealed class MainWindow : Window
         devices = new DeviceView(doc) { OpenLibrary = OpenLibraryFor, ShowNotes = () => SetBottom("roll") };
         library.AddDevice = t => { if (sel >= 0) { devices.Add(t, null); SetBottom("dev"); } };
         autoView = new AutomationView(doc);
+        mixerView = new MixerView(doc);
+        mixerView.Pick += id =>
+        {
+            if (Doc.IsBus(id)) { busSel = id; SetBottom("dev"); }
+            else Select(id, true, false);
+        };
         timeline = new Timeline(doc);
         tlScroll.Content = timeline;
         tlScroll.SizeChanged += (_, _) => { if (doc.ArrView) timeline.Reload(tlScroll.ActualWidth); };
@@ -103,6 +117,21 @@ public sealed class MainWindow : Window
         PreviewKeyDown += OnKey;
         Closing += (_, _) => doc.SaveAuto();
         if (selftest != null) Loaded += (_, _) => Dispatcher.BeginInvoke(SelfTest, DispatcherPriority.ApplicationIdle);
+        else
+        {
+            MidiInput.NoteOn += OnNoteOn;
+            MidiInput.NoteOff += OnNoteOff;
+            MidiLearn.Status += Flash;
+            Loaded += (_, _) =>
+            {
+                MidiInput.Start(Dispatcher);
+                if (MidiInput.Names.Count > 0) Flash("MIDI: " + string.Join(", ", MidiInput.Names));
+                // Driver ASIO scelto l'ultima volta
+                if (Program.RealAudio && Program.Engine != null && Settings.Load("asio") is string drv && drv != "")
+                    try { Asio.Start(Program.Engine, drv); } catch (Exception x) { Flash($"ASIO {drv} non disponibile: {x.Message}"); }
+            };
+            Closed += (_, _) => { MidiInput.Stop(); if (Program.Engine != null && Asio.Driver is string d) { try { Asio.Stop(Program.Engine); } catch { } Settings.Save("asio", d); } };
+        }
     }
 
     // ------------------------------------------------------------------ layout
@@ -162,9 +191,9 @@ public sealed class MainWindow : Window
         libB.Click += ToggleLibrary;
         tb.Children.Add(libB);
         tb.Children.Add(new Border { Width = 16 });
-        devTab.Click += () => SetBottom("dev"); rollTab.Click += () => SetBottom("roll"); autoTab.Click += () => SetBottom("auto");
+        devTab.Click += () => SetBottom("dev"); rollTab.Click += () => SetBottom("roll"); autoTab.Click += () => SetBottom("auto"); mixTab.Click += () => SetBottom("mix");
         tb.Children.Add(Txt.Make("IN BASSO", 10, Theme.Dim));
-        tb.Children.Add(devTab); tb.Children.Add(rollTab); tb.Children.Add(autoTab);
+        tb.Children.Add(devTab); tb.Children.Add(rollTab); tb.Children.Add(autoTab); tb.Children.Add(mixTab);
         tb.Children.Add(new Border { Width = 16 });
         var web = new Btn("INTERFACCIA COMPLETA", 0, "Session, macro, editor wavetable: interfaccia completa in una finestra a parte");
         web.Click += () => { if (Program.Web != null) Launcher.Open($"http://localhost:{Program.Port}/"); };
@@ -200,6 +229,7 @@ public sealed class MainWindow : Window
 
         var sw = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(8, 0, 4, 0) };
         sw.Children.Add(Txt.Make("SWING", 10, Theme.Dim)); swing.Margin = new Thickness(6, 0, 6, 0); sw.Children.Add(swing); sw.Children.Add(swingTxt);
+        swing.LearnId = "swing";
         swing.Begin += () => doc.Snapshot();
         swing.Changed += v => { doc.Pat["swing"] = (int)Math.Round(v); swingTxt.Text = $"{(int)Math.Round(v)} %"; doc.CommitQuiet(doc.PatKey); };
         swing.End += () => doc.Commit(doc.PatKey);
@@ -225,6 +255,9 @@ public sealed class MainWindow : Window
         sp.Children.Add(kitDd);
         met.Click += () => { metOn = !metOn; met.IsOn = metOn; doc.Op("met", new JsonObject { ["on"] = metOn }); };
         sp.Children.Add(met);
+        rec.OnBrush = new SolidColorBrush(Color.FromRgb(0x5a, 0x1e, 0x1a)); rec.OnBorder = Theme.Red; rec.Fg = Theme.Red;
+        rec.Click += ToggleRec;
+        sp.Children.Add(rec);
 
         undoB.Click += doc.Undo; redoB.Click += doc.Redo;
         sp.Children.Add(new Border { Width = 10 });
@@ -238,7 +271,7 @@ public sealed class MainWindow : Window
             ("Esporta audio (WAV, stem)…  (Ctrl+E)", ExportAudio),
         });
         sp.Children.Add(file);
-        var audio = new Btn("🎧 AUDIO", 0, "Uscita audio: cuffie, casse, scheda");
+        var audio = new Btn("🎧 AUDIO/MIDI", 0, "Uscita audio, driver ASIO, latenza, tastiere e controller MIDI");
         audio.Click += () => new AudioDialog(this).ShowDialog();
         var phone = new Btn("📱 TELEFONO", 0, "Collega il telefono (QR code)");
         phone.Click += () => new PhoneDialog(this).ShowDialog();
@@ -246,6 +279,8 @@ public sealed class MainWindow : Window
         var mm = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         mm.Children.Add(Txt.Make("MASTER", 9, Theme.Dim)); mm.Children.Add(masterMeter);
         sp.Children.Add(mm);
+        midiStatus.Margin = new Thickness(12, 0, 0, 0); midiStatus.VerticalAlignment = VerticalAlignment.Center;
+        sp.Children.Add(midiStatus);
         b.Child = sp;
         return b;
     }
@@ -365,6 +400,7 @@ public sealed class MainWindow : Window
         var volT = Txt.Make(Math.Round(Doc.Num(t, "vol", 0.8) * 100).ToString(CultureInfo.InvariantCulture), 10, Theme.Lcd);
         volT.HorizontalAlignment = HorizontalAlignment.Right;
         var pan = new HSlider(-1, 1, 0, Doc.Num(t, "pan", 0)) { Color = col, Margin = new Thickness(6, 0, 0, 0), ToolTip = "Pan (doppio clic: centro)" };
+        vol.LearnId = $"trk:{ch}:vol"; pan.LearnId = $"trk:{ch}:pan";
         vol.Begin += () => doc.Snapshot(); pan.Begin += () => doc.Snapshot();
         vol.Changed += v => { doc.SetAll(ch, "vol", v); volT.Text = Math.Round(v * 100).ToString(CultureInfo.InvariantCulture); doc.CommitQuiet(doc.AllPatKeys); };
         pan.Changed += v => { doc.SetAll(ch, "pan", v); doc.CommitQuiet(doc.AllPatKeys); };
@@ -392,7 +428,7 @@ public sealed class MainWindow : Window
     /// <summary>Seleziona la traccia: intestazione evidenziata, Libreria e pannello in basso aggiornati.</summary>
     void Select(int ch, bool showDevices, bool preview)
     {
-        sel = ch;
+        sel = ch; busSel = -1;
         if (showDevices) bottom = "dev";
         else if (Doc.IsSynth(ch)) bottom = "roll";
         if (preview) { if (Doc.IsSynth(ch)) doc.PreviewSynth(ch - 8, doc.Base(ch - 8)); else doc.PreviewDrum(ch); }
@@ -405,8 +441,17 @@ public sealed class MainWindow : Window
 
     void RenderBottom()
     {
-        devTab.IsOn = bottom == "dev"; rollTab.IsOn = bottom == "roll"; autoTab.IsOn = bottom == "auto";
+        devTab.IsOn = bottom == "dev"; rollTab.IsOn = bottom == "roll"; autoTab.IsOn = bottom == "auto"; mixTab.IsOn = bottom == "mix";
         drumEditor = null;
+        if (busSel >= 0 && !doc.BusExists(busSel)) busSel = -1;
+        if (bottom == "mix")
+        {
+            roll = null;
+            mixerView.Selected = busSel >= 0 ? busSel : sel;
+            mixerView.Render();
+            bottomHost.Content = mixerView;
+            return;
+        }
         if (bottom == "auto")
         {
             roll = null;
@@ -440,7 +485,7 @@ public sealed class MainWindow : Window
             bottomHost.Content = dp;
             return;
         }
-        devices.Ch = sel;
+        devices.Ch = bottom == "dev" && busSel >= 0 ? busSel : sel;
         devices.Render();
         bottomHost.Content = devices;
     }
@@ -503,6 +548,7 @@ public sealed class MainWindow : Window
         if (roll != null && roll.Playhead != step) { roll.Playhead = step; roll.InvalidateVisual(); }
         if (drumEditor != null && drumEditor.Playhead != step) { drumEditor.Playhead = step; drumEditor.InvalidateVisual(); }
         if (bottom == "auto" && bottomHost.Content == autoView) autoView.SetPlayhead(step);
+        if (bottom == "mix" && bottomHost.Content == mixerView) mixerView.UpdateMeters(e);
         if (doc.ArrView)
         {
             bool arrOn = playing && timeline.Length > 0;
@@ -515,6 +561,99 @@ public sealed class MainWindow : Window
         var pk = e.Mx.Peaks;
         foreach (var (ch, m) in meters) m.Set(pk[ch]);
         masterMeter.Set(pk[Mixer.Channels]);
+    }
+
+    // ------------------------------------------------------------------ MIDI
+    void Flash(string msg)
+    {
+        midiStatus.Text = msg;
+        statusTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+        statusTimer.Tick -= ClearFlash; statusTimer.Tick += ClearFlash;
+        statusTimer.Stop(); if (msg != "") statusTimer.Start();
+    }
+    void ClearFlash(object? s, EventArgs e) { statusTimer!.Stop(); midiStatus.Text = ""; }
+
+    void ToggleRec()
+    {
+        recOn = !recOn; rec.IsOn = recOn; recSnap = false;
+        Flash(recOn ? "REC: le note MIDI suonate durante la riproduzione vanno negli step" : "");
+    }
+
+    /// <summary>Destinazione della nota: pad di batteria (36–43 o canale 10) o traccia synth selezionata.</summary>
+    int Target(int midiCh, int note)
+    {
+        bool pad = note >= 36 && note <= 43;
+        if (pad && (midiCh == 10 || sel < 8)) return note - 36;
+        if (sel >= 8) return sel;
+        return -1;
+    }
+
+    /// <summary>Step in riproduzione (lo scheduler è avanti di pochi millisecondi).</summary>
+    int RecStep(out long tick)
+    {
+        tick = -1;
+        var e = Program.Engine;
+        if (!recOn || e == null || !e.Seq.Playing) return -1;
+        tick = Math.Max(0, e.Seq.Tick - 1);
+        return (int)(tick % doc.StepCount);
+    }
+
+    void OnNoteOn(int midiCh, int note, int vel)
+    {
+        int ch = Target(midiCh, note);
+        if (ch < 0) return;
+        double v = vel / 127.0;
+        if (ch < 8) doc.Op("trig", new JsonObject { ["i"] = ch, ["vel"] = Math.Max(0.2, v) });
+        else doc.Op("non", new JsonObject { ["k"] = ch - 8, ["notes"] = new JsonArray(note), ["vel"] = Math.Max(0.2, v), ["cid"] = "midi", ["id"] = note.ToString() });
+        int s = RecStep(out long tick);
+        if (s < 0) { if (ch >= 8) held[note] = (ch, -1, -1); return; }
+        if (!recSnap) { doc.Snapshot(); recSnap = true; }
+        if (!doc.Tracks.Contains(ch)) { doc.SetTracks(doc.Tracks.Append(ch)); doc.SetAll(ch, "mute", false); doc.Commit(new[] { "tracks" }.Concat(doc.AllPatKeys).ToArray()); }
+        if (ch < 8)
+        {
+            ((JsonArray)doc.Pat["steps"]![ch]!)[s] = vel >= 100 ? 2 : 1;
+        }
+        else
+        {
+            var steps = (JsonArray)Doc.TrackOf(doc.Pat, ch)["steps"]!;
+            // Note insieme sullo stesso step: accordo (intervalli dalla nota più bassa)
+            if (steps[s] is JsonObject st && held.Values.Any(h => h.ch == ch && h.step == s))
+            {
+                int root = (int)Doc.Num(st, "n", note);
+                var chord = (st["ch"] as JsonArray)?.Select(x => (int)Doc.Val(x)).ToList() ?? new List<int> { 0 };
+                chord.Add(note - root);
+                int lo = chord.Min();
+                st["n"] = root + lo;
+                st["ch"] = new JsonArray(chord.Select(x => x - lo).Distinct().OrderBy(x => x).Select(x => (JsonNode)x).ToArray());
+            }
+            else steps[s] = new JsonObject { ["n"] = note, ["g"] = 1, ["a"] = vel >= 100 ? 1 : 0, ["sl"] = 0, ["ch"] = null };
+            held[note] = (ch, s, tick);
+        }
+        doc.CommitQuiet(doc.PatKey);
+        RedrawNotes();
+    }
+
+    void OnNoteOff(int midiCh, int note)
+    {
+        if (!held.Remove(note, out var h)) return;
+        doc.Op("noff", new JsonObject { ["cid"] = "midi", ["id"] = note.ToString() });
+        if (h.step < 0 || Program.Engine is not AudioEngine e) return;
+        // Durata registrata in step (almeno 1)
+        long len = Math.Max(1, e.Seq.Tick - 1 - h.tick);
+        if (Doc.TrackOf(doc.Pat, h.ch)["steps"] is JsonArray steps && steps[h.step] is JsonObject st)
+        {
+            st["g"] = (int)Math.Min(len, doc.StepCount);
+            doc.CommitQuiet(doc.PatKey);
+            RedrawNotes();
+        }
+    }
+
+    void RedrawNotes()
+    {
+        foreach (var r in stepRows) r.InvalidateVisual();
+        drumEditor?.InvalidateVisual();
+        roll?.InvalidateVisual();
+        if (doc.ArrView) timeline.InvalidateVisual();
     }
 
     // ------------------------------------------------------------------ file
@@ -544,6 +683,8 @@ public sealed class MainWindow : Window
         else if (e.Key == Key.S && mod == ModifierKeys.Control) { SaveFile(); e.Handled = true; }
         else if (e.Key == Key.O && mod == ModifierKeys.Control) { OpenFile(); e.Handled = true; }
         else if (e.Key == Key.E && mod == ModifierKeys.Control) { ExportAudio(); e.Handled = true; }
+        else if (e.Key == Key.R && mod == ModifierKeys.None) { ToggleRec(); e.Handled = true; }
+        else if (e.Key == Key.X && mod == ModifierKeys.None) { SetBottom(bottom == "mix" ? "dev" : "mix"); e.Handled = true; }
         else if (e.Key == Key.F5 && mod == ModifierKeys.None) { SetView(true); e.Handled = true; }
         else if (e.Key == Key.F6 && mod == ModifierKeys.None) { SetView(false); e.Handled = true; }
         else if (e.Key == Key.Tab && mod == ModifierKeys.None) { SetView(!doc.ArrView); e.Handled = true; }
@@ -604,6 +745,16 @@ public sealed class MainWindow : Window
             SetBottom("dev");
             library.ShowEffects();
             Shot(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-step.png"));
+            // Track Stack con batteria, effetto sul ritorno A, mixer
+            doc.SetStack(0, 0); doc.SetStack(1, 0); doc.SetStack(2, 0);
+            doc.Chain(Doc.StackBase).Add(DeviceSpecs.New("comp"));
+            doc.Chain(Doc.RetA).Add(DeviceSpecs.New("eq"));
+            ((JsonObject)doc.Root["fx"]!)["sc"] = 0.5;
+            doc.Commit("buses", "fx");
+            SetBottom("mix");
+            Shot(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-mixer.png"));
+            busSel = Doc.MasterBus; SetBottom("dev");
+            Shot(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-master.png"));
             SetView(true);
             Select(8, false, false);
             SetBottom("auto");
@@ -620,6 +771,19 @@ public sealed class MainWindow : Window
                 Console.WriteLine($"export {src}: {l.Length / 48000.0:0.00} s, peak {pk:0.000}");
                 if (pk < 0.01) throw new Exception($"export {src} silenzioso");
             }
+            // Audio e MIDI: driver ASIO e ingressi MIDI (sul runner nessuno), finestra di dialogo
+            Console.WriteLine($"asio: {Asio.Drivers().Length} driver");
+            MidiInput.Start(Dispatcher);
+            Console.WriteLine($"midi: {MidiInput.Names.Count} ingressi");
+            var ad = new AudioDialog(this);
+            ad.Show();
+            ad.UpdateLayout();
+            var dpi = VisualTreeHelper.GetDpi(ad);
+            var rtb = new RenderTargetBitmap((int)(ad.ActualWidth * dpi.DpiScaleX), (int)(ad.ActualHeight * dpi.DpiScaleY), dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+            rtb.Render((Visual)ad.Content);
+            var enc = new PngBitmapEncoder(); enc.Frames.Add(BitmapFrame.Create(rtb));
+            using (var f = File.Create(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-audio.png"))) enc.Save(f);
+            ad.Close();
             Console.WriteLine($"selftest ok: {selftest}");
             Application.Current.Shutdown(0);
         }

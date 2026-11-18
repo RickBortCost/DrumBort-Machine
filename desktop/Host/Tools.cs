@@ -161,7 +161,7 @@ public static class Tools
         var json = JsonNode.Parse(File.ReadAllText(projectPath))!.AsObject();
         var parts = new JsonObject();
         if (json["slots"] is JsonArray slots) for (int i = 0; i < slots.Count && i < 8; i++) parts[$"p{i}"] = slots[i]?.DeepClone();
-        foreach (var k in new[] { "slot", "fx", "song", "lock", "session", "arr", "devs", "tracks" })
+        foreach (var k in new[] { "slot", "fx", "song", "lock", "session", "arr", "devs", "tracks", "buses" })
             if (json[k] != null) parts[k] = json[k]!.DeepClone();
         foreach (int? ch in stems ? Exporter.StemChannels(parts).Select(c => (int?)c) : new int?[] { null })
         {
@@ -180,7 +180,7 @@ public static class Tools
         var json = JsonNode.Parse(File.ReadAllText(projectPath))!.AsObject();
         var parts = new JsonObject();
         if (json["slots"] is JsonArray slots) for (int i = 0; i < slots.Count && i < 8; i++) parts[$"p{i}"] = slots[i]?.DeepClone();
-        foreach (var k in new[] { "slot", "fx", "song", "lock", "session", "arr", "userKits", "userPresets", "mode", "devs" })
+        foreach (var k in new[] { "slot", "fx", "song", "lock", "session", "arr", "userKits", "userPresets", "mode", "devs", "buses" })
             if (json[k] != null) parts[k] = json[k]!.DeepClone();
         var eng = new AudioEngine(rate, 1024);
         eng.Seq.P.Apply(parts);

@@ -73,7 +73,7 @@ public sealed class Doc
         var p = new JsonObject();
         bool all = keys == null;
         for (int i = 0; i < Slots; i++) if (all || keys!.Contains($"p{i}")) p[$"p{i}"] = Root["slots"]![i]!.DeepClone();
-        foreach (var k in new[] { "slot", "fx", "song", "lock", "arr", "tracks", "devs", "userKits", "userPresets", "userSounds" })
+        foreach (var k in new[] { "slot", "fx", "song", "lock", "arr", "tracks", "devs", "buses", "userKits", "userPresets", "userSounds" })
             if ((all || keys!.Contains(k)) && Root[k] != null) p[k] = Root[k]!.DeepClone();
         if (all || keys!.Contains("session"))
             p["session"] = new JsonObject { ["quant"] = Root["session"]?["quant"]?.DeepClone() ?? 16, ["follow"] = Root["session"]?["follow"]?.DeepClone() ?? new JsonArray() };
@@ -210,7 +210,66 @@ public sealed class Doc
     /// <summary>Nota della tonica alla base della tastiera della traccia synth k (come trackBase).</summary>
     public int Base(int k) => 12 * (SynthOct[k] + (int)Num(Track(8 + k), "oct", 0) + 1) + (int)Num(Pat["synth"], "key", 9);
 
-    public JsonArray Chain(int ch) => (JsonArray)Root["devs"]![ch]!;
+    public JsonArray Chain(int ch)
+    {
+        if (ch < 12) return (JsonArray)Root["devs"]![ch]!;
+        var b = Buses;
+        JsonObject owner = ch switch
+        {
+            12 or 13 => (JsonObject)((JsonArray)b["ret"]!)[ch - 12]!,
+            14 => (JsonObject)b["master"]!,
+            _ => (JsonObject)((JsonArray)b["stacks"]!)[ch - 16]!,
+        };
+        if (owner["devs"] is not JsonArray d) owner["devs"] = d = new JsonArray();
+        return d;
+    }
+    /// <summary>Parte del progetto da inviare dopo una modifica della catena.</summary>
+    public string ChainKey(int ch) => ch < 12 ? "devs" : "buses";
+
+    // ------------------------------------------------------------------ ritorni, master, Track Stack
+    public const int RetA = 12, RetB = 13, MasterBus = 14, StackBase = 16;
+    public static bool IsBus(int ch) => ch >= 12;
+    /// <summary>Ritorni, master e stack: { ret: [{devs}, {devs}], master: {devs}, stacks: [{name, tracks, vol, mute, devs}] }.</summary>
+    public JsonObject Buses
+    {
+        get
+        {
+            if (Root["buses"] is not JsonObject b) Root["buses"] = b = new JsonObject();
+            if (b["ret"] is not JsonArray r || r.Count < 2) b["ret"] = new JsonArray(new JsonObject { ["devs"] = new JsonArray() }, new JsonObject { ["devs"] = new JsonArray() });
+            if (b["master"] is not JsonObject) b["master"] = new JsonObject { ["devs"] = new JsonArray() };
+            if (b["stacks"] is not JsonArray) b["stacks"] = new JsonArray();
+            return b;
+        }
+    }
+    public JsonArray StackList => (JsonArray)Buses["stacks"]!;
+    public bool BusExists(int ch) => ch is RetA or RetB or MasterBus || (ch >= StackBase && ch - StackBase < StackList.Count);
+    public string BusName(int ch) => ch switch
+    {
+        RetA => "Ritorno A · Riverbero", RetB => "Ritorno B · Delay", MasterBus => "Master",
+        _ => BusExists(ch) ? Str(StackList[ch - StackBase], "name", $"Stack {ch - StackBase + 1}") : "",
+    };
+    public string ChShort(int ch) => ch < 12 ? TrackShort(ch) : ch == RetA ? "A" : ch == RetB ? "B" : ch == MasterBus ? "MST" : $"ST{ch - StackBase + 1}";
+    public string ChName(int ch) => ch < 12 ? TrackName(ch) : BusName(ch);
+    /// <summary>Stack della traccia (−1 = nessuno).</summary>
+    public int StackOf(int ch)
+    {
+        var l = StackList;
+        for (int s = 0; s < l.Count; s++) if ((l[s]?["tracks"] as JsonArray)?.Any(x => (int)Val(x, -1) == ch) == true) return s;
+        return -1;
+    }
+    /// <summary>Sposta la traccia nello stack s (−1 = fuori; s = numero di stack = nuovo stack). Gli stack vuoti spariscono.</summary>
+    public void SetStack(int ch, int s)
+    {
+        var l = StackList;
+        foreach (var st in l.OfType<JsonObject>())
+            if (st["tracks"] is JsonArray t) st["tracks"] = new JsonArray(t.Where(x => (int)Val(x, -1) != ch).Select(x => x!.DeepClone()).ToArray());
+        if (s >= 0 && s < Mixer.Stacks)
+        {
+            if (s >= l.Count) l.Add(new JsonObject { ["name"] = $"Stack {l.Count + 1}", ["tracks"] = new JsonArray(), ["vol"] = 0.8, ["mute"] = false, ["devs"] = new JsonArray() });
+            ((JsonArray)l[Math.Min(s, l.Count - 1)]!["tracks"]!).Add(ch);
+        }
+        for (int i = l.Count - 1; i >= 0; i--) if ((l[i]?["tracks"] as JsonArray)?.Count is null or 0) l.RemoveAt(i);
+    }
 
     // ------------------------------------------------------------------ arrangiamento
     /// <summary>Vista ARRANGIAMENTO: il motore suona la timeline (modalità session + arr.on).</summary>

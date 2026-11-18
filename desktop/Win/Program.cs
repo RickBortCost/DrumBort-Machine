@@ -48,7 +48,7 @@ public static class Program
         bool noAudio = Flag("--no-audio") || selftest != null;
         int rate = int.Parse(Arg("--rate", "48000"));
         if (!noAudio && !Flag("--rate")) rate = AudioEngine.PreferredRate(rate);
-        Engine = new AudioEngine(rate, int.Parse(Arg("--buffer", "1024")));
+        Engine = new AudioEngine(rate, int.Parse(Arg("--buffer", Settings.Load("buffer") ?? "1024")));
         try
         {
             if (noAudio) Engine.StartVirtual(); else Engine.Start();

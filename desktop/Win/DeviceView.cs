@@ -102,19 +102,19 @@ public sealed class DeviceView : DockPanel
     public void Render()
     {
         chain.Children.Clear();
-        if (Ch < 0 || !doc.Tracks.Contains(Ch))
+        if (Ch < 0 || (Doc.IsBus(Ch) ? !doc.BusExists(Ch) : !doc.Tracks.Contains(Ch)))
         {
             title.Text = "Nessuna traccia selezionata"; subtitle.Text = "";
             chain.Children.Add(Txt.Make("Seleziona una traccia (clic sul nome) o creane una con ＋ TRACCIA.", 13, Theme.Dim));
             return;
         }
-        title.Text = doc.TrackShort(Ch); title.Foreground = Theme.Track(Ch);
-        subtitle.Text = doc.TrackName(Ch);
-        chain.Children.Add(Instrument());
+        title.Text = doc.ChShort(Ch); title.Foreground = Theme.Track(Ch);
+        subtitle.Text = doc.ChName(Ch);
+        chain.Children.Add(Doc.IsBus(Ch) ? BusBox() : Instrument());
         var c = doc.Chain(Ch);
         for (int i = 0; i < c.Count; i++) chain.Children.Add(Device((JsonObject)c[i]!, i));
         chain.Children.Add(DropZone());
-        chain.Children.Add(MixerBox());
+        if (!Doc.IsBus(Ch)) chain.Children.Add(MixerBox());
     }
 
     // ------------------------------------------------------------------ riquadri
@@ -136,11 +136,100 @@ public sealed class DeviceView : DockPanel
 
     Knob TrackKnob(string k, string label, double min, double max, double def, Func<double, string> fmt)
     {
-        var kb = new Knob(label, min, max, def, Doc.Num(doc.Track(Ch), k, def), fmt) { Color = Theme.Track(Ch) };
+        var kb = new Knob(label, min, max, def, Doc.Num(doc.Track(Ch), k, def), fmt) { Color = Theme.Track(Ch), LearnId = $"trk:{Ch}:{k}" };
         kb.Begin += () => doc.Snapshot();
         kb.Changed += v => { doc.SetAll(Ch, k, v); doc.CommitQuiet(doc.AllPatKeys); };
         kb.End += () => doc.Commit(doc.AllPatKeys);
         return kb;
+    }
+
+    // ------------------------------------------------------------------ ritorni, master, stack
+    Knob FxKnob(string k, string label, double min, double max, double def, Func<double, string> fmt, bool integer = false)
+    {
+        var fx = (JsonObject)(doc.Root["fx"] ??= new JsonObject());
+        var kb = new Knob(label, min, max, def, Doc.Num(fx, k, def), fmt) { Color = Theme.Track(Ch), Integer = integer, LearnId = $"fx:{k}" };
+        kb.Begin += () => doc.Snapshot();
+        kb.Changed += v => { fx[k] = v; doc.CommitQuiet("fx"); };
+        kb.End += () => doc.Commit("fx");
+        return kb;
+    }
+
+    UIElement BusBox()
+    {
+        var b = Box(Theme.Track(Ch));
+        var sp = new StackPanel();
+        var g = KnobGrid();
+        string Pct(double v) => Math.Round(v * 100) + " %";
+        string F2(double v) => v.ToString("0.00", CultureInfo.InvariantCulture);
+        string Sig(double v) => Math.Abs(v) < 0.02 ? "OFF" : (v < 0 ? "LP " : "HP ") + Math.Round(Math.Abs(v) * 100);
+        switch (Ch)
+        {
+            case Doc.RetA:
+                sp.Children.Add(Header("Riverbero (mandata A)"));
+                g.Children.Add(FxKnob("rev", "Ritorno", 0, 1, 0.8, Pct));
+                g.Children.Add(FxKnob("size", "Durata", 0.4, 6, 2.2, v => F2(v) + " s"));
+                break;
+            case Doc.RetB:
+                sp.Children.Add(Header("Delay (mandata B)"));
+                g.Children.Add(FxKnob("dly", "Ritorno", 0, 1, 0.7, Pct));
+                g.Children.Add(FxKnob("fb", "Feedback", 0, 0.9, 0.35, Pct));
+                g.Children.Add(FxKnob("div", "Tempo", 1, 8, 3, v => $"{v:0}/16", true));
+                break;
+            case Doc.MasterBus:
+            {
+                sp.Children.Add(Header("Master"));
+                g.Children.Add(FxKnob("master", "Volume", 0, 1, 0.8, Pct));
+                g.Children.Add(FxKnob("filter", "Filtro", -1, 1, 0, Sig));
+                g.Children.Add(FxKnob("res", "Risonanza", 0.5, 12, 0.7, F2));
+                sp.Children.Add(g);
+                // Sidechain: la traccia scelta abbassa i synth (pompaggio)
+                sp.Children.Add(Header("Sidechain → synth"));
+                var sg = KnobGrid();
+                var fx = (JsonObject)(doc.Root["fx"] ??= new JsonObject());
+                var src = new StackPanel { Width = 92, Margin = new Thickness(0, 0, 0, 6) };
+                var l = Txt.Make("Sorgente", 9.5, Theme.Dim); l.HorizontalAlignment = HorizontalAlignment.Center;
+                src.Children.Add(l);
+                var dd = new Dropdown(84) { Margin = new Thickness(2, 4, 2, 2), ToolTip = "La traccia che comanda il sidechain (di solito la cassa)" };
+                dd.SetItems(Enumerable.Range(0, 8).Select(i => (i.ToString(), doc.TrackShort(i))));
+                dd.Value = ((int)Doc.Num(fx, "scSrc", 0)).ToString();
+                dd.Changed += v => { doc.Snapshot(); fx["scSrc"] = int.Parse(v); doc.Commit("fx"); };
+                src.Children.Add(dd);
+                sg.Children.Add(src);
+                sg.Children.Add(FxKnob("sc", "Quantità", 0, 1, 0, Pct));
+                sg.Children.Add(FxKnob("scRel", "Rilascio", 0.05, 0.6, 0.18, v => Math.Round(v * 1000) + " ms"));
+                sp.Children.Add(sg);
+                b.Child = sp;
+                return b;
+            }
+            default:
+            {
+                int s = Ch - Doc.StackBase;
+                var st = (JsonObject)doc.StackList[s]!;
+                sp.Children.Add(Header($"Track Stack · {Doc.Str(st, "name", "Stack")}"));
+                var info = new StackPanel { Margin = new Thickness(8, 6, 8, 6), Width = 170 };
+                var members = (st["tracks"] as JsonArray ?? new JsonArray()).Select(x => doc.TrackShort((int)Doc.Val(x)));
+                var mt = Txt.Make("Tracce: " + string.Join(", ", members), 12, Theme.Ink); mt.TextWrapping = TextWrapping.Wrap;
+                info.Children.Add(mt);
+                info.Children.Add(Txt.Make("Gli effetti qui sotto valgono per tutte le tracce dello stack.", 11, Theme.Dim));
+                var ren = new Btn("RINOMINA", 0, "Nome dello stack");
+                ren.Click += () =>
+                {
+                    var name = Prompt.Ask(Window.GetWindow(this), "Nome dello stack", Doc.Str(st, "name", "Stack"));
+                    if (name != null) { doc.Snapshot(); st["name"] = name; doc.Commit("buses"); }
+                };
+                info.Children.Add(ren);
+                sp.Children.Add(info);
+                var vol = new Knob("Volume", 0, 1, 0.8, Doc.Num(st, "vol", 0.8), v => Math.Round(v * 100).ToString(CultureInfo.InvariantCulture)) { Color = Theme.Track(Ch), LearnId = $"stack:{s}:vol" };
+                vol.Begin += () => doc.Snapshot();
+                vol.Changed += v => { st["vol"] = v; doc.CommitQuiet("buses"); };
+                vol.End += () => doc.Commit("buses");
+                g.Children.Add(vol);
+                break;
+            }
+        }
+        sp.Children.Add(g);
+        b.Child = sp;
+        return b;
     }
 
     UIElement Instrument()
@@ -315,10 +404,10 @@ public sealed class DeviceView : DockPanel
             }
             double def = Doc.Val(p.Def, p.Min);
             var pr = p;
-            var kb = new Knob(p.Label, p.Min, p.Max, def, Doc.Num(pp, p.K, def), v => DeviceSpecs.Format(pr, v), p.Log) { Color = col, Integer = p.Unit == "bit" };
+            var kb = new Knob(p.Label, p.Min, p.Max, def, Doc.Num(pp, p.K, def), v => DeviceSpecs.Format(pr, v), p.Log) { Color = col, Integer = p.Unit == "bit", LearnId = $"dev:{Ch}:{Doc.Str(d, "id", "")}:{p.K}" };
             kb.Begin += () => doc.Snapshot();
-            kb.Changed += v => { pp[pr.K] = v; doc.CommitQuiet("devs"); };
-            kb.End += () => doc.CommitQuiet("devs");
+            kb.Changed += v => { pp[pr.K] = v; doc.CommitQuiet(doc.ChainKey(Ch)); };
+            kb.End += () => doc.CommitQuiet(doc.ChainKey(Ch));
             g.Children.Add(kb);
         }
         var body = new StackPanel();
@@ -329,7 +418,7 @@ public sealed class DeviceView : DockPanel
     }
 
     // ------------------------------------------------------------------ modifiche
-    void Edit(Action a) { doc.Snapshot(); a(); doc.Commit("devs"); }
+    void Edit(Action a) { doc.Snapshot(); a(); doc.Commit(doc.ChainKey(Ch)); }
     public void Add(string type, int? at)
     {
         if (Ch < 0) return;
@@ -338,14 +427,14 @@ public sealed class DeviceView : DockPanel
         var c = doc.Chain(Ch);
         c.Insert(Math.Clamp(at ?? c.Count, 0, c.Count), d);
         sel = Doc.Str(d, "id", "");
-        doc.Commit("devs");
+        doc.Commit(doc.ChainKey(Ch));
     }
     void Remove(string id)
     {
         var c = doc.Chain(Ch);
         var d = c.FirstOrDefault(x => Doc.Str(x, "id", "") == id);
         if (d == null) return;
-        doc.Snapshot(); c.Remove(d); sel = null; doc.Commit("devs");
+        doc.Snapshot(); c.Remove(d); sel = null; doc.Commit(doc.ChainKey(Ch));
     }
     void Duplicate(string id)
     {
@@ -357,7 +446,7 @@ public sealed class DeviceView : DockPanel
         n["id"] = DeviceSpecs.New(Doc.Str(n, "type", "eq"))["id"]!.DeepClone();
         c.Insert(i + 1, n);
         sel = Doc.Str(n, "id", "");
-        doc.Commit("devs");
+        doc.Commit(doc.ChainKey(Ch));
     }
     void OnKey(object s, KeyEventArgs e)
     {
@@ -396,7 +485,7 @@ public sealed class DeviceView : DockPanel
         doc.Snapshot();
         c.RemoveAt(from);
         c.Insert(Math.Clamp(from < at ? at - 1 : at, 0, c.Count), d);
-        doc.Commit("devs");
+        doc.Commit(doc.ChainKey(Ch));
         e.Handled = true;
     }
     /// <summary>Dati per trascinare un nuovo effetto dal browser.</summary>

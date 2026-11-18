@@ -8,11 +8,12 @@ namespace DrumBort.Engine;
 public sealed class Fx
 {
     public double Filter, Res = 0.7, Rev = 0.8, Size = 2.2, Dly = 0.7, Fb = 0.35, Div = 3, Master = 0.8, Sc, ScRel = 0.18;
+    public int ScSrc;
     public static Fx Parse(System.Text.Json.Nodes.JsonNode? n) => new()
     {
         Filter = J.D(n, "filter", 0), Res = J.D(n, "res", 0.7), Rev = J.D(n, "rev", 0.8), Size = J.D(n, "size", 2.2),
         Dly = J.D(n, "dly", 0.7), Fb = J.D(n, "fb", 0.35), Div = J.D(n, "div", 3), Master = J.D(n, "master", 0.8),
-        Sc = J.D(n, "sc", 0), ScRel = J.D(n, "scRel", 0.18),
+        Sc = J.D(n, "sc", 0), ScRel = J.D(n, "scRel", 0.18), ScSrc = Math.Clamp(J.I(n, "scSrc", 0), 0, 7),
     };
     public Fx Clone() => (Fx)MemberwiseClone();
 }
@@ -22,12 +23,23 @@ public sealed class Mixer
     public const int Tracks = 8, SynthCh = 8, Channels = 12;
     const int CH = 3, OH = 4;
     public readonly AudioContext Ctx;
-    sealed class Channel
+    /// <summary>Catena di device tra due nodi (canale, ritorno, stack, master).</summary>
+    class Bus
     {
-        public required GainNode Gain; public required StereoPannerNode Pan; public required GainNode Rev, Dly;
         public Dictionary<string, DeviceInst> Built = new(); public string DevKey = "";
         public DeviceDef[] Chain = Array.Empty<DeviceDef>();
+        public GainNode In = null!, Out = null!;
     }
+    sealed class Channel : Bus
+    {
+        public required GainNode Gain; public required StereoPannerNode Pan; public required GainNode Rev, Dly;
+        public int Stack = -1;
+    }
+    public const int Stacks = 4;
+    readonly Bus[] ret = new Bus[2], stack = new Bus[Stacks];
+    readonly Bus mbus;
+    /// <summary>Livelli di ritorni A/B e stack 1-4.</summary>
+    public readonly float[] BusPeaks = new float[2 + Stacks];
     readonly Channel[] ch = new Channel[Channels];
     readonly GainNode master, kitIn, kitOut, revIn, revOut, dlyIn, dlyFb, dlyOut, duck;
     readonly BiquadFilterNode lp, hp, dlyTone;
@@ -58,17 +70,25 @@ public sealed class Mixer
         master = ctx.Gain();
         master.Connect(comp).Connect(ctx.Destination);
         lp = ctx.Biquad("lowpass"); hp = ctx.Biquad("highpass");
-        lp.Connect(hp).Connect(master);
+        // Master: filtro → device del master → volume → compressore
+        mbus = NewBus();
+        lp.Connect(hp).Connect(mbus.In);
+        mbus.Out.Connect(master);
         kitIn = ctx.Gain(0.85f); kitOut = ctx.Gain();
         kitOut.Connect(lp);
         revIn = ctx.Gain(); reverb = new ReverbNode(ctx); revOut = ctx.Gain();
-        revIn.Connect(reverb).Connect(revOut).Connect(lp);
+        // Ritorni A (riverbero) e B (delay): device dopo l'effetto, poi al master
+        ret[0] = NewBus(); ret[1] = NewBus();
+        revIn.Connect(reverb).Connect(revOut).Connect(ret[0].In);
+        ret[0].Out.Connect(lp);
         dlyIn = ctx.Gain(); delay = ctx.Delay(4); dlyFb = ctx.Gain();
         dlyTone = ctx.Biquad("lowpass"); dlyTone.Frequency.Value = 4500;
         dlyOut = ctx.Gain();
         dlyIn.Connect(delay);
         delay.Connect(dlyTone).Connect(dlyFb).Connect(delay);
-        delay.Connect(dlyOut).Connect(lp);
+        delay.Connect(dlyOut).Connect(ret[1].In);
+        ret[1].Out.Connect(lp);
+        for (int s = 0; s < Stacks; s++) stack[s] = NewBus();
         duck = ctx.Gain();
         duck.Connect(lp);
         for (int i = 0; i < Channels; i++)
@@ -83,6 +103,13 @@ public sealed class Mixer
         }
         BuildKitChain();
         SetFx(Fx, 120, true);
+    }
+
+    Bus NewBus()
+    {
+        var b = new Bus { In = Ctx.Gain(), Out = Ctx.Gain(), DevKey = "\u0000" };
+        Relink(b, b.In, b.Out, Array.Empty<DeviceDef>());
+        return b;
     }
 
     /// <summary>Solo test: esclude il compressore master.</summary>
@@ -146,30 +173,67 @@ public sealed class Mixer
     /// Catena di device della traccia (Devices.cs), tra guadagno e pan. I device esistenti si
     /// riusano; la catena si ricollega solo se cambiano ordine, presenza o attivazione.
     /// </summary>
-    public void SetDevices(int i, DeviceDef[] chain)
+    public void SetDevices(int i, DeviceDef[] chain) => Relink(ch[i], ch[i].Gain, ch[i].Pan, chain);
+
+    void Relink(Bus c, AudioNode from, AudioNode to, DeviceDef[] chain)
     {
-        var c = ch[i];
         double t = Ctx.CurrentTime;
         var act = chain.Where(d => d.On).ToArray();
         string key = string.Join("|", act.Select(d => $"{d.Id}:{d.Type}"));
         if (c.DevKey != key)
         {
             c.DevKey = key;
-            c.Gain.Disconnect();
+            from.Disconnect();
             foreach (var b in c.Built.Values) b.Output.Disconnect();
             foreach (var id in c.Built.Keys.ToList())
                 if (!act.Any(d => d.Id == id && d.Type == c.Built[id].Type)) { c.Built[id].Stop(); c.Built.Remove(id); }
-            AudioNode node = c.Gain;
+            AudioNode node = from;
             foreach (var d in act)
             {
                 if (!c.Built.TryGetValue(d.Id, out var b)) { b = Devices.Build(Ctx, d); c.Built[d.Id] = b; }
                 node.Connect(b.Input);
                 node = b.Output;
             }
-            node.Connect(c.Pan);
+            node.Connect(to);
         }
         c.Chain = act;
         foreach (var d in act) c.Built[d.Id].Set(d, t, Bpm);
+    }
+
+    /// <summary>
+    /// Ritorni, master e Track Stack (come i Summing Stack di Logic): le tracce di uno stack
+    /// passano per un bus con device e volume comuni; le mandate restano per traccia.
+    /// </summary>
+    public void SetBuses(BusesDef b)
+    {
+        Relink(ret[0], ret[0].In, ret[0].Out, b.Ret[0]);
+        Relink(ret[1], ret[1].In, ret[1].Out, b.Ret[1]);
+        Relink(mbus, mbus.In, mbus.Out, b.Master);
+        double t = Ctx.CurrentTime;
+        var member = Enumerable.Repeat(-1, Channels).ToArray();
+        for (int s = 0; s < Math.Min(Stacks, b.Stacks.Length); s++)
+            foreach (int c in b.Stacks[s].Tracks) if (c >= 0 && c < Channels && member[c] < 0) member[c] = s;
+        for (int s = 0; s < Stacks; s++)
+        {
+            var st = s < b.Stacks.Length ? b.Stacks[s] : null;
+            var bus = stack[s];
+            Relink(bus, bus.In, bus.Out, st?.Devs ?? Array.Empty<DeviceDef>());
+            bus.Out.GainParam.SetTargetAtTime(st == null || st.Mute ? 0 : (float)(st.Vol * st.Vol * 1.5625), t, 0.01);
+            // Uscita: bus della batteria, dei synth (sidechain) o direttamente al master se misto
+            var mem = Enumerable.Range(0, Channels).Where(c => member[c] == s).ToList();
+            AudioNode dest = mem.Count > 0 && mem.All(c => c < Tracks) ? kitIn : mem.Count > 0 && mem.All(c => c >= Tracks) ? duck : lp;
+            bus.Out.Disconnect();
+            if (mem.Count > 0) bus.Out.Connect(dest);
+        }
+        for (int i = 0; i < Channels; i++)
+        {
+            var c = ch[i];
+            if (c.Stack == member[i]) continue;
+            c.Stack = member[i];
+            c.Pan.Disconnect();
+            c.Pan.Connect(c.Rev); c.Pan.Connect(c.Dly);
+            c.Pan.Connect(member[i] >= 0 ? stack[member[i]].In : i < Tracks ? kitIn : duck);
+        }
     }
 
     public void ApplyMix(Pattern p, double time)
@@ -188,6 +252,7 @@ public sealed class Mixer
         {
             Bpm = bpm;
             for (int i = 0; i < Channels; i++) if (ch[i].Chain.Any(d => d.Type == "delay")) SetDevices(i, ch[i].Chain);
+            foreach (var b in ret.Concat(stack).Append(mbus)) if (b.Chain.Any(d => d.Type == "delay")) Relink(b, b.In, b.Out, b.Chain);
         }
         double t = Ctx.CurrentTime, tc = immediate ? 0.001 : 0.03;
         var (l, h) = FilterFreqs(f.Filter);
@@ -243,7 +308,7 @@ public sealed class Mixer
     {
         var kit = voiceKit ?? Kit;
         double t = Math.Max(time, Ctx.CurrentTime);
-        if (i == 0 && Fx.Sc > 0)
+        if (i == Fx.ScSrc && Fx.Sc > 0)
         {
             var d = duck.GainParam;
             d.CancelScheduledValues(t);
@@ -408,6 +473,8 @@ public sealed class Mixer
         }
         for (int i = 0; i < Channels; i++) Peaks[i] = Math.Max(Peak(ch[i].Pan), Peaks[i] * 0.9f);
         Peaks[Channels] = Math.Max(Peak(comp), Peaks[Channels] * 0.9f);
+        for (int b = 0; b < 2; b++) BusPeaks[b] = Math.Max(Peak(ret[b].Out), BusPeaks[b] * 0.9f);
+        for (int s = 0; s < Stacks; s++) BusPeaks[2 + s] = Math.Max(Peak(stack[s].Out), BusPeaks[2 + s] * 0.9f);
     }
     static float Peak(AudioNode n)
     {

@@ -2,6 +2,21 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.19.0] - 2026-11-18
+
+### Aggiunto
+- **Windows – audio a bassa latenza:** finestra **AUDIO/MIDI** con driver **ASIO** (schede professionali, ASIO4ALL) e pannello del driver, **WASAPI esclusivo** e scelta del buffer (128–2048 campioni, con la latenza in ms). Le scelte restano tra un avvio e l'altro.
+- **Windows – tastiere e controller MIDI:**
+  - le note suonano la traccia synth selezionata; le note 36–43 (o il canale 10) suonano i pad della batteria, con la velocity;
+  - **● REC** (tasto R): con la riproduzione attiva le note si scrivono negli step del pattern, con accento (velocity ≥ 100), durata e accordi;
+  - **MIDI Learn** come FL Studio: tasto destro su manopole, cursori e fader → si muove un controllo del controller; le assegnazioni restano salvate.
+- **Mixer, ritorni e Track Stack** (Windows, tab **MIXER** o tasto X):
+  - strisce per traccia con fader in dB, livello, mandate A/B, pan, mute/solo;
+  - **Track Stack** come i Summing Stack di Logic: tracce raggruppate in un bus con effetti, volume e mute comuni (fino a 4);
+  - **ritorni A (riverbero) e B (delay)** e **master** con la propria catena di effetti e i parametri nel DEVICE;
+  - **sidechain** con sorgente a scelta (qualsiasi traccia di batteria), quantità e rilascio, nel DEVICE del master.
+- Motore C#: catene di device su ritorni, master e stack (parte `buses` del progetto, conservata ma non usata dalla web app); sorgente del sidechain `fx.scSrc`.
+
 ## [1.18.0] - 2026-11-18
 
 ### Aggiunto

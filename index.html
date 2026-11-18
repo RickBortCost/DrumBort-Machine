@@ -139,6 +139,62 @@
     </aside>
   </div>
 
+  <!-- ===== Sound Lab (telefono): generatore di suoni, senza drum machine ===== -->
+  <section id="lab" class="lab" aria-label="Sound Lab" hidden>
+    <header class="lab-head">
+      <b class="lab-title">DRUMBORT <span>SOUND LAB</span></b>
+      <span id="labBadge" class="remote-badge" hidden></span>
+    </header>
+    <div class="seg lab-tabs" role="tablist">
+      <button class="btn" data-ltab="synth" role="tab">SYNTH</button>
+      <button class="btn" data-ltab="drum" role="tab">BATTERIA</button>
+      <button class="btn" data-ltab="mine" role="tab">I MIEI SUONI</button>
+    </div>
+
+    <div id="labSynth" class="lab-pane lab-synth" data-pane="synth">
+      <div class="lab-row">
+        <button id="labPreset" class="btn preset" aria-haspopup="dialog">Suono</button>
+        <select id="labRole" class="sel" aria-label="Ruolo del suono (registro e polifonia)"></select>
+        <button id="labInit" class="btn sm" title="Patch vuota">INIT</button>
+      </div>
+    </div>
+
+    <div id="labDrum" class="lab-pane lab-drum" data-pane="drum" hidden>
+      <div class="lab-row">
+        <select id="ldFrom" class="sel" aria-label="Parti da una voce dei kit o da un tipo"></select>
+        <button id="ldNew" class="btn sm">NUOVO</button>
+      </div>
+      <div class="lab-row">
+        <input id="ldName" class="search" type="text" maxlength="32" placeholder="Nome del suono" aria-label="Nome del suono" autocomplete="off">
+        <button id="ldSave" class="btn on">SALVA</button>
+      </div>
+      <div class="ld-view"><canvas id="ldWave" class="ld-wave" aria-hidden="true"></canvas><small id="ldInfo" class="ld-info"></small></div>
+      <div class="ld-play">
+        <button id="ldPad" class="ld-pad" aria-label="Suona (più in alto = più forte)">SUONA</button>
+        <div class="ld-test">
+          <label class="ld-ctl"><span>TUNE</span><input id="ldTune" type="range" min="-12" max="12" step="1" value="0"><b id="ldTuneV">0</b></label>
+          <label class="ld-ctl"><span>DECAY</span><input id="ldDecay" type="range" min="0.2" max="2.5" step="0.05" value="1"><b id="ldDecayV">×1.00</b></label>
+        </div>
+      </div>
+      <div id="ldLayers" class="seg ld-layers" role="group" aria-label="Strati"></div>
+      <label class="ld-ctl"><span>TIPO</span><select id="ldType" class="sel" aria-label="Tipo di voce dello strato"></select></label>
+      <div id="ldParams" class="ld-params"></div>
+    </div>
+
+    <div id="labMine" class="lab-pane lab-mine" data-pane="mine" hidden>
+      <p id="lmStatus" class="hint"></p>
+      <div class="lab-row">
+        <button id="lmShareAll" class="btn">CONDIVIDI LINK</button>
+        <button id="lmFile" class="btn">FILE</button>
+        <button id="lmImport" class="btn">IMPORTA</button>
+      </div>
+      <h4 class="lm-h">SYNTH</h4>
+      <div id="lmSynth" class="lm-list"></div>
+      <h4 class="lm-h">BATTERIA</h4>
+      <div id="lmDrum" class="lm-list"></div>
+    </div>
+  </section>
+
   <!-- ===== Fogli modali ===== -->
   <div id="menu" class="sheet menu-sheet" role="dialog" aria-modal="true" aria-label="Menu" hidden>
     <div class="sheet-box menu-box">

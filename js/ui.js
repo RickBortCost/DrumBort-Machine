@@ -4,7 +4,7 @@
  * La sezione SYNTH è in synthui.js.
  */
 
-import { KITS, USER_KITS, kitById, findKit, setUserKits } from './kits.js';
+import { KITS, USER_KITS, kitById, findKit, setUserKits, setUserSounds, normalizeSound, USER_SOUNDS, kitWithSound } from './kits.js';
 import { setUserPresets } from './presets.js';
 import { Engine, DEFAULT_FX } from './engine.js';
 import { Sequencer, createPattern, normalizePattern, normalizeOpt, parseRows, defaultTrack,
@@ -19,11 +19,21 @@ import { initPerformance } from './performance.js';
 import { composePattern, SESSION_TRACKS, normalizeSession, normalizeArr, followTarget, songToArr, MAX_ARR_BARS } from './session.js';
 import { initStudio } from './studio.js';
 import { initRemote, hostInfo } from './remote.js';
+import { initLab, isSoundPack } from './lab.js';
+import { decodeShare } from './projects.js';
 import { fillPattern } from './generate.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+/**
+ * Sound Lab: sul telefono l'app è un generatore di suoni (niente drum machine).
+ * ?lab forza il Lab, ?full forza la drum machine completa.
+ */
+const QS = new URLSearchParams(location.search);
+const LAB = QS.has('lab') || (!QS.has('full') && matchMedia('(pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px)').matches);
+let lab = null;
 
 const engine = new Engine();
 const seq = new Sequencer(engine);
@@ -49,6 +59,7 @@ const state = {
   favs: [],                         // preset preferiti della libreria
   userKits: [],                     // definizioni dei kit personalizzati
   userPresets: [],                  // preset synth salvati dall'editor wavetable
+  userSounds: [],                   // suoni di batteria creati nel Sound Lab
   projectName: '',                  // progetto aperto
   layout: null,                     // 'compact' | 'studio' (null = scelta automatica al primo avvio)
   session: normalizeSession(null),  // clip in riproduzione per traccia, quantizzazione, follow action
@@ -101,6 +112,8 @@ function loadState() {
       setUserKits(state.userKits);
       state.userPresets = Array.isArray(raw.userPresets) ? raw.userPresets : [];
       setUserPresets(state.userPresets);
+      setUserSounds(Array.isArray(raw.userSounds) ? raw.userSounds : []);
+      state.userSounds = USER_SOUNDS.slice();
       state.slots = raw.slots.map(normalizePattern);
       state.favs = Array.isArray(raw.favs) ? raw.favs.filter((x) => typeof x === 'string') : [];
       state.projectName = typeof raw.projectName === 'string' ? raw.projectName : '';
@@ -130,7 +143,7 @@ function save() {
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         slot: state.slot, slots: state.slots, fx: state.fx, song: state.song, lock: state.lock, midi: state.midi, view: state.view,
-        favs: state.favs, userKits: state.userKits, userPresets: state.userPresets, projectName: state.projectName,
+        favs: state.favs, userKits: state.userKits, userPresets: state.userPresets, userSounds: state.userSounds, projectName: state.projectName,
         layout: state.layout, session: state.session, arr: state.arr,
       }));
     } catch (_) { /* quota / navigazione privata */ }
@@ -1354,13 +1367,14 @@ function exportData() {
   return {
     app: 'drumbort', version: 3, appVersion: APP_VERSION,
     slot: state.slot, slots: state.slots, song: state.song, fx: state.fx, lock: state.lock, userKits: state.userKits,
-    userPresets: state.userPresets, session: state.session, arr: state.arr,
+    userPresets: state.userPresets, userSounds: state.userSounds, session: state.session, arr: state.arr,
   };
 }
 
 /** Sostituisce il progetto corrente con i dati forniti. */
 function importData(o) {
   mergeUserPresets(o.userPresets);
+  mergeUserSounds(o.userSounds);
   if (Array.isArray(o.userKits)) {
     const ids = new Set(state.userKits.map((d) => d.id));
     state.userKits = state.userKits.concat(o.userKits.filter((d) => d && !ids.has(d.id)));
@@ -1377,6 +1391,52 @@ function importData(o) {
   undoStack.length = 0; redoStack.length = 0;
   if (seq.playing) stopPlayback();
   syncPlayback(); renderAll(); save();
+}
+
+/** Aggiunge o aggiorna i suoni di batteria utente (prima dei kit che li usano). */
+function mergeUserSounds(list) {
+  if (!Array.isArray(list)) return 0;
+  const add = list.map(normalizeSound).filter(Boolean);
+  const ids = new Set(add.map((s) => s.id));
+  state.userSounds = (state.userSounds || []).filter((s) => !ids.has(s.id)).concat(add);
+  setUserSounds(state.userSounds);
+  if (add.length) { setUserKits(state.userKits); if (engine.cache) engine.cache.clear(); }
+  return add.length;
+}
+
+/** Pacchetto di suoni dal Sound Lab (link #snd= o file): entra nella libreria. */
+function importSoundPack(o) {
+  const before = state.userPresets.length;
+  mergeUserPresets(o.presets);
+  const np = state.userPresets.length - before;
+  const ns = mergeUserSounds(o.sounds);
+  buildKitSelect();
+  renderAll(); save();
+  toast(`Importati ${np} synth e ${ns} suoni di batteria${LAB ? '' : ' (browser: SUONI → Utente, KIT → I miei suoni)'}`);
+}
+
+async function handleSoundHash() {
+  const m = location.hash.match(/^#snd=([jz][A-Za-z0-9_-]+)$/);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  try {
+    const o = await decodeShare(m[1]);
+    if (!isSoundPack(o)) throw new Error('formato');
+    importSoundPack(o);
+  } catch (_) { toast('Link dei suoni non valido'); }
+}
+
+/** Assegna un suono utente alla traccia di batteria `t` del pattern corrente (crea/aggiorna un kit utente). */
+function useSoundOnTrack(soundId, t) {
+  snapshot();
+  const def = kitWithSound(pat().kit, t, soundId);
+  state.userKits = (state.userKits || []).filter((d) => d.id !== def.id).concat(def);
+  setUserKits(state.userKits);
+  if (engine.cache) engine.cache.clear();
+  pat().kit = def.id;
+  buildKitSelect();
+  syncPlayback(); renderAll(); save();
+  toast(`Suono sulla traccia ${t + 1} · kit "${def.name}"`);
 }
 
 /** Aggiunge i preset utente non ancora presenti (prima di leggere i pattern che li usano). */
@@ -1411,6 +1471,8 @@ $('#importFile').addEventListener('change', async (e) => {
   if (!f) return;
   try {
     const o = JSON.parse(await f.text());
+    if (isSoundPack(o)) { importSoundPack(o); return; }
+    if (LAB) { toast('Nel Sound Lab si importano solo file di suoni'); return; }
     snapshot();
     if (Array.isArray(o.slots)) {
       mergeUserPresets(o.userPresets);
@@ -1584,6 +1646,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Parti del progetto sincronizzate (layout e vista restano per dispositivo). */
 function remoteParts() {
+  if (LAB) return { userPresets: state.userPresets, userSounds: state.userSounds };
   const parts = {
     slot: state.slot, fx: state.fx, song: state.song, lock: state.lock,
     session: { quant: state.session.quant, follow: state.session.follow },
@@ -1591,11 +1654,14 @@ function remoteParts() {
     mode: sessionActive() ? 'session' : 'pattern',
   };
   state.slots.forEach((p, i) => { parts[`p${i}`] = p; });
+  parts.userSounds = state.userSounds;
   return parts;
 }
 
 function applyRemoteParts(parts, full) {
   if (parts.userPresets) mergeUserPresets(parts.userPresets);
+  if (parts.userSounds) mergeUserSounds(parts.userSounds);
+  if (LAB) { if (lab) lab.render(); save(); return; }
   if (parts.userKits) {
     state.userKits = parts.userKits;
     setUserKits(state.userKits);
@@ -1628,6 +1694,7 @@ function applyRemoteParts(parts, full) {
 const remoteHeld = new Map();   // note synth tenute da un altro dispositivo
 
 function onRemoteOp(m) {
+  if (LAB) return;    // il Sound Lab non segue il trasporto né i pad degli altri dispositivi
   const now = engine.ctx ? engine.ctx.currentTime : 0;
   switch (m.op) {
     case 'play': startPlayback(true); break;
@@ -1668,6 +1735,7 @@ function onRemoteOp(m) {
 }
 
 function onRemoteRole(role, native) {
+  if (LAB) { engine.silent = false; toast('Collegato al PC: i suoni salvati arrivano nella sua libreria'); if (lab) lab.render(); return; }
   engine.silent = role === 'control';
   toast(role === 'control'
     ? (native ? 'Collegato: l\'audio è generato dal motore nativo del PC' : 'Collegato come controller: l\'audio esce dal PC')
@@ -1675,7 +1743,14 @@ function onRemoteRole(role, native) {
 }
 
 function renderRemote(s) {
-  const b = $('#remoteBadge');
+  const b = $(LAB ? '#labBadge' : '#remoteBadge');
+  if (LAB) {
+    b.hidden = false;
+    b.className = `remote-badge ${s.connected ? 'engine' : 'off'}`;
+    b.textContent = s.connected ? '⇄ PC' : 'PC…';
+    b.title = s.connected ? 'Collegato a DrumBort Host' : 'Connessione all\'host…';
+    return;
+  }
   b.hidden = false;
   b.className = `remote-badge ${s.connected ? s.role : 'off'}`;
   b.textContent = !s.connected ? 'HOST…' : s.role === 'control' ? (s.native ? 'CTRL·C#' : 'CTRL') : 'AUDIO';
@@ -1696,13 +1771,14 @@ buildFx();
 synthUI = initSynthUI({
   engine, seq, ui, state, pat, save, snapshot, toast, setToggle, isPlayingPattern, remoteOp,
   openSheet, closeSheet, setPage: (n) => setPage(n),
+  onSoundChange: (kind) => { if (lab) lab.render(kind); },
 });
 const app = {
   engine, seq, ui, state, pat, kitOf, save, snapshot, toast, setToggle, isPlayingPattern, remoteOp,
   openSheet, closeSheet, deliver, syncPlayback, renderAll, buildKitSelect, exportData, importData, newProject,
 };
 panels = initPanels(app);
-studio = initStudio({ ...app, launchClip, launchScene, stopAllClips, setView, selectTrack: (t) => selectTrack(t), tempoPattern,
+studio = initStudio({ ...app, launchClip, launchScene, stopAllClips, setView, selectTrack: (t) => selectTrack(t), tempoPattern, useSoundOnTrack,
   toggleArr, setArrRec, songToArr, startPlayback });
 if (state.layout === null) state.layout = matchMedia('(pointer: fine) and (min-width: 1200px)').matches ? 'studio' : 'compact';
 if (state.layout === 'studio' && state.session.map.every((v) => v < 0)) { state.session.map.fill(state.slot); state.session.master = state.slot; }
@@ -1720,13 +1796,21 @@ engine.fx = { ...state.fx };
 renderAll();
 requestAnimationFrame(frame);
 
+if (LAB) {
+  document.documentElement.dataset.mode = 'lab';
+  $('#lab').hidden = false;
+  $('#overlay .logo span').textContent = 'SOUND LAB';
+  lab = initLab({ ...app, synthUI, remote: () => !!(remote && remote.role) });
+  lab.showTab('synth');
+}
 remote = initRemote({ getParts: remoteParts, applyParts: applyRemoteParts, onOp: onRemoteOp, onRole: onRemoteRole });
 if (remote) remote.onStatus(renderRemote);
 
 // Esposto per debug/test
 window.drumbort = { engine, seq, state, ui, midi, version: APP_VERSION, undo, redo, panels, get remote() { return remote; } };
-panels.handleShareHash();
-window.addEventListener('hashchange', () => panels.handleShareHash());
+if (!LAB) panels.handleShareHash();
+handleSoundHash();
+window.addEventListener('hashchange', () => { if (!LAB) panels.handleShareHash(); handleSoundHash(); });
 
 // =====================================================================
 // PWA: service worker + avviso di aggiornamento

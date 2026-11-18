@@ -723,23 +723,93 @@ export const kitById = (id) => findKit(id) || KITS[0];
 // =====================================================================
 // Kit utente (composti da voci di kit diversi)
 // =====================================================================
-// def = { id: 'u:…', name, crush: 0|bit, map: [{ kit, track }] × 8 }
+// def = { id: 'u:…', name, crush: 0|bit, map: [{ kit, track } | { sound }] × 8 }
 
 export const USER_KITS = [];
 
+// =====================================================================
+// Suoni di batteria creati nel Sound Lab: { id: 'us:…', name, short, spec }
+// spec = { type, o } (una factory) oppure { type: 'layer', voices: [spec…] }
+// =====================================================================
+
+export const FACTORIES = { kick, snare, clap, rim, metal, tom, cowbell, noiseHit };
+export const DRUM_TYPES = Object.keys(FACTORIES);
+export const METALS = { m808: METAL_808, m909: METAL_909 };
+export const USER_SOUNDS = [];
+
+/** Voce suonabile da una descrizione (le factory hanno valori predefiniti per ogni parametro). */
+export function buildVoice(spec) {
+  if (!spec || typeof spec !== 'object') return kick();
+  if (spec.type === 'layer') return layer(...(Array.isArray(spec.voices) ? spec.voices : []).slice(0, 4).map(buildVoice));
+  const f = FACTORIES[spec.type] || kick;
+  return f(spec.o && typeof spec.o === 'object' ? spec.o : {});
+}
+
+/** Valida un suono utente (da storage, file, link o rete). */
+export function normalizeSound(o) {
+  if (!o || typeof o !== 'object' || typeof o.id !== 'string' || !o.spec) return null;
+  const clean = (sp, depth = 0) => {
+    if (!sp || typeof sp !== 'object') return null;
+    if (sp.type === 'layer' && depth === 0 && Array.isArray(sp.voices)) {
+      const v = sp.voices.map((x) => clean(x, 1)).filter(Boolean).slice(0, 4);
+      return v.length ? { type: 'layer', voices: v } : null;
+    }
+    if (!FACTORIES[sp.type]) return null;
+    const out = {};
+    for (const [k, v] of Object.entries(sp.o || {})) {
+      if (typeof v === 'number' && isFinite(v)) out[k] = v;
+      else if (typeof v === 'string' && v.length < 16) out[k] = v;
+      else if (Array.isArray(v) && v.length <= 8 && v.every((x) => typeof x === 'number' && isFinite(x))) out[k] = v;
+    }
+    return { type: sp.type, o: out };
+  };
+  const spec = clean(o.spec);
+  if (!spec) return null;
+  const name = typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 32) : 'Suono';
+  const short = typeof o.short === 'string' && o.short.trim() ? o.short.trim().slice(0, 3).toUpperCase() : name.slice(0, 2).toUpperCase();
+  return { id: o.id.slice(0, 40), name, short, spec };
+}
+
+export function setUserSounds(list) {
+  USER_SOUNDS.length = 0;
+  for (const s of list || []) { const n = normalizeSound(s); if (n) USER_SOUNDS.push(n); }
+}
+export const findSound = (id) => USER_SOUNDS.find((s) => s.id === id) || null;
+
 /** Costruisce un kit utilizzabile dal motore a partire dalla sua definizione. */
 export function buildUserKit(def) {
-  const base = KITS.find((k) => k.id === (def.map[0] && def.map[0].kit)) || KITS[0];
+  const first = def.map.find((m) => m && m.kit);
+  const base = KITS.find((k) => k.id === (first && first.kit)) || KITS[0];
   return {
     id: def.id, name: def.name, user: true, def,
     bpm: base.bpm, swing: base.swing,
     crush: def.crush || undefined, lp: def.crush ? 12000 : undefined,
     demo: base.demo,
     tracks: def.map.map((m, i) => {
-      const src = (KITS.find((k) => k.id === m.kit) || base).tracks[m.track] || base.tracks[i];
+      const snd = m && m.sound ? findSound(m.sound) : null;
+      if (snd) return { name: snd.name, short: snd.short, play: buildVoice(snd.spec), pan: base.tracks[i].pan || 0 };
+      const src = (KITS.find((k) => k.id === (m && m.kit)) || base).tracks[m && m.track] || base.tracks[i];
       return { ...src };
     }),
   };
+}
+
+/**
+ * Kit derivato da quello corrente con un suono utente sulla traccia `t`.
+ * Se il kit corrente è già un kit utente lo modifica, altrimenti ne crea uno nuovo.
+ * @returns {object} definizione del kit (da salvare in state.userKits)
+ */
+export function kitWithSound(kitId, t, soundId) {
+  const cur = findKit(kitId) || KITS[0];
+  const snd = findSound(soundId);
+  if (cur.user) {
+    const def = JSON.parse(JSON.stringify(cur.def));
+    def.map[t] = { sound: soundId };
+    return def;
+  }
+  const map = cur.tracks.map((_, i) => ({ kit: cur.id, track: i }));
+  map[t] = { sound: soundId };
+  return { id: `u:${Date.now().toString(36)}`, name: `${cur.name} + ${snd ? snd.name : 'suono'}`.slice(0, 40), crush: cur.crush || 0, map };
 }
 
 /** Sostituisce l'elenco dei kit utente. */

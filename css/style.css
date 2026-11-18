@@ -782,6 +782,8 @@ input[type="range"]::-moz-range-thumb {
   }
   .bw-item:hover { border-color: var(--edge); background: #31343a; }
   .bw-item.cur { border-color: var(--orange); }
+  .bw-sep { padding: 6px 4px 2px; font-size: 9px; letter-spacing: .12em; color: var(--ink-dim); }
+  .bw-snd { border-left: 3px solid var(--orange); }
   .bw-item b { font-size: 12px; font-weight: normal; }
   .bw-item small { font-size: 9px; color: var(--ink-dim); }
 
@@ -884,3 +886,75 @@ input[type="range"]::-moz-range-thumb {
   #menu .mgrid { grid-template-columns: repeat(3, 1fr); }
   .mx-lbl { font-size: 8px; color: var(--ink-dim); }
 }
+
+/* =====================================================================
+   Sound Lab (telefono): generatore di suoni a tutta pagina
+   ===================================================================== */
+:root[data-mode="lab"] #app { display: none; }
+.lab {
+  --lab-wave: var(--orange);
+  display: flex; flex-direction: column; gap: 8px; height: 100dvh; overflow: hidden;
+  padding: calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 10px) calc(env(safe-area-inset-bottom) + 8px) calc(env(safe-area-inset-left) + 10px);
+}
+.lab[hidden] { display: none; }
+.lab-head { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.lab-title { font-size: 14px; letter-spacing: .14em; color: var(--ink); }
+.lab-title span { color: var(--orange); margin-left: 4px; }
+.lab-head .remote-badge { margin-left: auto; }
+.lab-tabs { flex: 0 0 auto; }
+.lab-tabs .btn { flex: 1; min-height: 44px; font-size: 12px; }
+.lab-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; overflow: auto; touch-action: pan-y; }
+.lab-pane[hidden] { display: none; }
+.lab-pane * { touch-action: pan-y; }
+.lab-pane input[type="range"], .lab-pane .ld-pad, .lab-pane .spad, .lab-pane canvas { touch-action: none; }
+.lab-row { display: flex; gap: 6px; align-items: center; }
+.lab-row > .btn, .lab-row > .sel, .lab-row > .search { min-height: 44px; }
+.lab-row .preset { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lab-row .sel { flex: 1; min-width: 0; }
+.lab-row .search { flex: 1; min-width: 0; }
+
+/* Synth: editor wavetable e pad a note dentro la pagina */
+.lab-synth { overflow: hidden; }
+.lab-synth .sheet-box {
+  position: static; flex: 1; min-height: 0; width: auto; max-width: none; max-height: none; margin: 0; padding: 0;
+  overflow: auto; border: 0; border-radius: 0; box-shadow: none; background: none; transform: none;
+}
+.lab-synth .sheet-box > .close, .lab-synth [data-close] { display: none; }
+.lab-synth .spads { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; }
+.lab-synth .spad-grid { grid-auto-rows: 52px; }
+
+/* Batteria */
+.ld-view { position: relative; flex: 0 0 auto; }
+.ld-wave { display: block; width: 100%; height: 84px; border-radius: 8px; background: #0d1114; border: 1px solid var(--edge); }
+.ld-info { position: absolute; right: 8px; bottom: 6px; font-size: 10px; color: var(--ink-dim); }
+.ld-layers { flex-wrap: wrap; }
+.ld-layers .btn { flex: 1 1 auto; min-height: 40px; font-size: 11px; }
+.ld-params { display: flex; flex-direction: column; gap: 4px; }
+.ld-ctl { display: grid; grid-template-columns: 104px 1fr 56px; align-items: center; gap: 8px; min-height: 44px; }
+.ld-ctl > span { font-size: 10px; letter-spacing: .08em; color: var(--ink-dim); }
+.ld-ctl > b { font-size: 12px; font-weight: normal; text-align: right; color: var(--yellow); font-variant-numeric: tabular-nums; }
+.ld-ctl .seg, .ld-ctl > .sel { grid-column: 2 / 4; }
+.ld-ctl .seg .btn { flex: 1; min-height: 40px; font-size: 11px; }
+.ld-play { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: center; flex: 0 0 auto; }
+.ld-pad {
+  height: 112px; border-radius: 12px; border: 1px solid #000; cursor: pointer; color: #1a1205; font-size: 13px; letter-spacing: .1em; font-weight: bold;
+  background: linear-gradient(180deg, #ffb35c, var(--orange) 60%, #b85e10); box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 3px 0 #000;
+}
+.ld-pad:active { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 1px 0 #000; }
+.ld-test .ld-ctl { grid-template-columns: 52px 1fr 48px; }
+
+/* I miei suoni */
+.lm-h { margin: 6px 0 0; font-size: 11px; letter-spacing: .12em; color: var(--ink-dim); font-weight: normal; }
+.lm-list { display: flex; flex-direction: column; gap: 4px; }
+.lm-row { display: grid; grid-template-columns: 1fr auto auto auto auto; grid-template-rows: auto auto; align-items: center; gap: 2px 6px; padding: 6px 8px; border-radius: 8px; background: var(--panel-2); }
+.lm-row b { font-size: 13px; font-weight: normal; grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-row small { grid-column: 1; grid-row: 2; font-size: 10px; color: var(--ink-dim); }
+.lm-row .btn { grid-row: 1 / 3; min-width: 44px; min-height: 44px; }
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .lab-synth { display: grid; grid-template-columns: 1fr 300px; grid-template-rows: auto 1fr; }
+  .lab-synth .lab-row { grid-column: 1 / 3; }
+  .lab-synth .spad-grid { grid-auto-rows: 40px; }
+  .ld-play { grid-template-columns: 160px 1fr; }
+}
+.lab-mine .lab-row .btn { flex: 1; }

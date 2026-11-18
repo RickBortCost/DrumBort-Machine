@@ -313,7 +313,7 @@ export function initWaveEditor(app) {
   });
   $('#waveCanvas').addEventListener('click', () => { focusOsc = (focusOsc + 1) % 3; drawWave(); });
 
-  $('#waveSheet').addEventListener('click', (e) => {
+  $('#waveSheet .sheet-box').addEventListener('click', (e) => {   // il box può essere spostato nel Sound Lab
     const act = e.target.closest('[data-act]') && e.target.closest('[data-act]').dataset.act;
     if (!act) return;
     const t = tr();
@@ -366,6 +366,12 @@ export function initWaveEditor(app) {
       focusOsc = 0;
       render();
       app.openSheet('waveSheet');
+      requestAnimationFrame(drawWave);
+    },
+    /** Sound Lab: editor sempre visibile nella pagina (nessun foglio modale). */
+    show(track) {
+      k = track;
+      render();
       requestAnimationFrame(drawWave);
     },
   };

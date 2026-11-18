@@ -20,12 +20,15 @@ public sealed class Project
     public bool ArrOn;
     public (int[] m, int s)[] Arr = Array.Empty<(int[], int)>();
     public string Mode = "pattern";
+    JsonArray? lastUserKits;
 
     /// <summary>Applica le parti ricevute (stesso formato di remoteParts() nella web app).</summary>
     public void Apply(JsonObject parts)
     {
         if (parts["userPresets"] is JsonArray up) Synth.SetUserPresets(up);
-        if (parts["userKits"] is JsonArray uk) Kits.SetUserKits(uk);
+        if (parts["userSounds"] is JsonArray us) Kits.SetUserSounds(us);
+        if (parts["userKits"] is JsonArray uk) lastUserKits = (JsonArray)uk.DeepClone();
+        if (parts["userSounds"] != null || parts["userKits"] != null) Kits.SetUserKits(lastUserKits);
         for (int i = 0; i < 8; i++) if (parts[$"p{i}"] is JsonObject p) Slots[i] = Pattern.Parse(p);
         if (parts["slot"] is JsonValue sv && sv.TryGetValue(out double sd)) Slot = Math.Clamp((int)sd, 0, 7);
         if (parts["fx"] is JsonObject fx) Fx = Fx.Parse(fx);

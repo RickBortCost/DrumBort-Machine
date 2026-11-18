@@ -64,7 +64,7 @@ const browser = await chromium.launch();
   const host = await startHost(['--no-audio'], port);
   try {
     const pc = await open(browser, `http://localhost:${port}/`, false);
-    const ph = await open(browser, `http://127.0.0.1:${port}/`, true);
+    const ph = await open(browser, `http://127.0.0.1:${port}/?full`, true);
     const roles = await Promise.all([pc, ph].map((d) => d.page.evaluate(() => [drumbort.remote.role, drumbort.remote.native, drumbort.engine.silent, document.querySelector('#remoteBadge').textContent])));
     check('PC e telefono sono controller del motore nativo', roles.every((r) => r[0] === 'control' && r[1] && r[2] && r[3] === 'CTRL·C#'), JSON.stringify(roles));
 
@@ -103,9 +103,29 @@ const browser = await chromium.launch();
     await ph.page.evaluate(() => drumbort.remote.op('trig', { i: 0, vel: 1 }));
     check('pad dal telefono suonato dal motore', await waitFor(async () => (await status(port)).engine.voices > 0, 2000));
 
-    const errs = [...pc.errors, ...ph.errors];
+    // Sound Lab sul telefono: un suono salvato arriva al PC e al motore, il progetto del PC resta intatto
+    const lab = await open(browser, `http://127.0.0.1:${port}/`, true);
+    const pcSteps = await pc.page.evaluate(() => JSON.stringify(drumbort.state.slots.map((s) => s.steps)));
+    const lm = await lab.page.evaluate(() => [document.documentElement.dataset.mode, drumbort.engine.silent, document.querySelector('#labBadge').textContent]);
+    check('telefono in Sound Lab collegato, con audio locale', lm[0] === 'lab' && !lm[1] && lm[2] === '⇄ PC', JSON.stringify(lm));
+    await lab.page.click('[data-ltab="drum"]');
+    await lab.page.selectOption('#ldFrom', 't|kick');
+    await lab.page.fill('#ldName', 'Kick dal Lab');
+    await lab.page.click('#ldSave');
+    check('il suono arriva al PC', await waitFor(() => pc.page.evaluate(() => drumbort.state.userSounds.some((s) => s.name === 'Kick dal Lab'))));
+    check('il suono arriva al motore C#', await waitFor(async () => (await status(port)).engine.sounds === 1));
+    const pcSame = await pc.page.evaluate(() => JSON.stringify(drumbort.state.slots.map((s) => s.steps)));
+    check('il Sound Lab non tocca il progetto del PC', pcSame === pcSteps);
+    // Il PC lo assegna a una traccia: il kit utente col suono arriva al motore
+    await pc.page.evaluate(() => { const s = drumbort.state.userSounds.find((x) => x.name === 'Kick dal Lab'); document.querySelector('[data-btab="kits"]').click(); });
+    await pc.page.click('.sx-th[data-sel="0"]');
+    await pc.page.click('[data-btab="kits"]');
+    await pc.page.click('.bw-item[data-usound]');
+    check('kit con il suono del Lab in uso sul motore', await waitFor(async () => (await status(port)).engine.kit.startsWith('u:')));
+
+    const errs = [...pc.errors, ...ph.errors, ...lab.errors];
     check('nessun errore JS', errs.length === 0, errs.join(' | '));
-    await pc.ctx.close(); await ph.ctx.close();
+    await pc.ctx.close(); await ph.ctx.close(); await lab.ctx.close();
   } finally { host.p.kill(); }
 }
 
@@ -116,7 +136,7 @@ const browser = await chromium.launch();
   const host = await startHost(['--mode', 'browser'], port);
   try {
     const pc = await open(browser, `http://localhost:${port}/`, false);
-    const ph = await open(browser, `http://127.0.0.1:${port}/`, true);
+    const ph = await open(browser, `http://127.0.0.1:${port}/?full`, true);
     const r = await Promise.all([pc, ph].map((d) => d.page.evaluate(() => [drumbort.remote.role, drumbort.engine.silent])));
     check('PC = motore audio, telefono = controller', r[0][0] === 'engine' && !r[0][1] && r[1][0] === 'control' && r[1][1], JSON.stringify(r));
     await ph.page.click('#play');

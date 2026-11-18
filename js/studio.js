@@ -4,7 +4,7 @@
  * L'editor della clip selezionata è la griglia step/synth esistente; parametri e pad a destra.
  */
 
-import { allKits, kitById } from './kits.js';
+import { allKits, kitById, USER_SOUNDS, buildVoice } from './kits.js';
 import { PRESETS, categories, findPresets } from './presets.js';
 import { SYNTH_TRACKS } from './synth.js';
 import { SYNTH_CH } from './engine.js';
@@ -395,7 +395,11 @@ export function initStudio(app) {
     } else {
       const kits = allKits().filter((k) => !q || k.name.toLowerCase().includes(q.toLowerCase()));
       const cur = app.kitOf(app.pat()).id;
-      list.innerHTML = kits.map((k) => `<button class="bw-item${k.id === cur ? ' cur' : ''}" data-kitid="${k.id}"><b>${esc(k.name)}</b><small>${k.user ? 'personalizzato' : 'kit'}</small></button>`).join('');
+      // Suoni creati nel Sound Lab: un clic li mette sulla traccia di batteria selezionata
+      const snds = USER_SOUNDS.filter((s) => !q || s.name.toLowerCase().includes(q.toLowerCase()));
+      const t = isSynth(selTrack) ? 0 : selTrack;
+      list.innerHTML = (snds.length ? `<div class="bw-sep">I MIEI SUONI → traccia ${t + 1}</div>` + snds.map((s) => `<button class="bw-item bw-snd" data-usound="${esc(s.id)}" title="Assegna alla traccia ${t + 1}"><b>${esc(s.name)}</b><small>suono batteria · ▶ ascolta e assegna</small></button>`).join('') + '<div class="bw-sep">KIT</div>' : '')
+        + kits.map((k) => `<button class="bw-item${k.id === cur ? ' cur' : ''}" data-kitid="${k.id}"><b>${esc(k.name)}</b><small>${k.user ? 'personalizzato' : 'kit'}</small></button>`).join('');
     }
   }
   browser.addEventListener('click', (e) => {
@@ -418,6 +422,13 @@ export function initStudio(app) {
         engine.playSynth(k, engine.ctx.currentTime + 0.02, 0.5, [base, base + 7], 0.85, tr);
       }
       app.toast(`${PRESETS[tr.preset].name} → ${SYNTH_TRACKS[k].name}`);
+      return;
+    }
+    const us = e.target.closest('[data-usound]');
+    if (us) {
+      const snd = USER_SOUNDS.find((s) => s.id === us.dataset.usound);
+      if (snd && engine.ctx) engine.audition(buildVoice(snd.spec), 1, { tune: 0, decay: 1 });
+      app.useSoundOnTrack(us.dataset.usound, isSynth(selTrack) ? 0 : selTrack);
       return;
     }
     const kb = e.target.closest('[data-kitid]');

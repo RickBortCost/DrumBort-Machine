@@ -358,6 +358,17 @@ export class Engine {
     }
   }
 
+  /** Ascolto di una voce fuori dai kit (Sound Lab): canale 1, un colpo alla volta, senza cache. */
+  audition(play, vel = 1, p = { tune: 0, decay: 1 }) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime + 0.005;
+    if (this._aud) this._kill(this._aud, t);
+    const g = this.ctx.createGain();
+    g.connect(this.channels[0].gain);
+    play(this.ctx, g, t, vel, p);
+    this._aud = { g, src: null };
+  }
+
   /** Sfuma e ferma una voce (voice stealing). */
   _kill(v, t, tc = 0.004) {
     v.g.gain.setTargetAtTime(0, t, tc);

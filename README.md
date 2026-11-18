@@ -56,6 +56,22 @@ Su computer (finestra di almeno 1000×600) l'app si apre nel layout **Studio**, 
 
 Il pulsante **▦** nella barra (o Menu → Layout) passa tra Studio e layout compatto.
 
+## Sound Lab (telefono)
+
+Sul telefono l'app è un **generatore di suoni**, senza drum machine:
+
+- **SYNTH**: editor wavetable a tutta pagina (oscillatori, filtri, inviluppi, LFO, step, matrice di modulazione), libreria dei suoni, pad a note per l'ascolto. "Salva come preset" lo aggiunge ai tuoi suoni.
+- **BATTERIA**: designer di suoni di batteria fino a 4 strati. Ogni strato è una voce (cassa, rullante, clap, rim, hat/piatto, tom, cowbell, rumore/FX) con i suoi parametri; si può partire da qualsiasi voce dei kit. Forma d'onda in tempo reale, pad SUONA (più in alto = più forte), prova di tune e decay.
+- **I MIEI SUONI**: ascolto, modifica, eliminazione e invio al PC.
+
+**Portare i suoni sul PC**
+- Con **DrumBort Host** (stessa rete Wi-Fi, badge ⇄ PC) i suoni salvati arrivano da soli nella libreria del PC e al motore C#; il progetto del PC non viene toccato.
+- Senza host: **CONDIVIDI LINK** (AirDrop, messaggi, e-mail) e apri il link sul PC, oppure **FILE** e sul PC Menu → Importa JSON.
+
+Sul PC i synth compaiono nel browser **SUONI → Utente**, i suoni di batteria in **KIT → I miei suoni**: un clic li mette sulla traccia selezionata (viene creato un kit personalizzato). Sono disponibili anche in **Crea kit**.
+
+La drum machine completa resta su tablet e PC; sul telefono si apre con `?full` nell'indirizzo.
+
 ## Versione PC (DrumBort Host)
 
 App desktop per **Windows, macOS e Linux** (cartella [`desktop/`](desktop/README.md), zip nella pagina Release): un **motore audio nativo C#** genera gli stessi suoni della web app e il **telefono fa da controller** sulla rete Wi-Fi.
@@ -182,6 +198,7 @@ js/wavetable.js         motore wavetable, tabelle e preset
 js/waveeditor.js        editor wavetable
 js/session.js           modalità session (clip, scene, follow action, arrangiamento)
 js/remote.js            controllo remoto tramite l'host desktop (WebSocket)
+js/lab.js               Sound Lab (telefono): synth, designer batteria, invio al PC
 desktop/                host desktop C#: motore audio nativo, server, sincronizzazione
 tools/export-dsp.mjs    esporta kit e preset per il motore desktop
 js/studio.js            layout Studio: browser, clip, mixer

@@ -440,13 +440,13 @@ export function initSynthUI(app) {
     last = { el: inp, t: now };
   });
 
-  const library = initLibrary({ ...app, onPresetChange: () => { renderLabels(); renderParams(); } });
+  const library = initLibrary({ ...app, onPresetChange: () => { renderLabels(); renderParams(); if (app.onSoundChange) app.onSoundChange(); } });
   $('#presetBtn').addEventListener('click', () => library.open(ui.ssel));
   const editor = initWaveEditor({
     ...app,
-    onChange: () => { renderLabels(); renderParams(); },
+    onChange: () => { renderLabels(); renderParams(); if (app.onSoundChange) app.onSoundChange('edit'); },
     openLibrary: (k, cat) => library.open(k, cat),
-    onTrack: (k) => { ui.ssel = k; render(); },
+    onTrack: (k) => { ui.ssel = k; render(); if (app.onSoundChange) app.onSoundChange(); },
   });
   $('#sedBtn').addEventListener('click', () => editor.open(ui.ssel));
 
@@ -615,6 +615,8 @@ export function initSynthUI(app) {
   return {
     render,
     openEditor() { editor.open(ui.ssel || 0); },
+    showEditor() { editor.show(ui.ssel || 0); },
+    openLibrary(cat) { library.open(ui.ssel || 0, cat); },
     showTick,
     clearPlayhead,
     onMidiRaw,

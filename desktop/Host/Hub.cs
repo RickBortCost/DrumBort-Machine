@@ -83,7 +83,8 @@ public sealed class Hub
             case "hello":
             {
                 bool seed;
-                lock (cacheLock) seed = cache.Count == 0;
+                // Il progetto lo porta il primo dispositivo con i pattern (il Sound Lab manda solo i suoni)
+                lock (cacheLock) seed = !cache.ContainsKey("p0");
                 c.Role = !Native && c.Local && !clients.Values.Any(x => x.Id != c.Id && x.Role == "engine") ? "engine" : "control";
                 await Send(c, new JsonObject { ["t"] = "welcome", ["role"] = c.Role, ["native"] = Native, ["seed"] = seed });
                 if (!seed)
@@ -98,10 +99,24 @@ public sealed class Hub
             case "state":
             {
                 if (m["parts"] is not JsonObject parts) return;
-                lock (cacheLock) foreach (var (k, v) in parts) cache[k] = v?.DeepClone();
+                lock (cacheLock)
+                    foreach (var (k, v) in parts)
+                    {
+                        // Librerie dei suoni: unione per id (Sound Lab e PC aggiungono, nessuno cancella quelli dell'altro)
+                        if ((k == "userSounds" || k == "userPresets") && v is JsonArray add && cache[k] is JsonArray have)
+                        {
+                            var ids = add.Select(x => J.S(x, "id", "")).ToHashSet();
+                            var merged = new JsonArray(have.Where(x => !ids.Contains(J.S(x, "id", ""))).Select(x => x!.DeepClone()).Concat(add.Select(x => x!.DeepClone())).ToArray());
+                            cache[k] = merged;
+                        }
+                        else cache[k] = v?.DeepClone();
+                    }
                 if (engine != null)
                 {
                     var copy = (JsonObject)parts.DeepClone();
+                    lock (cacheLock)
+                        foreach (var k in new[] { "userSounds", "userPresets" })
+                            if (copy.ContainsKey(k)) copy[k] = cache[k]?.DeepClone();
                     engine.Post(() => { engine.Seq.P.Apply(copy); engine.Seq.Sync(); });
                 }
                 await Broadcast(m, c);

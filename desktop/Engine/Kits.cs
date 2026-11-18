@@ -45,21 +45,44 @@ public static class Kits
         }
     }
 
-    /// <summary>Kit personalizzati: voci prese da kit diversi (come buildUserKit nella web app).</summary>
+    static readonly Dictionary<string, KitTrack> sounds = new();
+    /// <summary>Cambia a ogni aggiornamento di suoni/kit utente (chiave della cache delle voci).</summary>
+    public static int UserRev;
+    public static int UserSoundCount => sounds.Count;
+
+    /// <summary>Suoni di batteria creati nel Sound Lab: { id, name, short, spec }.</summary>
+    public static void SetUserSounds(JsonArray? list)
+    {
+        sounds.Clear();
+        UserRev++;
+        if (list == null) return;
+        foreach (var s in list)
+        {
+            var id = J.S(s, "id", "");
+            if (id == "" || s?["spec"] == null) continue;
+            sounds[id] = new KitTrack { Name = J.S(s, "name", "Suono"), Short = J.S(s, "short", "US"), Play = Build(s["spec"]) };
+        }
+    }
+
+    /// <summary>Kit personalizzati: voci prese da kit diversi o dal Sound Lab (come buildUserKit nella web app).</summary>
     public static void SetUserKits(JsonArray? defs)
     {
         user.Clear();
+        UserRev++;
         if (defs == null) return;
         foreach (var d in defs)
         {
             if (d?["map"] is not JsonArray map || map.Count != 8) continue;
-            var baseKit = All.FirstOrDefault(k => k.Id == J.S(map[0], "kit", "")) ?? All[0];
+            var first = map.FirstOrDefault(m => J.S(m, "kit", "") != "");
+            var baseKit = All.FirstOrDefault(k => k.Id == J.S(first, "kit", "")) ?? All[0];
             var kit = new KitDef
             {
                 Id = J.S(d, "id", ""), Name = J.S(d, "name", ""), Bpm = baseKit.Bpm, Swing = baseKit.Swing,
                 Crush = J.I(d, "crush", 0), Lp = J.I(d, "crush", 0) > 0 ? 12000 : 0,
                 Tracks = map.Select((m, i) =>
                 {
+                    if (sounds.TryGetValue(J.S(m, "sound", ""), out var snd))
+                        return new KitTrack { Name = snd.Name, Short = snd.Short, Play = snd.Play, Pan = baseKit.Tracks[i].Pan };
                     var src = All.FirstOrDefault(k => k.Id == J.S(m, "kit", "")) ?? baseKit;
                     int ti = J.I(m, "track", i);
                     return ti >= 0 && ti < src.Tracks.Length ? src.Tracks[ti] : baseKit.Tracks[i];

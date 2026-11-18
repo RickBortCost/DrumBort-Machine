@@ -2,6 +2,20 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.9.0] - 2026-11-18
+
+### Aggiunto
+- **Sound Lab**: sul telefono l'app diventa un generatore di suoni, senza drum machine.
+  - SYNTH: editor wavetable a tutta pagina con libreria e pad a note.
+  - BATTERIA: designer a strati (fino a 4 voci parametriche: cassa, rullante, clap, rim, hat/piatto, tom, cowbell, rumore/FX), partenza da qualsiasi voce dei kit, forma d'onda, pad sensibile alla posizione, prova di tune e decay.
+  - I MIEI SUONI: ascolto, modifica, eliminazione, condivisione.
+- **Invio dei suoni al PC**: automatico con DrumBort Host (solo la libreria, il progetto del PC resta intatto), oppure con link `#snd=` o file JSON.
+- Sul PC: suoni di batteria utente nel browser Studio (KIT → I miei suoni, un clic li assegna alla traccia selezionata creando un kit personalizzato) e in Crea kit; i kit utente possono usare suoni del Sound Lab, anche nel motore C#.
+
+### Modificato
+- Sul telefono la drum machine completa si apre con `?full`.
+- CI desktop: un runner non disponibile (es. macOS) non blocca gli altri pacchetti, che vengono allegati comunque; pacchetto macOS Intel su `macos-13`.
+
 ## [1.8.0] - 2026-11-18
 
 ### Aggiunto

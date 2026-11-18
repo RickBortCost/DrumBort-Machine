@@ -3,7 +3,7 @@
  * condivisione via link, export MIDI e registrazione dell'uscita.
  */
 
-import { KITS, USER_KITS, setUserKits, findKit } from './kits.js';
+import { KITS, USER_KITS, USER_SOUNDS, setUserKits, findKit, findSound, buildVoice } from './kits.js';
 import { euclid, varyDrums, varySynth } from './generate.js';
 import { exportMidi } from './midifile.js';
 import { recordNode, recordMic } from './recorder.js';
@@ -70,11 +70,18 @@ export function initPanels(app) {
   const voiceOptions = KITS.map((k) => `<optgroup label="${esc(k.name)}">${
     k.tracks.map((t, i) => `<option value="${k.id}|${i}">${esc(k.name.split(' ').slice(-1)[0])} · ${esc(t.name)}</option>`).join('')}</optgroup>`).join('');
   const ROLE = ['Kick', 'Snare', 'Clap/Rim', 'Closed Hat', 'Open Hat', 'Tom', 'Cymbal', 'Perc'];
-  $('#kitRows').innerHTML = ROLE.map((r, i) => `
+  // Voci dei kit + suoni creati nel Sound Lab (valore "sound|<id>")
+  const allOptions = () => (USER_SOUNDS.length
+    ? `<optgroup label="I miei suoni">${USER_SOUNDS.map((s) => `<option value="sound|${esc(s.id)}">${esc(s.name)}</option>`).join('')}</optgroup>`
+    : '') + voiceOptions;
+  const buildRows = () => {
+    $('#kitRows').innerHTML = ROLE.map((r, i) => `
     <div class="row-ctl kit-row"><small>${i + 1} ${r}</small>
-      <select class="sel" data-slot="${i}" aria-label="Voce ${r}">${voiceOptions}</select>
+      <select class="sel" data-slot="${i}" aria-label="Voce ${r}">${allOptions()}</select>
       <button class="btn sm" data-prev="${i}" aria-label="Ascolta ${r}">▶</button>
     </div>`).join('');
+  };
+  buildRows();
   let editingKit = null;
 
   function openKits() {
@@ -83,9 +90,10 @@ export function initPanels(app) {
     const base = cur && !cur.user ? cur : KITS[0];
     $('#kitName').value = editingKit ? editingKit.name : '';
     $('#kitCrush').value = String(editingKit ? editingKit.crush || 0 : 0);
+    buildRows();
     document.querySelectorAll('#kitRows select').forEach((sel, i) => {
       const m = editingKit ? editingKit.map[i] : { kit: base.id, track: i };
-      sel.value = `${m.kit}|${m.track}`;
+      sel.value = m.sound && findSound(m.sound) ? `sound|${m.sound}` : `${m.kit || base.id}|${m.track ?? i}`;
     });
     $('[data-act="kit-delete"]').disabled = !editingKit;
     app.openSheet('kitSheet');
@@ -94,15 +102,15 @@ export function initPanels(app) {
     const prev = e.target.closest('[data-prev]');
     if (prev && engine.ctx) {
       const [kid, ti] = document.querySelector(`#kitRows select[data-slot="${prev.dataset.prev}"]`).value.split('|');
-      const k = KITS.find((x) => x.id === kid);
       const g = engine.ctx.createGain();
       g.connect(engine.channels[+prev.dataset.prev].gain);
-      k.tracks[+ti].play(engine.ctx, g, engine.ctx.currentTime + 0.01, 1, { tune: 0, decay: 1 });
+      const play = kid === 'sound' ? (findSound(ti) && buildVoice(findSound(ti).spec)) : KITS.find((x) => x.id === kid).tracks[+ti].play;
+      if (play) play(engine.ctx, g, engine.ctx.currentTime + 0.01, 1, { tune: 0, decay: 1 });
       return;
     }
     const act = e.target.closest('[data-act]') && e.target.closest('[data-act]').dataset.act;
     if (act === 'kit-save') {
-      const map = [...document.querySelectorAll('#kitRows select')].map((s) => { const [kit, t] = s.value.split('|'); return { kit, track: +t }; });
+      const map = [...document.querySelectorAll('#kitRows select')].map((s) => { const [kit, t] = s.value.split('|'); return kit === 'sound' ? { sound: t } : { kit, track: +t }; });
       const name = $('#kitName').value.trim() || `Kit ${(state.userKits || []).length + 1}`;
       const def = { id: editingKit ? editingKit.id : `u:${Date.now().toString(36)}`, name, crush: +$('#kitCrush').value, map };
       state.userKits = (state.userKits || []).filter((d) => d.id !== def.id).concat(def);

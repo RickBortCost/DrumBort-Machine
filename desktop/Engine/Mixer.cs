@@ -249,7 +249,7 @@ public sealed class Mixer
         drum[i] = v;
     }
 
-    static string DrumKey(KitDef kit, int i, DrumTrack p) => $"d|{kit.Id}|{i}|{p.Tune}|{p.Decay}";
+    static string DrumKey(KitDef kit, int i, DrumTrack p) => $"d|{kit.Id}{(kit.Id.StartsWith("u:") ? $"#{Kits.UserRev}" : "")}|{i}|{p.Tune}|{p.Decay}";
 
     void RequestDrum(KitDef kit, int i, double tune, double decay, string key)
     {

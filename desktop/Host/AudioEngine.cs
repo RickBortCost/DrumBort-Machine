@@ -158,6 +158,7 @@ public sealed class AudioEngine : IDisposable
         load = Math.Round(RenderLoad, 3),
         steps = Seq.P.Slots[Seq.P.Slot].Steps.Sum(r => r.Count(v => v > 0)),
         kit = Seq.P.Slots[Seq.P.Slot].Kit,
+        sounds = Kits.UserSoundCount,
     };
 
     public static void ListDevices()

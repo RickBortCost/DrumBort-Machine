@@ -10,9 +10,9 @@ Applicazione per PC (Windows, macOS, Linux) che:
 1. Scarica dalla [pagina Release](https://github.com/RickBortCost/DrumBort-Machine/releases) lo zip per il tuo sistema (`win-x64`, `osx-arm64` per Mac Apple Silicon, `osx-x64` per Mac Intel, `linux-x64`) ed estrailo.
 2. Avvia `DrumBortHost` (Windows: `DrumBortHost.exe`). Non serve installare .NET.
 3. Nella finestra compaiono l'indirizzo per il PC (`http://localhost:8765/`), quello per il telefono e un **QR code**.
-4. Sul telefono, collegato alla **stessa rete Wi-Fi**, inquadra il QR (o apri l'indirizzo). In alto compare **CTRL·C#**: il telefono è il controller, l'audio esce dal PC.
+4. Sul telefono, collegato alla **stessa rete Wi-Fi**, inquadra il QR (o apri l'indirizzo): si apre il **Sound Lab** (badge **⇄ PC**) e i suoni che salvi arrivano nella libreria del PC. Con `?full` il telefono diventa invece il controller della drum machine (badge **CTRL·C#**) e l'audio esce dal PC.
 
-Il primo dispositivo che si collega porta il proprio progetto sull'host; quelli successivi lo ricevono, sostituendo il progetto locale.
+Il primo dispositivo con la drum machine che si collega porta il proprio progetto sull'host; quelli successivi lo ricevono, sostituendo il progetto locale. Un telefono in **Sound Lab** invia solo i suoni che crei (synth e batteria): arrivano nella libreria del PC e al motore senza toccare il progetto. Per usare il telefono come controller della drum machine apri l'indirizzo con `?full`.
 
 - **Windows**: al primo avvio consenti l'accesso alle reti private nel firewall.
 - **macOS**: se il sistema blocca l'app scaricata, esegui `xattr -dr com.apple.quarantine <cartella>` oppure autorizzala in Impostazioni → Privacy e sicurezza.

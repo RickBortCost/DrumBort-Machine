@@ -25,13 +25,14 @@ function check(label, ok, info = '') {
 
 /** Apre la pagina, raccoglie errori/404 e sblocca l'audio. */
 async function openApp(browser, url, viewport, extra = {}) {
-  const context = await browser.newContext({ viewport, hasTouch: true, isMobile: browser.browserType().name() !== 'firefox', acceptDownloads: true, ...extra });
+  const { lab, ...ctxOpts } = extra;
+  const context = await browser.newContext({ viewport, hasTouch: true, isMobile: browser.browserType().name() !== 'firefox', acceptDownloads: true, ...ctxOpts });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
   page.on('response', (r) => { if (r.status() >= 400) errors.push(`${r.status()} ${r.url()}`); });
-  await page.goto(url);
+  await page.goto(extra.lab ? url : `${url}${url.includes('?') ? '&' : '?'}full`);
   await page.waitForFunction(() => window.drumbort);
   await page.tap('#overlay');
   await page.waitForFunction(() => document.querySelector('#overlay').hidden && drumbort.engine.ctx.state === 'running', null, { timeout: 5000 });
@@ -699,6 +700,79 @@ async function audioTests(browser, url) {
   await context.close();
 }
 
+async function labTests(browser, url) {
+  const name = browser.browserType().name();
+  console.log(`\n[${name}] Sound Lab (telefono) → PC`);
+  const { context, page, errors } = await openApp(browser, url, VIEWPORTS[0], { lab: true });
+  const L = await page.evaluate(() => ({
+    mode: document.documentElement.dataset.mode, app: document.querySelector('#app').offsetParent !== null,
+    sw: document.documentElement.scrollWidth, tabs: Math.min(...[...document.querySelectorAll('[data-ltab]')].map((b) => b.getBoundingClientRect().height)),
+  }));
+  check('il telefono apre il Sound Lab senza drum machine', L.mode === 'lab' && !L.app && L.sw <= 440, JSON.stringify(L));
+  check('schede ≥ 44 px', L.tabs >= 44, `${L.tabs}`);
+
+  // Synth: editor wavetable nella pagina, suono wavetable pronto, pad a note
+  const S = await page.evaluate(() => ({ main: !document.querySelector('#waveMain').hidden, inLab: !!document.querySelector('#labSynth #waveMain'), name: document.querySelector('#labPreset').textContent }));
+  check('editor wavetable integrato con un suono wavetable', S.main && S.inLab, JSON.stringify(S));
+  await page.locator('#labSynth .spad').first().dispatchEvent('pointerdown', { pointerId: 3, isPrimary: true });
+  await page.locator('#labSynth .spad').first().dispatchEvent('pointerup', { pointerId: 3, isPrimary: true });
+  await page.fill('#waveName', 'Basso dal telefono');
+  await page.dispatchEvent('#waveName', 'change');
+  page.once('dialog', (d) => d.accept('Basso dal telefono'));
+  await page.tap('[data-act="wave-save"]');
+  const up = await page.evaluate(() => drumbort.state.userPresets.map((p) => p.name));
+  check('synth salvato tra i miei suoni', up.length === 1, up.join(', '));
+
+  // Batteria: parti dal rullante dubstep, modifica, aggiungi uno strato, salva
+  await page.tap('[data-ltab="drum"]');
+  await page.selectOption('#ldFrom', 'k|dubstep|1');
+  await page.evaluate(() => { const r = document.querySelector('#ldParams input[data-key="tones.0"]'); r.value = 0.8; r.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.tap('#ldLayers [data-layer="add"]');
+  await page.tap('#ldPad');
+  await page.fill('#ldName', 'Snare telefono');
+  await page.tap('#ldSave');
+  const snd = await page.evaluate(() => drumbort.state.userSounds[0]);
+  check('suono di batteria salvato (4 strati, tono modificato)', snd && snd.name === 'Snare telefono' && snd.spec.type === 'layer' && snd.spec.voices.length === 4 && snd.spec.voices[0].o.tones[0] !== 205, JSON.stringify(snd && snd.spec).slice(0, 120));
+  const wave = await page.evaluate(() => document.querySelector('#ldInfo').textContent);
+  check('forma d\'onda del suono disegnata', /ms|s ·/.test(wave), wave);
+
+  // Link per il PC
+  await page.tap('[data-ltab="mine"]');
+  const rows = await page.evaluate(() => document.querySelectorAll('.lm-row').length);
+  check('I MIEI SUONI elenca synth e batteria', rows === 2, `${rows}`);
+  const link = await page.evaluate(async () => {
+    const { encodeShare } = await import('./js/projects.js');
+    const s = drumbort.state;
+    return `${location.origin}${location.pathname}#snd=${await encodeShare({ app: 'drumbort-sound', v: 1, presets: s.userPresets, sounds: s.userSounds })}`;
+  });
+  check('nessun errore JS nel Lab', errors.length === 0, errors.join(' | '));
+  await context.close();
+
+  // PC: apre il link, il suono va in libreria e su una traccia del kit
+  const pc = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const p2 = await pc.newPage();
+  const e2 = [];
+  p2.on('pageerror', (e) => e2.push(e.message));
+  await p2.goto(link);
+  await p2.waitForFunction(() => window.drumbort);
+  await p2.click('#overlay');
+  await p2.waitForFunction(() => drumbort.state.userSounds.length === 1, null, { timeout: 5000 }).catch(() => {});
+  const imp = await p2.evaluate(() => [drumbort.state.userSounds.length, drumbort.state.userPresets.length, location.hash]);
+  check('il PC importa i suoni dal link', imp[0] === 1 && imp[1] === 1 && !imp[2], JSON.stringify(imp));
+  await p2.click('[data-btab="kits"]');
+  await p2.click('.sx-th[data-sel="1"]');
+  await p2.click('[data-btab="kits"]');
+  await p2.click('.bw-item[data-usound]');
+  const kit = await p2.evaluate(() => { const p = drumbort.state.slots[drumbort.state.slot]; const k = drumbort.state.userKits.find((d) => d.id === p.kit); return [p.kit, k && k.map[1].sound, document.querySelector('#kit').selectedOptions[0].textContent]; });
+  check('un clic mette il suono sulla traccia selezionata (kit utente)', kit[0].startsWith('u:') && kit[1] === snd.id, kit.join(' / '));
+  await p2.evaluate(() => drumbort.engine.trigger(1, drumbort.engine.ctx.currentTime, 1, drumbort.seq.pattern.tracks[1]));
+  await p2.click('#menuBtn'); await p2.click('#menu [data-act="kits"]');
+  const opt = await p2.evaluate(() => [...document.querySelectorAll('#kitRows select[data-slot="1"] option')].some((o) => o.selected && o.value.startsWith('sound|')));
+  check('Crea kit mostra il suono del telefono', opt);
+  check('nessun errore JS sul PC', e2.length === 0, e2.join(' | '));
+  await pc.close();
+}
+
 async function pwaTests(browser, url) {
   console.log(`\n[${browser.browserType().name()}] PWA`);
   const { context, page, errors } = await openApp(browser, url, VIEWPORTS[0]);
@@ -757,6 +831,7 @@ for (const name of BROWSERS) {
     await synthTests(browser, url);
     await featureTests(browser, url);
     await studioTests(browser, url);
+    await labTests(browser, url);
     await audioTests(browser, url);
     await pwaTests(browser, url);
   } catch (err) {

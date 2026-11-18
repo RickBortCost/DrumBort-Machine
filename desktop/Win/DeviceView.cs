@@ -260,7 +260,8 @@ public sealed class DeviceView : DockPanel
             if (e.ClickCount == 2) { Edit(() => d["fold"] = !fold); e.Handled = true; return; }
             down = e.GetPosition(this);
             sel = id; Focus();
-            Render();
+            foreach (var el in chain.Children.OfType<Border>())
+                if (el.Tag is string t && t != "drop") { el.BorderBrush = t == id ? col : Theme.Panel3; el.BorderThickness = t == id ? new Thickness(2) : new Thickness(1, 2, 1, 1); }
             e.Handled = true;
         };
         head.MouseMove += (_, e) =>

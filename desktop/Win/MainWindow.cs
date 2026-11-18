@@ -251,7 +251,7 @@ public sealed class MainWindow : Window
 
     void BuildTracks()
     {
-        heads.Children.Clear(); rows.Children.Clear(); stepRows.Clear(); meters.Clear();
+        heads.Children.Clear(); rows.Children.Clear(); stepRows.Clear(); meters.Clear(); headerOf.Clear();
         var tracks = doc.Tracks;
         if (tracks.Count == 0)
         {
@@ -266,17 +266,19 @@ public sealed class MainWindow : Window
         {
             heads.Children.Add(TrackHeader(ch));
             var row = new StepRow(doc, ch) { Margin = new Thickness(0, 2, 0, 2), Height = 44 };
-            row.MouseLeftButtonDown += (_, _) => Select(ch, false);
+            row.PreviewMouseLeftButtonDown += (_, _) => { if (sel != ch) Select(ch, false, false); };
             stepRows.Add(row);
             rows.Children.Add(row);
         }
     }
 
+    readonly Dictionary<int, Border> headerOf = new();
     UIElement TrackHeader(int ch)
     {
         var t = doc.Track(ch);
         var col = Theme.Track(ch);
         var b = new Border { Height = 48, Margin = new Thickness(0, 0, 0, 0), BorderBrush = col, BorderThickness = new Thickness(5, 0, 0, 1), Background = ch == sel ? Theme.Panel3 : Theme.Panel2, Cursor = Cursors.Hand };
+        headerOf[ch] = b;
         var g = new Grid { Margin = new Thickness(6, 2, 4, 2) };
         g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(24) });
         g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(18) });
@@ -321,22 +323,22 @@ public sealed class MainWindow : Window
         {
             if (e.OriginalSource is HSlider) return;
             if (e.ClickCount == 2) { OpenLibraryFor(ch); return; }
-            Select(ch, true);
+            Select(ch, true, true);
         };
         b.AllowDrop = true;
         b.DragOver += (_, e) => { e.Effects = DeviceView.IsNewDevice(e.Data, out string _t) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; };
-        b.Drop += (_, e) => { if (DeviceView.IsNewDevice(e.Data, out var type)) { Select(ch, true); devices.Add(type, null); } };
+        b.Drop += (_, e) => { if (DeviceView.IsNewDevice(e.Data, out var type)) { Select(ch, true, false); devices.Add(type, null); } };
         return b;
     }
 
-    void Select(int ch, bool showDevices)
+    /// <summary>Seleziona la traccia: intestazione evidenziata, Libreria e pannello in basso aggiornati.</summary>
+    void Select(int ch, bool showDevices, bool preview)
     {
-        bool changed = sel != ch;
         sel = ch;
         if (showDevices) bottom = "dev";
         else if (Doc.IsSynth(ch)) bottom = "roll";
-        if (Doc.IsSynth(ch)) doc.PreviewSynth(ch - 8, doc.Base(ch - 8)); else if (changed && showDevices) doc.PreviewDrum(ch);
-        BuildTracks();
+        if (preview) { if (Doc.IsSynth(ch)) doc.PreviewSynth(ch - 8, doc.Base(ch - 8)); else doc.PreviewDrum(ch); }
+        foreach (var (c, h) in headerOf) h.Background = c == sel ? Theme.Panel3 : Theme.Panel2;
         library.Render();
         RenderBottom();
     }
@@ -348,6 +350,7 @@ public sealed class MainWindow : Window
         devTab.IsOn = bottom == "dev"; rollTab.IsOn = bottom == "roll";
         if (bottom == "roll" && sel >= 8)
         {
+            if (roll != null && roll.Ch == sel && bottomHost.Content is ScrollViewer cur && cur.Content == roll) { roll.InvalidateVisual(); return; }
             roll = new PianoRoll(doc, sel);
             bottomHost.Content = new ScrollViewer { Content = roll, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Background = Theme.Bg };
             roll.Loaded += (_, _) => ((ScrollViewer)bottomHost.Content).ScrollToVerticalOffset(roll.Height / 2 - 120);
@@ -391,7 +394,8 @@ public sealed class MainWindow : Window
         sel = ch;
         if (!libOpen) ToggleLibrary();
         library.ShowFor(ch);
-        BuildTracks();
+        foreach (var (c, h) in headerOf) h.Background = c == sel ? Theme.Panel3 : Theme.Panel2;
+        RenderBottom();
     }
     void ToggleLibrary()
     {

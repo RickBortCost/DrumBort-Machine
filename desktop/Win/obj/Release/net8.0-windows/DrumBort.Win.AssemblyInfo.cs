@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("DrumBort")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.17.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.17.0+ffcbce9cf2f1d56402b3c972a0614af3114994d5")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.17.0+5b9ecf3cab2def479b983e0969e7c5c2fb96e5c3")]
 [assembly: System.Reflection.AssemblyProductAttribute("DrumBort Machine")]
 [assembly: System.Reflection.AssemblyTitleAttribute("DrumBort")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.17.0.0")]

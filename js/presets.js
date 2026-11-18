@@ -16,7 +16,10 @@
  * I nomi descrivono il suono e non indicano affiliazione con produttori di strumenti.
  */
 
-export const CATEGORIES = ['Bass', 'Lead', 'Pad', 'Keys', 'Piano', 'Organ', 'Strings', 'Brass', 'Pluck', 'Mallet', 'Bell', 'Choir', 'FX'];
+import { WT_PRESETS, normalizeWTPreset } from './wavetable.js';
+
+export const CATEGORIES = ['Wavetable', 'Bass', 'Lead', 'Pad', 'Keys', 'Piano', 'Organ', 'Strings', 'Brass', 'Pluck', 'Mallet', 'Bell', 'Choir', 'FX'];
+export const USER_CAT = 'Utente';
 
 const O = (type, oct = 0, det = 0, g = 1) => ({ type, oct, det, g });
 
@@ -107,10 +110,31 @@ const RAW = {
   sweepdown: { name: 'Downlifter', cat: 'FX', tags: ['sweep', 'noise', 'transition'], osc: [O('sawtooth', 0, 0, 0.4)], noise: { g: 0.8, hp: 300 }, pitch: { from: 12, to: -12, time: 2 }, cut: 6000, res: 2, envOct: 0, fdec: 2, a: 0.01, d: 2, s: 0.6, r: 0.8, lfo: { to: 'cut', rate: 0.4, depth: 0.6 } },
 };
 
+Object.assign(RAW, WT_PRESETS);
+
 // Id dentro ogni preset (servono per le cache dei buffer generati)
 for (const [id, p] of Object.entries(RAW)) p.id = id;
 
 export const PRESETS = RAW;
+
+/** Categorie da mostrare (con "Utente" se esistono preset salvati). */
+export const categories = () => (Object.values(PRESETS).some((p) => p.cat === USER_CAT) ? [USER_CAT, ...CATEGORIES] : CATEGORIES);
+
+/**
+ * Registra i preset utente (patch wavetable salvate dall'editor). Gli id iniziano con "up:".
+ * @param {object[]} list  [{ id, ...preset }]
+ */
+export function setUserPresets(list) {
+  for (const id of Object.keys(PRESETS)) if (id.startsWith('up:')) delete PRESETS[id];
+  for (const p of list || []) {
+    if (!p || typeof p.id !== 'string' || !p.id.startsWith('up:')) continue;
+    const n = normalizeWTPreset(p, { cat: USER_CAT });
+    n.cat = USER_CAT;
+    if (!n.tags.includes('user')) n.tags = ['user', ...n.tags].slice(0, 8);
+    n.id = p.id;
+    PRESETS[p.id] = n;
+  }
+}
 
 /** Preset filtrati per categoria/testo/tag/preferiti. */
 export function findPresets({ cat = null, text = '', favs = null } = {}) {

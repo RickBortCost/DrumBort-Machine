@@ -78,6 +78,7 @@ export function chordName(root, ch) {
 
 import { PRESETS } from './presets.js';
 import { getNoise } from './kits.js';
+import { playWT } from './wavetable.js';
 
 export { PRESETS };
 
@@ -93,8 +94,11 @@ export const isChordTrack = (k) => !SYNTH_TRACKS[k].mono;
 /** Macro utente di una traccia (con default). */
 export const voiceParams = (tr) => ({
   cut: tr.cut || 0, res: tr.res || 0, env: tr.env ?? 1, dec: tr.dec ?? 1,
-  atk: tr.atk ?? 1, rel: tr.rel ?? 1, lfo: tr.lfo ?? 1, rate: tr.rate ?? 1,
+  atk: tr.atk ?? 1, rel: tr.rel ?? 1, lfo: tr.lfo ?? 1, rate: tr.rate ?? 1, pos: tr.pos || 0,
 });
+
+/** Preset effettivo di una traccia: la patch modificata nell'editor, altrimenti quello di libreria. */
+export const presetOf = (tr) => (tr.patch && tr.patch.wt ? tr.patch : PRESETS[tr.preset]);
 
 /** Coda di rilascio (s) di un preset con i parametri utente. */
 export const releaseTime = (pr, p) => pr.r * Math.sqrt(p.dec ?? 1) * (p.rel ?? 1);
@@ -225,6 +229,7 @@ const EPS = 0.0001;
  * @param {number|null} glideFrom  nota da cui scivolare (slide)
  */
 export function playVoice(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = null) {
+  if (pr.wt) return playWT(ctx, out, t, dur, notes, vel, pr, p, glideFrom);
   const accent = vel >= 0.95;
   const decMul = p.dec ?? 1;
   const a = pr.a * (p.atk ?? 1), d = pr.d * decMul, s = pr.s, r = releaseTime(pr, p);

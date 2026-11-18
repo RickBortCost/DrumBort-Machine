@@ -78,7 +78,7 @@ public sealed class MixerView : ScrollViewer
     UIElement FaderRow(int id, double value, double def, Action<double> set, Action begin, Action end, string learn)
     {
         var col = Theme.Track(id);
-        var row = new Grid { Height = 140, Margin = new Thickness(0, 6, 0, 2) };
+        var row = new Grid { Height = 104, Margin = new Thickness(0, 4, 0, 0) };
         row.ColumnDefinitions.Add(new ColumnDefinition());
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) });
         var f = new VFader(0, 1, def, value) { Color = col, LearnId = learn, HorizontalAlignment = HorizontalAlignment.Center };
@@ -146,7 +146,7 @@ public sealed class MixerView : ScrollViewer
             var st = (JsonObject)doc.StackList[id - Doc.StackBase]!;
             int n = (st["tracks"] as JsonArray)?.Count ?? 0;
             sp.Children.Add(Txt.Make($"{n} tracce", 10, Theme.Dim));
-            sp.Children.Add(new Border { Height = 52 });
+            sp.Children.Add(new Border { Height = 48 });
             sp.Children.Add(FaderRow(id, Doc.Num(st, "vol", 0.8), 0.8, v => { st["vol"] = v; doc.CommitQuiet("buses"); }, doc.Snapshot, () => doc.Commit("buses"), $"stack:{id - Doc.StackBase}:vol"));
             bool mute = Doc.Bool(st, "mute");
             var m = new Btn("M", 0, "Mute dello stack") { IsOn = mute, HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -157,7 +157,7 @@ public sealed class MixerView : ScrollViewer
         string k = id == Doc.RetA ? "rev" : id == Doc.RetB ? "dly" : "master";
         double def = id == Doc.RetA ? 0.8 : id == Doc.RetB ? 0.7 : 0.8;
         sp.Children.Add(Txt.Make(id == Doc.MasterBus ? "uscita" : "ritorno", 10, Theme.Dim));
-        sp.Children.Add(new Border { Height = 52 });
+        sp.Children.Add(new Border { Height = 48 });
         sp.Children.Add(FaderRow(id, Doc.Num(fx, k, def), def, v => { fx[k] = v; doc.CommitQuiet("fx"); }, doc.Snapshot, () => doc.Commit("fx"), $"fx:{k}"));
         return b;
     }

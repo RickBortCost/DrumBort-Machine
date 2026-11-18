@@ -2,6 +2,19 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.20.0] - 2026-11-18
+
+### Aggiunto
+- **Windows – EDITOR come il Channel Rack e il Piano roll di FL Studio:**
+  - **graph editor** sotto le note: velocity, intonazione, decay, probabilità, ripetizioni e spostamento per ogni colpo di batteria; velocity, cutoff e decay per ogni nota synth (tasto destro = valore della traccia, Shift = linea retta);
+  - **lunghezza degli step per traccia** (3–64): tracce di lunghezze diverse girano sfasate (poliritmi);
+  - piano roll con **scala e tonica** (righe della scala evidenziate), **note fantasma** delle altre tracce synth, **slide** con Alt+clic;
+  - strumenti: trasponi (±1, ±12), **CHOP**, **GLUE**, **LEGATO**, **UMANIZZA**, **RIFF** (frase nella scala, come Riff Machine), pulisci.
+- **Drummer e Session Player** come in Logic Pro (🥁 DRUMMER o tasto D): stile (pop, rock, house, hip hop, trap, techno, drum & bass, dembow) e pad XY semplice ↔ complesso / morbido ↔ forte per la batteria, con voci e fill; basso (tonica, ottave, groove, walking) o accordi (lunghi, stab, arpeggio, comping) da una progressione nella scala del pattern. Si sente mentre si muove il pad; Annulla ripristina.
+
+### Modificato
+- Mixer: fader più compatti; nel DEVICE del master il sidechain è in un riquadro a parte.
+
 ## [1.19.0] - 2026-11-18
 
 ### Aggiunto

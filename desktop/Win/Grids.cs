@@ -130,7 +130,8 @@ public sealed class StepRow : FrameworkElement
 /// <summary>
 /// Piano roll di una traccia synth: clic su una cella vuota crea una nota (trascinando a destra si
 /// allunga), clic su una nota la toglie, Shift+clic cambia l'accento. PAD e KEYS: più note sullo
-/// stesso step formano un accordo; BASS e LEAD: una nota per step.
+/// stesso step formano un accordo; BASS e LEAD: una nota per step. Alt+clic: slide. Righe della
+/// scala evidenziate, note delle altre tracce synth in trasparenza.
 /// </summary>
 public sealed class PianoRoll : FrameworkElement
 {
@@ -165,7 +166,9 @@ public sealed class PianoRoll : FrameworkElement
             int p = low + Span - 1 - r;
             double y = r * RowH;
             bool black = new[] { 1, 3, 6, 8, 10 }.Contains(p % 12);
-            dc.DrawRectangle(black ? Theme.Bg : Theme.Panel, null, new Rect(Key, y, w - Key, RowH));
+            // Righe della scala del pattern più chiare (come lo "scale highlighting" di FL Studio)
+            bool inScale = Scales.In(doc, p);
+            dc.DrawRectangle(inScale ? (black ? Theme.Panel : Theme.Panel2) : Theme.Bg, null, new Rect(Key, y, w - Key, RowH));
             dc.DrawLine(new Pen(Theme.Dark, 0.5), new Point(Key, y), new Point(w, y));
             dc.DrawRectangle(black ? Brushes.Black : Brushes.WhiteSmoke, new Pen(Theme.Dark, 0.5), new Rect(0, y, Key - 2, RowH));
             if (p % 12 == root || p % 12 == 0)
@@ -178,6 +181,20 @@ public sealed class PianoRoll : FrameworkElement
         for (int s = 0; s <= N; s++)
             dc.DrawLine(new Pen(s % 4 == 0 ? Theme.Edge : Theme.Panel3, s % 16 == 0 ? 1.5 : 0.6), new Point(Key + s * cw, 0), new Point(Key + s * cw, ActualHeight));
         if (Playhead >= 0) dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(40, 255, 155, 61)), null, new Rect(Key + Playhead * cw, 0, cw, ActualHeight));
+        // Note fantasma delle altre tracce synth
+        foreach (int other in doc.Tracks.Where(t => t >= 8 && t != Ch))
+        {
+            var oc = ((SolidColorBrush)Theme.Track(other)).Color;
+            var pen = new Pen(new SolidColorBrush(Color.FromArgb(110, oc.R, oc.G, oc.B)), 1);
+            if (Doc.TrackOf(doc.Pat, other)["steps"] is not JsonArray os) continue;
+            for (int s = 0; s < N && s < os.Count; s++)
+                if (os[s] is JsonObject ost)
+                    foreach (int p in Pitches(ost))
+                    {
+                        int r = low + Span - 1 - p;
+                        if (r >= 0 && r < Span) dc.DrawRectangle(null, pen, new Rect(Key + s * cw + 1, r * RowH + 2, Math.Max(3, Doc.Num(ost, "g", 1) * cw - 2), RowH - 4));
+                    }
+        }
         var steps = Steps;
         for (int s = 0; s < N && s < steps.Count; s++)
         {
@@ -190,6 +207,8 @@ public sealed class PianoRoll : FrameworkElement
                 if (r < 0 || r >= Span) continue;
                 var rect = new Rect(Key + s * cw + 1, r * RowH + 1, Math.Max(3, g * cw - 2), RowH - 2);
                 dc.DrawRoundedRectangle(col, new Pen(acc ? Brushes.White : Theme.Dark, acc ? 1.5 : 1), rect, 2, 2);
+                // Slide (portamento verso la nota successiva)
+                if (Doc.Num(st, "sl", 0) > 0) dc.DrawLine(new Pen(Brushes.White, 1.5), new Point(rect.Right - 6, rect.Bottom - 2), new Point(rect.Right, rect.Top + 2));
             }
         }
     }
@@ -225,6 +244,7 @@ public sealed class PianoRoll : FrameworkElement
         {
             var st = (JsonObject)steps[at]!;
             if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) st["a"] = Doc.Num(st, "a", 0) > 0 ? 0 : 1;
+            else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) st["sl"] = Doc.Num(st, "sl", 0) > 0 ? 0 : 1;
             else RemovePitch(at, p);
             doc.Commit(doc.PatKey);
             e.Handled = true;

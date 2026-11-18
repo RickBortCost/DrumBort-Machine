@@ -182,7 +182,12 @@ public sealed class DeviceView : DockPanel
                 g.Children.Add(FxKnob("filter", "Filtro", -1, 1, 0, Sig));
                 g.Children.Add(FxKnob("res", "Risonanza", 0.5, 12, 0.7, F2));
                 sp.Children.Add(g);
-                // Sidechain: la traccia scelta abbassa i synth (pompaggio)
+                b.Child = sp;
+                // Sidechain in un riquadro a parte: la traccia scelta abbassa i synth (pompaggio)
+                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                row.Children.Add(b);
+                var b2 = Box(Theme.Track(Ch));
+                sp = new StackPanel();
                 sp.Children.Add(Header("Sidechain → synth"));
                 var sg = KnobGrid();
                 var fx = (JsonObject)(doc.Root["fx"] ??= new JsonObject());
@@ -198,8 +203,9 @@ public sealed class DeviceView : DockPanel
                 sg.Children.Add(FxKnob("sc", "Quantità", 0, 1, 0, Pct));
                 sg.Children.Add(FxKnob("scRel", "Rilascio", 0.05, 0.6, 0.18, v => Math.Round(v * 1000) + " ms"));
                 sp.Children.Add(sg);
-                b.Child = sp;
-                return b;
+                b2.Child = sp;
+                row.Children.Add(b2);
+                return row;
             }
             default:
             {

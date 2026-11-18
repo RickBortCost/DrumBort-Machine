@@ -29,9 +29,10 @@ public sealed class MainWindow : Window
     readonly ScrollViewer tlScroll = new() { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled };
     readonly AutomationView autoView;
     readonly MixerView mixerView;
-    int busSel = -1;              // ritorno, master o stack mostrato nel DEVICE (−1 = la traccia selezionata)
+    int busSel = -1;
+    EditorPanel? lastEditor; int editorSlot = -1, editorSteps = -1;              // ritorno, master o stack mostrato nel DEVICE (−1 = la traccia selezionata)
     ScrollViewer tracksSv = null!;
-    StepRow? drumEditor;
+    EditorPanel? editor;
     readonly StackPanel heads = new(), rows = new();
     readonly ContentControl bottomHost = new();
     readonly Grid root = new();
@@ -188,6 +189,9 @@ public sealed class MainWindow : Window
         var add = new Btn("＋ TRACCIA", 0, "Nuove tracce (Ctrl+Alt+N)") { Fg = Theme.Green };
         add.Click += NewTracks;
         tb.Children.Add(add);
+        var drummer = new Btn("🥁 DRUMMER", 0, "Drummer e Session Player: batteria, basso e accordi generati da stile e pad XY (D)");
+        drummer.Click += OpenPlayers;
+        tb.Children.Add(drummer);
         libB.Click += ToggleLibrary;
         tb.Children.Add(libB);
         tb.Children.Add(new Border { Width = 16 });
@@ -442,7 +446,7 @@ public sealed class MainWindow : Window
     void RenderBottom()
     {
         devTab.IsOn = bottom == "dev"; rollTab.IsOn = bottom == "roll"; autoTab.IsOn = bottom == "auto"; mixTab.IsOn = bottom == "mix";
-        drumEditor = null;
+        editor = null;
         if (busSel >= 0 && !doc.BusExists(busSel)) busSel = -1;
         if (bottom == "mix")
         {
@@ -460,31 +464,29 @@ public sealed class MainWindow : Window
             bottomHost.Content = autoView;
             return;
         }
-        if (bottom == "roll" && sel >= 8)
+        if (bottom == "roll")
         {
-            if (roll != null && roll.Ch == sel && bottomHost.Content is ScrollViewer cur && cur.Content == roll) { roll.InvalidateVisual(); return; }
-            roll = new PianoRoll(doc, sel);
-            bottomHost.Content = new ScrollViewer { Content = roll, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Background = Theme.Bg };
-            roll.Loaded += (_, _) => ((ScrollViewer)bottomHost.Content).ScrollToVerticalOffset(roll.Height / 2 - 120);
+            // Stesso editor se la traccia e il pattern non cambiano (scorrimento e parametro restano)
+            if (lastEditor is EditorPanel ep && ep.Ch == sel && editorSlot == doc.Slot && editorSteps == doc.StepCount && sel >= 0)
+            {
+                editor = ep; roll = ep.Roll; ep.Redraw();
+                if (bottomHost.Content != ep) bottomHost.Content = ep;
+                return;
+            }
+            if (sel < 0)
+            {
+                roll = null;
+                var t = Txt.Make("Seleziona una traccia.", 13, Theme.Dim); t.Margin = new Thickness(16);
+                bottomHost.Content = new Border { Background = Theme.Panel, Child = t };
+                return;
+            }
+            editor = lastEditor = new EditorPanel(doc, sel);
+            editorSlot = doc.Slot; editorSteps = doc.StepCount;
+            roll = editor.Roll;
+            bottomHost.Content = editor;
             return;
         }
         roll = null;
-        if (bottom == "roll")
-        {
-            var dp = new DockPanel { Background = Theme.Panel };
-            string head = sel >= 0 ? $"P{doc.Slot + 1} · {doc.TrackShort(sel)} {doc.TrackName(sel)} — clic: colpo · Shift o tasto destro: accento · trascina: dipingi" : "Seleziona una traccia.";
-            var t = Txt.Make(head, 12, Theme.Dim);
-            t.Margin = new Thickness(10, 8, 10, 4);
-            DockPanel.SetDock(t, Dock.Top);
-            dp.Children.Add(t);
-            if (sel >= 0)
-            {
-                drumEditor = new StepRow(doc, sel) { Height = 90, Margin = new Thickness(10, 4, 10, 10), VerticalAlignment = VerticalAlignment.Top };
-                dp.Children.Add(drumEditor);
-            }
-            bottomHost.Content = dp;
-            return;
-        }
         devices.Ch = bottom == "dev" && busSel >= 0 ? busSel : sel;
         devices.Render();
         bottomHost.Content = devices;
@@ -534,6 +536,7 @@ public sealed class MainWindow : Window
         else doc.Op("play", doc.ArrView ? new JsonObject { ["from"] = timeline.Start } : null);
     }
 
+    void OpenPlayers() => new PlayersDialog(this, doc, sel).ShowDialog();
     void ExportAudio() => new ExportDialog(this, doc).ShowDialog();
     void Tick()
     {
@@ -546,7 +549,7 @@ public sealed class MainWindow : Window
         int step = playing ? (int)(e.Seq.Tick % n) : -1;
         foreach (var r in stepRows) if (r.Playhead != step) { r.Playhead = step; r.InvalidateVisual(); }
         if (roll != null && roll.Playhead != step) { roll.Playhead = step; roll.InvalidateVisual(); }
-        if (drumEditor != null && drumEditor.Playhead != step) { drumEditor.Playhead = step; drumEditor.InvalidateVisual(); }
+        editor?.SetPlayhead(step);
         if (bottom == "auto" && bottomHost.Content == autoView) autoView.SetPlayhead(step);
         if (bottom == "mix" && bottomHost.Content == mixerView) mixerView.UpdateMeters(e);
         if (doc.ArrView)
@@ -651,8 +654,7 @@ public sealed class MainWindow : Window
     void RedrawNotes()
     {
         foreach (var r in stepRows) r.InvalidateVisual();
-        drumEditor?.InvalidateVisual();
-        roll?.InvalidateVisual();
+        editor?.Redraw();
         if (doc.ArrView) timeline.InvalidateVisual();
     }
 
@@ -684,6 +686,7 @@ public sealed class MainWindow : Window
         else if (e.Key == Key.O && mod == ModifierKeys.Control) { OpenFile(); e.Handled = true; }
         else if (e.Key == Key.E && mod == ModifierKeys.Control) { ExportAudio(); e.Handled = true; }
         else if (e.Key == Key.R && mod == ModifierKeys.None) { ToggleRec(); e.Handled = true; }
+        else if (e.Key == Key.D && mod == ModifierKeys.None && !(Keyboard.FocusedElement is Timeline)) { OpenPlayers(); e.Handled = true; }
         else if (e.Key == Key.X && mod == ModifierKeys.None) { SetBottom(bottom == "mix" ? "dev" : "mix"); e.Handled = true; }
         else if (e.Key == Key.F5 && mod == ModifierKeys.None) { SetView(true); e.Handled = true; }
         else if (e.Key == Key.F6 && mod == ModifierKeys.None) { SetView(false); e.Handled = true; }
@@ -736,6 +739,17 @@ public sealed class MainWindow : Window
         enc.Save(f);
     }
 
+    static void ShotOf(Window w, string path)
+    {
+        var dpi = VisualTreeHelper.GetDpi(w);
+        var rtb = new RenderTargetBitmap((int)(w.ActualWidth * dpi.DpiScaleX), (int)(w.ActualHeight * dpi.DpiScaleY), dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+        var host = new System.Windows.Shapes.Rectangle();
+        rtb.Render((Visual)w.Content);
+        var enc = new PngBitmapEncoder(); enc.Frames.Add(BitmapFrame.Create(rtb));
+        using var f = File.Create(path);
+        enc.Save(f);
+    }
+
     void SelfTest()
     {
         try
@@ -745,6 +759,9 @@ public sealed class MainWindow : Window
             SetBottom("dev");
             library.ShowEffects();
             Shot(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-step.png"));
+            // Editor della traccia synth: piano roll con scala e note fantasma, graph editor
+            Select(8, false, false); SetBottom("roll");
+            Shot(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-editor.png"));
             // Track Stack con batteria, effetto sul ritorno A, mixer
             doc.SetStack(0, 0); doc.SetStack(1, 0); doc.SetStack(2, 0);
             doc.Chain(Doc.StackBase).Add(DeviceSpecs.New("comp"));
@@ -771,6 +788,19 @@ public sealed class MainWindow : Window
                 Console.WriteLine($"export {src}: {l.Length / 48000.0:0.00} s, peak {pk:0.000}");
                 if (pk < 0.01) throw new Exception($"export {src} silenzioso");
             }
+            // Drummer e Session Player su una copia del pattern
+            var test = (JsonObject)doc.Pat.DeepClone();
+            foreach (var st in Players.DrumStyles)
+            {
+                Players.Drums(test, st.id, 0.7, 0.7, Enumerable.Repeat(true, 8).ToArray(), 0.5, 3);
+                int hits = ((JsonArray)test["steps"]!).Sum(r => ((JsonArray)r!).Count(v => Doc.Val(v) > 0));
+                Console.WriteLine($"drummer {st.id}: {hits} colpi");
+                if (hits < 6) throw new Exception($"drummer {st.id}: troppo pochi colpi");
+            }
+            var pdlg = new PlayersDialog(this, doc, 0);
+            pdlg.Show(); pdlg.UpdateLayout();
+            ShotOf(pdlg, Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-drummer.png"));
+            pdlg.Close();
             // Audio e MIDI: driver ASIO e ingressi MIDI (sul runner nessuno), finestra di dialogo
             Console.WriteLine($"asio: {Asio.Drivers().Length} driver");
             MidiInput.Start(Dispatcher);

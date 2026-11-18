@@ -93,6 +93,8 @@ function save() {
         slot: state.slot, slots: state.slots, fx: state.fx, song: state.song, lock: state.lock, midi: state.midi, view: state.view,
       }));
     } catch (_) { /* quota / navigazione privata */ }
+    // Le modifiche cambiano le voci: pre-renderizza in background quelle nuove
+    if (engine.ctx) engine.prewarm(seq.pattern);
   }, 250);
 }
 
@@ -349,8 +351,12 @@ function setToggle(el, on) {
 function clearPlayhead() {
   if (synthUI) synthUI.clearPlayhead();
   phCells.forEach((c, t) => { if (c) c.classList.remove('ph'); phCells[t] = null; });
-  $$('.pager .page').forEach((b) => b.classList.remove('lit'));
+  pagerBtns.forEach((b) => b.classList.remove('lit'));
+  litPage = -1;
 }
+
+const pagerBtns = $$('.pager .page');
+let litPage = -1;
 
 function showTick(e) {
   // Song mode: la vista segue il pattern in riproduzione
@@ -369,7 +375,10 @@ function showTick(e) {
     }
   }
   const page = (e.tick % STEPS) >> 3;
-  $$('.pager .page').forEach((b) => b.classList.toggle('lit', +b.dataset.page === page));
+  if (page !== litPage) {
+    litPage = page;
+    pagerBtns.forEach((b) => b.classList.toggle('lit', +b.dataset.page === page));
+  }
   if (synthUI) synthUI.showTick(e);
 }
 
@@ -470,10 +479,11 @@ grid.addEventListener('keydown', (e) => {
 function hitPad(t, vel = 1) {
   if (!engine.ctx) return;
   engine.trigger(t, engine.ctx.currentTime, vel, seq.pattern.tracks[t]);
-  const pad = pads[t];
-  pad.classList.remove('hit');
-  void pad.offsetWidth;            // riavvia l'animazione
-  pad.classList.add('hit');
+  // Web Animations: nessun reflow forzato (prima: classList + offsetWidth)
+  if (pads[t].animate) {
+    pads[t].animate([{ filter: 'brightness(1.8)', transform: 'translateY(2px)' }, { filter: 'none', transform: 'none' }],
+      { duration: 160, easing: 'ease-out' });
+  }
   if (ui.rec) recordHit(t, vel);
 }
 

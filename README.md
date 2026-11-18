@@ -92,6 +92,7 @@ js/sequencer.js         pattern, step, swing, tempo
 js/synth.js             voci synth, preset, scale e accordi
 js/synthpattern.js      dati e demo della sezione synth
 js/synthui.js           interfaccia della sezione synth
+js/voicecache.js        cache delle voci pre-renderizzate (prestazioni)
 js/ui.js                interfaccia, salvataggio, undo, song, PWA
 js/export.js            render offline e codifica WAV
 js/midi.js              Web MIDI (note e clock)
@@ -119,6 +120,7 @@ npm ci && npx playwright install chromium webkit
 npm test             # versione + e2e su Chromium
 npm run test:all     # Chromium + WebKit
 npm run test:live    # contro il sito pubblicato
+npm run perf         # benchmark audio e UI
 ```
 
 Controllano layout di batteria e synth (440×956, 956×440, 820×1180, 1180×820: niente scroll, target ≥ 44 px), funzioni, segnale delle 80 voci di batteria e dei 15 preset synth, export, service worker e uso offline.

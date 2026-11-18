@@ -2,6 +2,18 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.2.1] - 2026-11-18
+
+### Prestazioni
+- Cache delle voci: ogni suono di batteria e ogni nota del sequencer viene sintetizzato una sola volta in background e poi riprodotto come buffer. Carico audio in riproduzione circa 5–6 volte più basso (benchmark: da 2,5× a ~14× tempo reale).
+- Pre-render all'avvio, al cambio pattern/kit e dopo ogni modifica: anche il primo giro usa le voci in cache.
+- Polifonia limitata: una voce per strumento della batteria (come l'hardware), BASS/LEAD monofonici, massimo 3 accordi PAD.
+- Scheduler con timer in un Web Worker e finestra di anticipo di 120 ms: meno buchi quando la UI è occupata o la pagina è in background.
+- UI: playhead senza filtri CSS, contenimento del rendering delle celle (layout da ~44 ms a ~2 ms in 6 s), animazione dei pad senza reflow forzati.
+
+### Aggiunto
+- `npm run perf`: benchmark di audio e UI.
+
 ## [1.2.0] - 2026-11-18
 
 ### Aggiunto
@@ -72,6 +84,7 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); vers
 - Layout touch per iPhone e iPad (portrait/landscape), PWA offline.
 - Deploy automatico su GitHub Pages.
 
+[1.2.1]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.1.0...v1.1.1

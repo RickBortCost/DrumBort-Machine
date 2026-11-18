@@ -11,8 +11,11 @@
  */
 
 import { KITS } from './kits.js';
+import { PRESETS, playVoice } from './synth.js';
 
 const TRACKS = 8;
+const SYNTH_TRACKS = 3;
+export const SYNTH_CH = TRACKS;   // canali 8-10: BASS, LEAD, PAD
 const CH_IDX = 3;   // Closed Hat
 const OH_IDX = 4;   // Open Hat (strozzato dal Closed Hat)
 
@@ -127,13 +130,13 @@ export class Engine {
     this.delay.connect(this.dlyTone).connect(this.dlyFb).connect(this.delay);
     this.delay.connect(this.dlyOut).connect(this.fxIn);
 
-    // --- Canali con mandate post-pan ---
-    for (let i = 0; i < TRACKS; i++) {
+    // --- Canali con mandate post-pan (0-7 batteria → bus kit, 8-10 synth → filtro master) ---
+    for (let i = 0; i < TRACKS + SYNTH_TRACKS; i++) {
       const gain = ctx.createGain();
       const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
       const post = pan || gain;
       if (pan) gain.connect(pan);
-      post.connect(this.kitIn);
+      post.connect(i < TRACKS ? this.kitIn : this.fxIn);
       const rev = ctx.createGain();
       const dly = ctx.createGain();
       rev.gain.value = 0;
@@ -222,6 +225,7 @@ export class Engine {
   /** Applica il mixer di un intero pattern. */
   applyMix(pattern, time) {
     pattern.tracks.forEach((tr, i) => this.setChannel(i, tr, time));
+    if (pattern.synth) pattern.synth.tracks.forEach((tr, k) => this.setChannel(SYNTH_CH + k, tr, time));
   }
 
   /** Effetti master (globali). `bpm` serve per il tempo del delay. */
@@ -300,6 +304,23 @@ export class Engine {
     src.connect(g).connect(out);
     src.start(t);
     src.stop(t + len + 0.02);
+  }
+
+  // -------------------------------------------------------------------
+  // Synth
+  // -------------------------------------------------------------------
+  /**
+   * Suona una nota/accordo sulla traccia synth k (0 BASS, 1 LEAD, 2 PAD).
+   * @param {number|null} dur  durata gate (s); null = tenuta fino a handle.release()
+   * @returns {{release(time:number):void}|null}
+   */
+  playSynth(k, time, dur, notes, vel, tr, glideFrom = null) {
+    const ctx = this.ctx;
+    if (!ctx) return null;
+    const pr = PRESETS[tr.preset];
+    if (!pr) return null;
+    const t = Math.max(time, ctx.currentTime);
+    return playVoice(ctx, this.channels[SYNTH_CH + k].gain, t, dur, notes, vel, pr, tr, glideFrom);
   }
 
   /** Click del metronomo (fuori dalla catena effetti). */

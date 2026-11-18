@@ -1,5 +1,6 @@
 /**
- * midi.js — Web MIDI: note in (pad), note out (canale 10, mappa GM), clock in/out.
+ * midi.js — Web MIDI: note in (pad/synth), note out (batteria canale 10 mappa GM,
+ * synth canali 1-3), clock in/out.
  * Non disponibile su iOS/iPadOS Safari: la UI mostra un avviso.
  * Il clock in segue tempo, start e stop esterni (non è un aggancio di fase).
  */
@@ -27,7 +28,8 @@ export class Midi {
     this.opts = { noteIn: true, noteOut: false, clockOut: false, clockIn: false };
     this._ticks = [];
     // Hook
-    this.onNote = null;      // (track, velocity)
+    this.onNote = null;      // (track, velocity)  — batteria, mappa GM
+    this.onRaw = null;       // (note, velocity, on) → true se gestita (sezione synth)
     this.onStart = null;     // ()
     this.onStop = null;      // ()
     this.onTempo = null;     // (bpm)
@@ -65,7 +67,11 @@ export class Midi {
     if (st === 0xf8) { if (this.opts.clockIn) this._clockTick(e.timeStamp); return; }
     if (st === 0xfa || st === 0xfb) { if (this.opts.clockIn) { this._ticks = []; this.onStart && this.onStart(); } return; }
     if (st === 0xfc) { if (this.opts.clockIn) this.onStop && this.onStop(); return; }
-    if ((st & 0xf0) === 0x90 && d2 > 0 && this.opts.noteIn) {
+    const type = st & 0xf0;
+    if (!this.opts.noteIn || (type !== 0x90 && type !== 0x80)) return;
+    const on = type === 0x90 && d2 > 0;
+    if (this.onRaw && this.onRaw(d1, d2 / 127, on)) return;
+    if (on) {
       const t = GM_IN[d1];
       if (t !== undefined && this.onNote) this.onNote(t, d2 / 127);
     }
@@ -93,6 +99,16 @@ export class Midi {
     const ts = this._ts(ctx, time), n = GM_OUT[track];
     this.output.send([0x99, n, Math.max(1, Math.round(vel * 127))], ts);
     this.output.send([0x89, n, 0], ts + 60);
+  }
+
+  /** Note synth: BASS canale 1, LEAD canale 2, PAD canale 3. */
+  synthNotes(ctx, k, notes, time, dur, vel) {
+    if (!this.output || !this.opts.noteOut) return;
+    const ts = this._ts(ctx, time), v = Math.max(1, Math.round(vel * 127));
+    for (const n of notes) {
+      this.output.send([0x90 | k, n, v], ts);
+      this.output.send([0x80 | k, n, 0], ts + dur * 1000);
+    }
   }
 
   /** 6 impulsi di clock per sedicesimo. */

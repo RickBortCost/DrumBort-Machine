@@ -63,8 +63,8 @@ const browser = await chromium.launch();
   const port = 8800 + Math.floor(Math.random() * 500);
   const host = await startHost(['--no-audio'], port);
   try {
-    const pc = await open(browser, `http://localhost:${port}/`, false);
-    const ph = await open(browser, `http://127.0.0.1:${port}/?full`, true);
+    const pc = await open(browser, `http://localhost:${port}/?demo`, false);
+    const ph = await open(browser, `http://127.0.0.1:${port}/?full&demo`, true);
     const roles = await Promise.all([pc, ph].map((d) => d.page.evaluate(() => [drumbort.remote.role, drumbort.remote.native, drumbort.engine.silent, document.querySelector('#remoteBadge').textContent])));
     check('PC e telefono sono controller del motore nativo', roles.every((r) => r[0] === 'control' && r[1] && r[2] && r[3] === 'CTRL·C#'), JSON.stringify(roles));
 
@@ -118,6 +118,7 @@ const browser = await chromium.launch();
     check('il Sound Lab non tocca il progetto del PC', pcSame === pcSteps);
     // Il PC lo assegna a una traccia: il kit utente col suono arriva al motore
     await pc.page.evaluate(() => { const s = drumbort.state.userSounds.find((x) => x.name === 'Kick dal Lab'); document.querySelector('[data-btab="kits"]').click(); });
+    await pc.page.click('[data-sxv="session"]');
     await pc.page.click('.sx-th[data-sel="0"]');
     await pc.page.click('[data-btab="kits"]');
     await pc.page.click('.bw-item[data-usound]');
@@ -135,8 +136,8 @@ const browser = await chromium.launch();
   const port = 9400 + Math.floor(Math.random() * 500);
   const host = await startHost(['--mode', 'browser'], port);
   try {
-    const pc = await open(browser, `http://localhost:${port}/`, false);
-    const ph = await open(browser, `http://127.0.0.1:${port}/?full`, true);
+    const pc = await open(browser, `http://localhost:${port}/?demo`, false);
+    const ph = await open(browser, `http://127.0.0.1:${port}/?full&demo`, true);
     const r = await Promise.all([pc, ph].map((d) => d.page.evaluate(() => [drumbort.remote.role, drumbort.engine.silent])));
     check('PC = motore audio, telefono = controller', r[0][0] === 'engine' && !r[0][1] && r[1][0] === 'control' && r[1][1], JSON.stringify(r));
     await ph.page.click('#play');

@@ -8,6 +8,8 @@ import { allKits, kitById, USER_SOUNDS, buildVoice } from './kits.js';
 import { PRESETS, categories, findPresets } from './presets.js';
 import { SYNTH_TRACKS } from './synth.js';
 import { SYNTH_CH } from './engine.js';
+import { initTracksView } from './tracks.js';
+import { initFxChain } from './fxchain.js';
 import { DRUM_TRACKS, SESSION_TRACKS, hasClip, QUANTS, FOLLOW, FOLLOW_BARS, MAX_ARR_BARS } from './session.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -23,7 +25,8 @@ export function initStudio(app) {
   const { engine, seq, state, ui } = app;
   let active = false;
   let selTrack = 0;        // traccia selezionata (0-11)
-  let view = 'session';    // 'session' | 'arrange' (Tab)
+  let view = 'tracks';     // 'tracks' (predefinita, stile Logic) | 'session' | 'arrange' (Tab)
+  ui.mixerOn = false;      // nella vista TRACCE il mixer si apre a richiesta
 
   const isSynth = (i) => i >= DRUM_TRACKS;
   const trackName = (i, p = app.pat()) => (isSynth(i) ? SYNTH_TRACKS[i - DRUM_TRACKS].name : app.kitOf(p).tracks[i].name);
@@ -41,14 +44,22 @@ export function initStudio(app) {
   // ===================================================================
   const panel = $('#session');
   panel.innerHTML = `<div class="sx-tool">
-      <div class="seg sx-views"><button class="btn sm" data-sxv="session">SESSION</button><button class="btn sm" data-sxv="arrange">ARRANGE</button></div>
+      <div class="seg sx-views"><button class="btn sm" data-sxv="tracks">TRACCE</button><button class="btn sm" data-sxv="session">SESSION</button><button class="btn sm" data-sxv="arrange">GRIGLIA</button></div>
       <label class="sx-q">LANCIO <select id="sxQuant" aria-label="Quantizzazione del lancio">${QUANTS.map((q) => `<option value="${q.v}">${q.label}</option>`).join('')}</select></label>
       <button id="arrPlay" class="btn sm" aria-pressed="false" title="Riproduci l'arrangiamento">▶ ARR</button>
       <button id="arrRec" class="btn sm" aria-pressed="false" title="Registra i lanci della session nell'arrangiamento">● REC ARR</button>
       <button id="sxAuto" class="btn sm" title="Automazione della clip selezionata (A)">∿ AUTO</button>
       <button id="sxMacro" class="btn sm" title="Macro (M)">◎ MACRO</button>
+      <button id="sxMixer" class="btn sm" aria-pressed="false" title="Mostra il mixer">▤ MIXER</button>
+      <div class="seg sx-bottom" role="group" aria-label="Pannello in basso">
+        <button class="btn sm" data-bottom="fx" title="Effetti della traccia selezionata">FX</button>
+        <button class="btn sm" data-bottom="editor" title="Note della traccia selezionata">NOTE</button>
+      </div>
+      <button id="sxBrowser" class="btn sm" aria-pressed="true" title="Mostra/nascondi il browser (B)">◧</button>
+      <button id="sxSide" class="btn sm" aria-pressed="true" title="Mostra/nascondi il pannello laterale (I)">◨</button>
       <span class="sx-info" id="sxInfo"></span>
     </div>
+    <div class="sx-tracks" id="sxTracks"></div>
     <div class="sx-sess" id="sxSess"></div>
     <div class="sx-arr" id="sxArr" hidden>
       <div class="ar-tools">
@@ -156,11 +167,22 @@ export function initStudio(app) {
     $('#sxInfo').textContent = n ? `${n} bar${state.arr.on && seq.playing ? ` · ${ui.arrBar + 1}/${n}` : ''}` : '';
     $('#sxSess').hidden = view !== 'session';
     $('#sxArr').hidden = view !== 'arrange';
+    $('#sxTracks').hidden = view !== 'tracks';
+    applyPanels();
+    // Vista TRACCE: niente controlli da session; il mixer si apre con ▤ MIXER
+    panel.dataset.view = view;
+    document.getElementById('app').classList.toggle('mixer-off', view === 'tracks' && !ui.mixerOn);
+    app.setToggle($('#sxMixer'), view !== 'tracks' || ui.mixerOn);
   }
   panel.querySelector('.sx-tool').addEventListener('click', (e) => {
     const v = e.target.closest('[data-sxv]');
     if (v) { setView(v.dataset.sxv); return; }
     if (e.target.closest('#arrPlay')) { app.toggleArr(); return; }
+    if (e.target.closest('#sxBrowser')) { togglePanel('browser'); return; }
+    if (e.target.closest('#sxSide')) { togglePanel('side'); return; }
+    const bt = e.target.closest('[data-bottom]');
+    if (bt) { setBottom(bt.dataset.bottom); return; }
+    if (e.target.closest('#sxMixer')) { ui.mixerOn = !ui.mixerOn; if (view !== 'tracks') ui.mixerOn = true; renderTool(); return; }
     if (e.target.closest('#sxMacro')) { app.openMacros(); return; }
     if (e.target.closest('#sxAuto')) { app.openAuto(selTrack < DRUM_TRACKS ? `d${selTrack}.vol` : `s${selTrack - DRUM_TRACKS}.cut`); return; }
     if (e.target.closest('#arrRec')) {
@@ -172,8 +194,68 @@ export function initStudio(app) {
   function setView(v) {
     view = v;
     renderTool();
-    if (v === 'arrange') renderArr(); else renderSession();
+    if (v === 'arrange') renderArr(); else if (v === 'tracks') tracks.render(); else renderSession();
   }
+  const tracks = initTracksView({ ...app, openLibrary: () => app.openLibrary(), setBottom: (m) => setBottom(m) }, $('#sxTracks'), COLORS);
+
+  // ===================================================================
+  // Pannelli: browser e pannello laterale nascondibili; in basso effetti o note
+  // ===================================================================
+  if (!state.panels) state.panels = { browser: true, side: true, bottom: 'editor' };
+  function applyPanels() {
+    const a = document.getElementById('app'), P = state.panels;
+    a.classList.toggle('no-browser', !P.browser);
+    a.classList.toggle('no-side', !P.side);
+    a.classList.toggle('bottom-fx', P.bottom === 'fx');
+    app.setToggle($('#sxBrowser'), P.browser);
+    app.setToggle($('#sxSide'), P.side);
+    $$('[data-bottom]', panel).forEach((b) => app.setToggle(b, b.dataset.bottom === P.bottom));
+    if (P.bottom === 'fx') renderFx();
+  }
+  function togglePanel(k) { state.panels[k] = !state.panels[k]; applyPanels(); app.save(); }
+  function setBottom(m) { state.panels.bottom = m; applyPanels(); app.save(); }
+  document.addEventListener('keydown', (e) => {
+    if (!active || e.ctrlKey || e.metaKey || e.altKey || e.target.closest('input, select, textarea') || (app.kbActive && app.kbActive())) return;
+    if (e.key === 'b' || e.key === 'B') { e.preventDefault(); togglePanel('browser'); }
+    if (e.key === 'i' || e.key === 'I') { e.preventDefault(); togglePanel('side'); }
+  });
+
+  // Catena di effetti della traccia selezionata (fxchain.js): un riquadro per effetto
+  const chain = initFxChain(app, $('#fxbar'), {
+    isSynth, channel, setBottom,
+    color: (i) => COLORS[i], short: (i) => trackShort(i), name: (i) => trackName(i),
+  });
+  const renderFx = () => chain.render(selTrack);
+
+  // Barra inferiore ridimensionabile: trascina il bordo superiore (doppio clic = altezza iniziale)
+  const splitter = document.createElement('div');
+  splitter.className = 'sx-split';
+  splitter.setAttribute('role', 'separator');
+  splitter.setAttribute('aria-orientation', 'horizontal');
+  splitter.title = 'Trascina per ridimensionare il pannello in basso';
+  document.getElementById('app').appendChild(splitter);
+  const applyH = () => {
+    const h = state.panels.h;
+    document.getElementById('app').style.setProperty('--bottom-h', h ? `${h}px` : '');
+  };
+  let sp = null;
+  splitter.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    splitter.setPointerCapture(e.pointerId);
+    const cur = ($('#fxbar').offsetParent ? $('#fxbar') : document.querySelector('#app .grid')).getBoundingClientRect().height;
+    sp = { y: e.clientY, h: cur };
+  });
+  splitter.addEventListener('pointermove', (e) => {
+    if (!sp) return;
+    state.panels.h = Math.round(Math.min(window.innerHeight * 0.7, Math.max(120, sp.h + (sp.y - e.clientY))));
+    applyH();
+    if (state.panels.bottom === 'fx') chain.redraw();
+  });
+  const spEnd = () => { if (sp) { sp = null; app.save(); window.dispatchEvent(new Event('resize')); } };
+  splitter.addEventListener('pointerup', spEnd);
+  splitter.addEventListener('pointercancel', spEnd);
+  splitter.addEventListener('dblclick', () => { delete state.panels.h; applyH(); app.save(); window.dispatchEvent(new Event('resize')); });
+  applyH();
 
   // ===================================================================
   // Arrangiamento: tracce × battute; ogni cella = pattern da cui suona la clip
@@ -333,6 +415,7 @@ export function initStudio(app) {
       const i = +el.dataset.i, tr = mixParams(i);
       el.querySelector('.mx-name b').textContent = trackShort(i, state.slots[mixSlot(i)]);
       el.classList.toggle('picked', i === selTrack);
+      el.hidden = !state.tracks.includes(i);         // solo i canali attivi
       el.querySelectorAll('input[data-p]').forEach((inp) => { inp.value = tr[inp.dataset.p] || 0; });
       app.setToggle(el.querySelector('[data-ms="mute"]'), tr.mute);
       app.setToggle(el.querySelector('[data-ms="solo"]'), tr.solo);
@@ -454,7 +537,10 @@ export function initStudio(app) {
 
   return {
     barTick,
-    toggleView() { setView(view === 'session' ? 'arrange' : 'session'); },
+    get view() { return view; },
+    tick(e) { if (active && view === 'tracks') tracks.tick(e); },
+    clearPlayhead() { tracks.clearPlayhead(); },
+    toggleView() { setView(view === 'tracks' ? 'session' : view === 'session' ? 'arrange' : 'tracks'); },
     setActive(on) {
       const was = active;
       active = on;
@@ -464,9 +550,10 @@ export function initStudio(app) {
       if (!active) return;
       selTrack = ui.view === 'synth' ? DRUM_TRACKS + (ui.ssel || 0) : state.sel;
       renderTool();
-      if (view === 'arrange') renderArr(); else renderSession();
+      if (view === 'arrange') renderArr(); else if (view === 'tracks') tracks.render(); else renderSession();
       renderMixer();
       renderBrowser();
+      if (state.panels && state.panels.bottom === 'fx') renderFx();
     },
   };
 }

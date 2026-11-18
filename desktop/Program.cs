@@ -84,6 +84,28 @@ app.MapGet("/host.json", () => Results.Json(new
     native = hub.Native, clients = hub.Count, version = typeof(Hub).Assembly.GetName().Version?.ToString(3),
     engine = engine?.Status(),
 }));
+// Uscita audio del motore nativo: elenco, scelta, nuova lettura dei dispositivi
+bool realAudio = engine != null && !Flag("--no-audio");
+app.MapGet("/audio", () => !realAudio ? Results.Json(new { available = false }) : Results.Json(new
+{
+    available = true, current = engine!.CurrentDevice, follow = engine.FollowDefault,
+    devices = engine.Devices().Select(d => new { d.name, d.isDefault }),
+}));
+app.MapPost("/audio", async (HttpContext ctx) =>
+{
+    if (!realAudio) return Results.Json(new { available = false });
+    var body = await JsonNode.ParseAsync(ctx.Request.Body) as JsonObject;
+    string? name = body?["device"]?.GetValue<string>();
+    bool refresh = body?["refresh"]?.GetValue<bool>() ?? false;
+    try
+    {
+        if (refresh) engine!.Refresh();
+        else engine!.SelectDevice(name);
+        return Results.Json(new { available = true, current = engine.CurrentDevice, follow = engine.FollowDefault });
+    }
+    catch (Exception e) { return Results.Json(new { available = true, error = e.Message }, statusCode: 500); }
+});
+if (engine != null) engine.DeviceChanged += (name) => _ = hub.Broadcast(new JsonObject { ["t"] = "audio", ["device"] = name });
 var types = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
 types.Mappings[".webmanifest"] = "application/manifest+json";
 app.UseStaticFiles(new StaticFileOptions

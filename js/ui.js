@@ -23,6 +23,7 @@ import { initLab, isSoundPack } from './lab.js';
 import { initPianoRoll } from './pianoroll.js';
 import { makeZip } from './zip.js';
 import { initAutomation } from './automation.js';
+import { initAudioOut } from './audioout.js';
 import { initMacros, normalizeMacros, defaultMacros } from './macros.js';
 import { decodeShare } from './projects.js';
 import { fillPattern } from './generate.js';
@@ -41,6 +42,7 @@ let lab = null;
 let piano = null;       // piano roll (pianoroll.js)
 let auto = null;        // editor dell'automazione (automation.js)
 let macros = null;      // macro di progetto (macros.js)
+let audioOut = null;    // scelta dell'uscita audio (audioout.js)
 
 const engine = new Engine();
 const seq = new Sequencer(engine);
@@ -68,6 +70,7 @@ const state = {
   userPresets: [],                  // preset synth salvati dall'editor wavetable
   userSounds: [],                   // suoni di batteria creati nel Sound Lab
   macros: defaultMacros(),          // 4 macro di progetto (macros.js)
+  tracks: [],                       // canali attivi, in ordine (0-7 batteria, 8-11 synth): vista TRACCE
   projectName: '',                  // progetto aperto
   layout: null,                     // 'compact' | 'studio' (null = scelta automatica al primo avvio)
   session: normalizeSession(null),  // clip in riproduzione per traccia, quantizzazione, follow action
@@ -111,6 +114,20 @@ function normalizeSong(o) {
   return { on: !!(o && o.on), chain };
 }
 
+/**
+ * Canali attivi della vista TRACCE. Progetti senza l'elenco (versioni precedenti): i canali che
+ * hanno note in almeno un pattern.
+ */
+function normalizeTracks(t) {
+  if (Array.isArray(t)) return [...new Set(t.filter((i) => Number.isInteger(i) && i >= 0 && i < 12))];
+  const used = [];
+  for (let i = 0; i < 12; i++) {
+    const has = state.slots.some((p) => (i < 8 ? p.steps[i].some(Boolean) : p.synth.tracks[i - 8].steps.some(Boolean) || p.synth.tracks[i - 8].arp.on));
+    if (has) used.push(i);
+  }
+  return used;
+}
+
 function loadState() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORE_KEY));
@@ -134,14 +151,22 @@ function loadState() {
       state.session = normalizeSession(raw.session);
       state.arr = normalizeArr(raw.arr);
       state.macros = normalizeMacros(raw.macros);
+      state.tracks = normalizeTracks(raw.tracks);
+      if (raw.panels && typeof raw.panels === 'object') state.panels = { browser: raw.panels.browser !== false, side: raw.panels.side !== false, bottom: raw.panels.bottom === 'fx' ? 'fx' : 'editor', ...(Number.isFinite(raw.panels.h) ? { h: raw.panels.h } : {}) };
       if (raw.midi && raw.midi.opts) {
         state.midi = { opts: { ...state.midi.opts, ...raw.midi.opts }, input: raw.midi.input || '', output: raw.midi.output || '' };
       }
       return;
     }
   } catch (_) { /* storage non disponibile o dati corrotti */ }
-  // Primo caricamento: ogni slot contiene il groove demo di un kit e un groove synth
-  state.slots = Array.from({ length: SLOTS }, (_, i) => createPattern(KITS[i % KITS.length].id, true, i % 3));
+  // Primo avvio: progetto vuoto, senza tracce (con ?demo i groove dimostrativi di ogni kit)
+  if (new URLSearchParams(location.search).has('demo')) {
+    state.slots = Array.from({ length: SLOTS }, (_, i) => createPattern(KITS[i % KITS.length].id, true, i % 3));
+    state.tracks = normalizeTracks(null);
+  } else {
+    state.slots = Array.from({ length: SLOTS }, () => createPattern(KITS[0].id, false, null));
+    state.tracks = [];
+  }
 }
 
 let saveTimer = null;
@@ -153,7 +178,7 @@ function save() {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         slot: state.slot, slots: state.slots, fx: state.fx, song: state.song, lock: state.lock, midi: state.midi, view: state.view,
         favs: state.favs, userKits: state.userKits, userPresets: state.userPresets, userSounds: state.userSounds, projectName: state.projectName,
-        layout: state.layout, session: state.session, arr: state.arr, macros: state.macros,
+        layout: state.layout, session: state.session, arr: state.arr, macros: state.macros, tracks: state.tracks, panels: state.panels,
       }));
     } catch (_) { /* quota / navigazione privata */ }
     // Le modifiche cambiano le voci: pre-renderizza in background quelle nuove
@@ -481,6 +506,10 @@ function renderTools() {
 function renderAll() {
   renderBarsCtl();
   for (let t = 0; t < TRACKS; t++) renderRow(t);
+  // Layout Studio: nell'editor solo i canali attivi
+  const studioOn = sessionActive();
+  for (let t = 0; t < TRACKS; t++) labels[t].parentElement.classList.toggle('inactive', studioOn && !state.tracks.includes(t));
+  for (let k = 0; k < 4; k++) { const r = $(`.srow.sk${k}`); if (r) r.classList.toggle('inactive', studioOn && !state.tracks.includes(8 + k)); }
   renderTrackLabels();
   renderParams();
   renderTransport();
@@ -544,6 +573,7 @@ function showTick(e) {
   }
   if (synthUI) synthUI.showTick(e);
   if (piano) piano.tick(e.tick);
+  if (studio) studio.tick(e);
 }
 
 function frame() {
@@ -779,6 +809,8 @@ function startPlayback(fromRemote = false) {
   if (!engine.ctx || seq.playing) return;
   if (!fromRemote) remoteOp('play');
   if (sessionActive()) {
+    // Vista TRACCE: si ascolta la timeline (se ha regioni)
+    if (studio && studio.view === 'tracks' && state.arr.bars.length && !ui.arrRec) state.arr.on = true;
     // Clip in attesa partono subito; senza clip si lancia la scena del pattern selezionato
     ui.sceneBars = 0;
     if (state.arr.on && state.arr.bars.length && !ui.arrRec) {
@@ -1411,6 +1443,7 @@ $('#menu').addEventListener('click', async (e) => {
     case 'gen': panels.openGen(); return;
     case 'kits': panels.openKits(); return;
     case 'macro': macros.open(); return;
+    case 'audioout': audioOut.open(); return;
     case 'auto': auto.open(ui.view === 'synth' ? `s${ui.ssel || 0}.cut` : `d${state.sel}.vol`); return;
     case 'wt': synthUI.openEditor(); return;
     case 'recout': panels.recordOutput(); return;
@@ -1500,6 +1533,7 @@ function exportData() {
     app: 'drumbort', version: 3, appVersion: APP_VERSION,
     slot: state.slot, slots: state.slots, song: state.song, fx: state.fx, lock: state.lock, userKits: state.userKits,
     userPresets: state.userPresets, userSounds: state.userSounds, session: state.session, arr: state.arr, macros: state.macros,
+    tracks: state.tracks,
   };
 }
 
@@ -1520,6 +1554,7 @@ function importData(o) {
   state.slot = clamp(o.slot | 0, 0, SLOTS - 1);
   if (o.session) state.session = normalizeSession(o.session);
   if (o.macros) state.macros = normalizeMacros(o.macros);
+  state.tracks = normalizeTracks(o.tracks);
   state.arr = normalizeArr(o.arr);
   undoStack.length = 0; redoStack.length = 0;
   if (seq.playing) stopPlayback();
@@ -1580,8 +1615,12 @@ function mergeUserPresets(list) {
   setUserPresets(state.userPresets);
 }
 
+/** Nuovo progetto: vuoto, nessuna traccia, nessun groove o preset dimostrativo. */
 function newProject() {
-  for (let i = 0; i < SLOTS; i++) state.slots[i] = createPattern(KITS[i % KITS.length].id, true, i % 3);
+  for (let i = 0; i < SLOTS; i++) state.slots[i] = createPattern(KITS[0].id, false, null);
+  state.tracks = [];
+  state.macros = defaultMacros();
+  ui.arrStart = 0;
   state.song = normalizeSong(null);
   state.fx = { ...DEFAULT_FX };
   state.lock = null;
@@ -1720,6 +1759,7 @@ async function startAudio() {
       unlocked = true;
       syncPlayback();
       restoreSamples();
+      if (audioOut) audioOut.restore();
       engine.ctx.addEventListener('statechange', () => {
         // iOS può sospendere/interrompere il contesto (chiamate, background)
         if (engine.ctx.state !== 'running' && document.visibilityState === 'visible') overlay.hidden = false;
@@ -1785,6 +1825,7 @@ function remoteParts() {
     session: { quant: state.session.quant, follow: state.session.follow },
     arr: state.arr, userKits: state.userKits, userPresets: state.userPresets,
     mode: sessionActive() ? 'session' : 'pattern',
+    tracks: state.tracks,
   };
   state.slots.forEach((p, i) => { parts[`p${i}`] = p; });
   parts.userSounds = state.userSounds;
@@ -1806,6 +1847,7 @@ function applyRemoteParts(parts, full) {
   }
   if (typeof parts.slot === 'number') state.slot = clamp(parts.slot | 0, 0, SLOTS - 1);
   if (parts.fx) state.fx = normalizeFx(parts.fx);
+  if (parts.tracks) state.tracks = normalizeTracks(parts.tracks);
   if (parts.song) state.song = normalizeSong(parts.song);
   if ('lock' in parts) state.lock = parts.lock && findKit(parts.lock) ? parts.lock : null;
   if (parts.session) {
@@ -1912,12 +1954,14 @@ const app = {
 };
 panels = initPanels(app);
 auto = initAutomation(app);
+audioOut = initAudioOut({ ...app, remoteRole: () => remote && remote.role });
 macros = initMacros({
   ...app, renderParams: () => { renderParams(); synthUI.render(); if (studio) studio.render(); },
   /** Pattern che contiene i parametri della traccia i (0-7 batteria, 8-11 synth) in riproduzione. */
   trackPattern: (i) => (sessionActive() ? state.slots[state.session.map[i] >= 0 ? state.session.map[i] : state.session.master] : pat()),
 });
 studio = initStudio({ ...app, openAuto: (k) => auto.open(k), openMacros: () => macros.open(), launchClip, launchScene, stopAllClips, setView, selectTrack: (t) => selectTrack(t), tempoPattern, useSoundOnTrack,
+  openLibrary: () => synthUI.openLibrary(), openWave: () => synthUI.openEditor(), kbActive: () => !!(piano && piano.kb),
   toggleArr, setArrRec, songToArr, startPlayback });
 if (state.layout === null) state.layout = matchMedia('(pointer: fine) and (min-width: 1200px)').matches ? 'studio' : 'compact';
 if (state.layout === 'studio' && state.session.map.every((v) => v < 0)) { state.session.map.fill(state.slot); state.session.master = state.slot; }
@@ -1945,7 +1989,7 @@ if (LAB) {
   lab = initLab({ ...app, synthUI, remote: () => !!(remote && remote.role) });
   lab.showTab('synth');
 }
-remote = initRemote({ getParts: remoteParts, applyParts: applyRemoteParts, onOp: onRemoteOp, onRole: onRemoteRole });
+remote = initRemote({ getParts: remoteParts, applyParts: applyRemoteParts, onOp: onRemoteOp, onRole: onRemoteRole, onAudio: (d) => audioOut.changed(d) });
 if (remote) remote.onStatus(renderRemote);
 
 // Esposto per debug/test

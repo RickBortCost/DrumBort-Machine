@@ -2,6 +2,17 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.13.0] - 2026-11-18
+
+### Aggiunto
+- **Scelta dell'uscita audio** (Menu → 🎧 Uscita audio). Host desktop: elenco dei dispositivi della scheda audio, scelta salvata; con "Predefinito di sistema" l'host segue il dispositivo predefinito (cuffie collegate dopo l'avvio comprese). Browser: `setSinkId` dove supportato.
+- **Vista TRACCE** stile Logic Pro, predefinita nel layout Studio: tracce attive in colonna, timeline con regioni da creare, spostare, allungare ed eliminare; ＋ TRACCIA.
+- **Pannelli nascondibili**: browser (◧, **B**), pannello laterale (◨, **I**), mixer (▤).
+- **Catena di effetti** della traccia selezionata, stile device: un riquadro per effetto con interruttore, manopole rotative e curve di EQ e filtro. La barra inferiore è ridimensionabile.
+
+### Modificato
+- **Nuovo progetto vuoto**: primo avvio e Nuovo progetto non caricano più groove o preset (`?demo` per i groove dimostrativi).
+
 ## [1.12.0] - 2026-11-18
 
 ### Aggiunto

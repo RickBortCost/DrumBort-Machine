@@ -46,7 +46,14 @@ Il nome del suono nella testa dei parametri synth apre la **libreria**: 59 strum
 
 Aspetto da workstation: pannelli ardesia con accenti arancio e verdi (colori ispirati a FL Studio), rack dei canali con step a gruppi di 4, contatore BAR · BEAT · STEP nella barra di trasporto.
 
-Su computer (finestra di almeno 1000×600) l'app si apre nel layout **Studio**, pensato per mouse e tastiera e organizzato come una *session view*:
+Su computer (finestra di almeno 1000×600) l'app si apre nel layout **Studio**, pensato per mouse e tastiera. Un nuovo progetto è **vuoto**, senza preset né groove (`?demo` nell'indirizzo carica i groove dimostrativi).
+
+- **Vista TRACCE** (predefinita, stile Logic Pro): tracce attive in colonna a sinistra (colore, nome, M/S, ×), timeline a battute a destra. **＋ TRACCIA** aggiunge una voce di batteria o un synth; nella timeline clic+trascina crea una regione, si sposta trascinando, il bordo destro la allunga, clic destro o Canc la elimina. Il righello fissa il punto di partenza.
+- **Pannelli nascondibili**: ◧ browser (**B**), ◨ pannello laterale (**I**), ▤ MIXER. Clic sull'intestazione di una traccia → in basso i suoi **effetti**; clic su una regione → le sue **note** (pulsanti FX / NOTE).
+- **Catena di effetti** stile device: un riquadro per effetto (Strumento/Voce, Drive, Bit crush, EQ con curva, Filtro con curva, Compressore, Mandate, Mixer), ognuno con interruttore e manopole (trascina in verticale, Shift = fine, rotella, frecce, doppio clic = valore iniziale). La barra inferiore si **ridimensiona** trascinandone il bordo superiore (doppio clic: altezza iniziale).
+- **Uscita audio** (Menu → 🎧 Uscita audio): scelta del dispositivo (cuffie, casse, interfaccia). Con l'host desktop l'elenco è quello della scheda audio del PC; "Predefinito di sistema" segue automaticamente il dispositivo predefinito, per esempio quando si collegano le cuffie.
+
+Le viste **SESSION** e **GRIGLIA** restano come *session view*:
 
 - **Browser** (sinistra): suoni per categoria e ricerca; kit. Un clic assegna il suono alla traccia synth selezionata o il kit al pattern.
 - **Clip** (centro): colonne = 12 tracce (8 batteria + 4 synth), righe = 8 pattern. ▶ lancia la clip di quella traccia, ▶ P1…P8 lancia la scena intera, ■ ferma una traccia o tutte. I lanci sono quantizzati (menu **LANCIO**: nessuna, 1/4, 1/2, 1, 2 o 4 battute). Un clic sul corpo della clip la apre nell'editor sottostante (doppio clic: lancia).
@@ -205,7 +212,10 @@ js/remote.js            controllo remoto tramite l'host desktop (WebSocket)
 js/lab.js               Sound Lab (telefono): synth, designer batteria, invio al PC
 desktop/                host desktop C#: motore audio nativo, server, sincronizzazione
 tools/export-dsp.mjs    esporta kit e preset per il motore desktop
-js/studio.js            layout Studio: browser, clip, mixer
+js/studio.js            layout Studio: browser, clip, mixer, pannelli
+js/tracks.js            vista TRACCE (tracce in colonna e timeline)
+js/fxchain.js           catena di effetti della traccia selezionata
+js/audioout.js          scelta del dispositivo di uscita audio
 js/ui.js                interfaccia, salvataggio, undo, song, PWA
 js/export.js            render offline e codifica WAV
 js/midi.js              Web MIDI (note e clock)

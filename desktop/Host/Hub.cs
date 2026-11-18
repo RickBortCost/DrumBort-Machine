@@ -123,7 +123,7 @@ public sealed class Hub
                 break;
             }
             case "op":
-                if (engine != null) { var op = (JsonObject)m.DeepClone(); engine.Post(() => Op(op)); }
+                if (engine != null) { engine.Touch(); var op = (JsonObject)m.DeepClone(); engine.Post(() => Op(op)); }
                 await Broadcast(m, c);
                 break;
         }
@@ -173,6 +173,8 @@ public sealed class Hub
                 break;
         }
     }
+
+    public Task Broadcast(JsonObject m) => Broadcast(m, null);
 
     async Task Broadcast(JsonObject m, Client? except)
     {

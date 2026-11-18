@@ -109,14 +109,32 @@ public sealed class AudioEngine : IDisposable
     }
     float[] cbBuf = new float[4096];
 
-    /// <summary>Avvia il rendering e l'uscita audio. device: −1 = predefinito.</summary>
-    public void Start(int device = -1)
+    // =================================================================
+    // Uscita audio: scelta del dispositivo e cambio a caldo
+    // =================================================================
+    readonly object paLock = new();
+    int wantDevice = -1;                 // −1 = segue il dispositivo predefinito del sistema
+    string? wantName;                    // dispositivo scelto (per nome: gli indici cambiano)
+    public string CurrentDevice { get; private set; } = "";
+    public bool FollowDefault => wantName == null;
+    long lastActivity = Environment.TickCount64;
+    /// <summary>Notifica di cambio uscita (per i dispositivi collegati).</summary>
+    public event Action<string>? DeviceChanged;
+    Timer? watch;
+
+    /// <summary>Attività dal vivo (pad, note): il controllo del dispositivo predefinito aspetta.</summary>
+    public void Touch() => lastActivity = Environment.TickCount64;
+
+    void OpenStream()
     {
-        running = true;
-        thread = new Thread(Loop) { IsBackground = true, Name = "DrumBort audio", Priority = ThreadPriority.Highest };
-        thread.Start();
-        PortAudio.Initialize();
-        int dev = device >= 0 ? device : PortAudio.DefaultOutputDevice;
+        int dev = -1;
+        if (wantName != null)
+            for (int i = 0; i < PortAudio.DeviceCount; i++)
+            {
+                var d = PortAudio.GetDeviceInfo(i);
+                if (d.maxOutputChannels >= 2 && d.name == wantName) { dev = i; break; }
+            }
+        if (dev < 0) dev = PortAudio.DefaultOutputDevice;
         if (dev == PortAudio.NoDevice) throw new InvalidOperationException("Nessun dispositivo audio di uscita");
         var info = PortAudio.GetDeviceInfo(dev);
         var p = new StreamParameters
@@ -126,7 +144,93 @@ public sealed class AudioEngine : IDisposable
         };
         stream = new PaStream(null, p, Ctx.SampleRate, 256, StreamFlags.ClipOff, Callback, null!);
         stream.Start();
+        CurrentDevice = info.name;
         Console.WriteLine($"Audio: {info.name} · {Ctx.SampleRate} Hz · buffer {capacity} frame ({1000.0 * capacity / Ctx.SampleRate:0} ms)");
+    }
+
+    /// <summary>Chiude e riapre PortAudio (rilegge i dispositivi collegati nel frattempo) e l'uscita.</summary>
+    void Reopen()
+    {
+        lock (paLock)
+        {
+            try { stream?.Stop(); stream?.Dispose(); } catch { /* già chiuso */ }
+            stream = null;
+            try { PortAudio.Terminate(); } catch { }
+            PortAudio.Initialize();
+            OpenStream();
+        }
+        DeviceChanged?.Invoke(CurrentDevice);
+    }
+
+    /// <summary>Elenco delle uscite (rilette dal sistema).</summary>
+    public List<(int index, string name, string api, bool isDefault)> Devices()
+    {
+        lock (paLock)
+        {
+            var list = new List<(int, string, string, bool)>();
+            int def = PortAudio.DefaultOutputDevice;
+            for (int i = 0; i < PortAudio.DeviceCount; i++)
+            {
+                var d = PortAudio.GetDeviceInfo(i);
+                if (d.maxOutputChannels < 2) continue;
+                list.Add((i, d.name, $"API {d.hostApi}", i == def));
+            }
+            return list;
+        }
+    }
+
+    /// <summary>Sceglie l'uscita: nome del dispositivo, oppure null per seguire il predefinito.</summary>
+    public void SelectDevice(string? name)
+    {
+        wantName = string.IsNullOrEmpty(name) ? null : name;
+        Settings.Save("device", wantName ?? "");
+        Reopen();
+    }
+
+    /// <summary>Riapre l'uscita rileggendo i dispositivi (es. cuffie appena collegate).</summary>
+    public void Refresh() => Reopen();
+
+    /// <summary>Avvia il rendering e l'uscita audio. device: −1 = predefinito (o quello salvato).</summary>
+    public void Start(int device = -1)
+    {
+        running = true;
+        thread = new Thread(Loop) { IsBackground = true, Name = "DrumBort audio", Priority = ThreadPriority.Highest };
+        thread.Start();
+        PortAudio.Initialize();
+        if (device >= 0) wantName = PortAudio.GetDeviceInfo(device).name;
+        else { var saved = Settings.Load("device"); wantName = string.IsNullOrEmpty(saved) ? null : saved; }
+        lock (paLock) OpenStream();
+        // Segue il dispositivo predefinito (cuffie collegate/scollegate): controlla a riposo ogni 4 s
+        watch = new Timer(_ => CheckDefault(), null, 4000, 4000);
+    }
+
+    void CheckDefault()
+    {
+        if (!running || !FollowDefault || Seq.Playing || Environment.TickCount64 - lastActivity < 5000) return;
+        try
+        {
+            string? now;
+            lock (paLock)
+            {
+                // PortAudio aggiorna l'elenco solo dopo una nuova inizializzazione: si apre una sessione
+                // separata solo per leggere il nome del predefinito
+                PortAudio.Terminate(); PortAudio.Initialize();
+                int def = PortAudio.DefaultOutputDevice;
+                now = def == PortAudio.NoDevice ? null : PortAudio.GetDeviceInfo(def).name;
+                if (now == null || now == CurrentDevice)
+                {
+                    // Stessa uscita: si riapre lo stream (la terminazione l'ha chiuso)
+                    try { stream?.Dispose(); } catch { }
+                    OpenStream();
+                    return;
+                }
+                try { stream?.Dispose(); } catch { }
+                OpenStream();
+            }
+            Console.WriteLine($"Uscita audio cambiata: {CurrentDevice}");
+            DeviceChanged?.Invoke(CurrentDevice);
+        }
+        catch (Exception e) { Console.Error.WriteLine($"[audio] {e.Message}"); }
     }
 
     /// <summary>Senza scheda audio (test, server): il rendering segue l'orologio di sistema e l'uscita è scartata.</summary>
@@ -174,6 +278,7 @@ public sealed class AudioEngine : IDisposable
     public void Dispose()
     {
         running = false;
+        watch?.Dispose();
         wake.Set();
         try { stream?.Stop(); stream?.Dispose(); PortAudio.Terminate(); } catch { /* chiusura */ }
     }

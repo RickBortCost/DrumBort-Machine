@@ -32,7 +32,7 @@ async function openApp(browser, url, viewport, extra = {}) {
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
   page.on('response', (r) => { if (r.status() >= 400) errors.push(`${r.status()} ${r.url()}`); });
-  await page.goto(extra.lab ? url : `${url}${url.includes('?') ? '&' : '?'}full`);
+  await page.goto(extra.lab ? url : `${url}${url.includes('?') ? '&' : '?'}full&demo`);
   await page.waitForFunction(() => window.drumbort);
   await page.tap('#overlay');
   await page.waitForFunction(() => document.querySelector('#overlay').hidden && drumbort.engine.ctx.state === 'running', null, { timeout: 5000 });
@@ -519,14 +519,45 @@ async function studioTests(browser, url) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
-  await page.goto(url);
+  await page.goto(`${url}?demo`);
   await page.waitForFunction(() => window.drumbort);
   await page.click('#overlay');
   await page.waitForFunction(() => drumbort.engine.ctx && drumbort.engine.ctx.state === 'running');
   const L = await page.evaluate(() => ({ layout: document.querySelector('#app').dataset.layout, sw: document.documentElement.scrollWidth, sh: document.documentElement.scrollHeight,
-    vis: ['#browser', '#session', '#mixer', '#grid', '.side'].every((s) => document.querySelector(s).offsetParent !== null) }));
+    vis: ['#browser', '#session', '#grid', '.side'].every((s) => document.querySelector(s).offsetParent !== null) }));
   check('layout Studio automatico su PC', L.layout === 'studio' && L.vis, L.layout);
   check('Studio senza scroll', L.sw <= 1440 && L.sh <= 900, `${L.sw}×${L.sh}`);
+
+  // Vista TRACCE predefinita (stile Logic): tracce attive del progetto dimostrativo
+  const tv = await page.evaluate(() => [!document.querySelector('#sxTracks').hidden, document.querySelectorAll('.tv-hdr').length, drumbort.state.tracks.length]);
+  check('vista TRACCE predefinita con le tracce attive', tv[0] && tv[1] === tv[2] && tv[2] > 0, JSON.stringify(tv));
+  // Pannelli nascondibili e barra degli effetti della traccia selezionata
+  await page.click('#sxBrowser'); await page.click('#sxSide');
+  await page.click('.tv-hdr[data-i="1"] .tv-name');
+  const pn = await page.evaluate(() => [document.querySelector('.browser').offsetParent === null, document.querySelector('.side').offsetParent === null, document.querySelector('#fxbar').offsetParent !== null]);
+  // Catena di device: un riquadro per effetto, manopola dei bassi trascinata in verticale
+  const dvs = await page.evaluate(() => [...document.querySelectorAll('#fxbar .dv')].map((d) => d.dataset.dev).join(','));
+  check('catena effetti con un riquadro per device', dvs === 'inst,drv,crush,eq,flt,cmp,send,mix', dvs);
+  const kb = await page.locator('.kb[data-k="lo"] .kb-dial').boundingBox();
+  await page.mouse.move(kb.x + kb.width / 2, kb.y + kb.height / 2); await page.mouse.down();
+  await page.mouse.move(kb.x + kb.width / 2, kb.y + kb.height / 2 - 40, { steps: 5 }); await page.mouse.up();
+  const lo = await page.evaluate(() => [drumbort.state.slots.every((s) => s.tracks[1].lo === 6), !!drumbort.engine.channels[1].nodes.lo, document.querySelector('[data-dev="eq"]').classList.contains('off')]);
+  check('browser e pannello nascosti, effetti della traccia in basso', pn.every(Boolean) && lo[0] && lo[1] && !lo[2], JSON.stringify([pn, lo]));
+  await page.click('[data-pw="eq"]');
+  const pw = await page.evaluate(() => [drumbort.state.slots[0].tracks[1].lo, document.querySelector('[data-dev="eq"]').classList.contains('off')]);
+  await page.click('[data-pw="eq"]');
+  const pw2 = await page.evaluate(() => drumbort.state.slots[0].tracks[1].lo);
+  check('interruttore del device spegne e ripristina', pw[0] === 0 && pw[1] && pw2 === 6, JSON.stringify([pw, pw2]));
+  // Barra inferiore ridimensionabile
+  const h0 = await page.evaluate(() => document.querySelector('#fxbar').getBoundingClientRect().height);
+  const sp = await page.locator('.sx-split').boundingBox();
+  await page.mouse.move(sp.x + sp.width / 2, sp.y + 4); await page.mouse.down();
+  await page.mouse.move(sp.x + sp.width / 2, sp.y - 76, { steps: 4 }); await page.mouse.up();
+  const h1 = await page.evaluate(() => [document.querySelector('#fxbar').getBoundingClientRect().height, drumbort.state.panels.h]);
+  check('barra inferiore ridimensionabile', Math.abs(h1[0] - h0 - 80) < 6 && h1[1] > 0, `${Math.round(h0)} → ${Math.round(h1[0])}`);
+  await page.dblclick('.sx-split');
+  await page.click('#sxBrowser'); await page.click('#sxSide'); await page.click('[data-bottom="editor"]');
+  await page.click('[data-sxv="session"]');
 
   // Scena e clip
   await page.click('.sx-scene[data-scene="2"]');
@@ -632,6 +663,7 @@ async function studioTests(browser, url) {
   const lane = await page.evaluate(() => { const a = drumbort.state.slots[drumbort.state.slot].auto; return a && a['d0.vol'] && a['d0.vol'].filter((v) => v != null).length; });
   check('corsia di automazione disegnata', lane >= 28, `${lane} step`);
   await page.keyboard.press('Escape');
+  await page.click('[data-sxv="session"]');
   await page.evaluate(() => document.querySelector('#play').click());
   await page.waitForTimeout(800);
   const applied = await page.evaluate(() => drumbort.engine._autoLast && drumbort.engine._autoLast[0] !== undefined);
@@ -836,6 +868,7 @@ async function labTests(browser, url) {
   const imp = await p2.evaluate(() => [drumbort.state.userSounds.length, drumbort.state.userPresets.length, location.hash]);
   check('il PC importa i suoni dal link', imp[0] === 1 && imp[1] === 1 && !imp[2], JSON.stringify(imp));
   await p2.click('[data-btab="kits"]');
+  await p2.click('[data-sxv="session"]');
   await p2.click('.sx-th[data-sel="1"]');
   await p2.click('[data-btab="kits"]');
   await p2.click('.bw-item[data-usound]');

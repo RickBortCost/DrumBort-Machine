@@ -72,6 +72,7 @@ export function initRemote(app) {
           break;
         case 'op': app.onOp(m); break;
         case 'peers': peers = m.n | 0; emit(); break;
+        case 'audio': if (app.onAudio) app.onAudio(m.device); break;
         default: break;
       }
     };

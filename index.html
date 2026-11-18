@@ -66,6 +66,7 @@
     </section>
     <section id="session" class="session panel" aria-label="Clip e scene"></section>
     <section id="mixer" class="mixer panel" aria-label="Mixer"></section>
+    <section id="fxbar" class="fxbar panel" aria-label="Effetti della traccia"></section>
 
     <!-- ===== Griglia step sequencer (generata da ui.js) ===== -->
     <main id="grid" class="grid" data-page="0" aria-label="Step sequencer. Frecce per spostarsi, Invio per attivare."></main>
@@ -230,6 +231,7 @@
         <div class="mgrid">
           <button class="btn mitem" data-act="wt"><span class="mi" aria-hidden="true">≋</span><span class="ml">Synth wavetable<small>oscillatori, filtri, LFO, matrice</small></span></button>
           <button class="btn mitem" data-act="kits"><span class="mi" aria-hidden="true">🥁</span><span class="ml">Crea kit<small>voci da kit diversi</small></span></button>
+          <button class="btn mitem" data-act="audioout"><span class="mi" aria-hidden="true">🎧</span><span class="ml">Uscita audio<small>cuffie, casse, scheda</small></span></button>
           <button class="btn mitem" data-act="midi"><span class="mi" aria-hidden="true">🎹</span><span class="ml">MIDI<small>dispositivi, clock</small></span></button>
           <button class="btn mitem" data-act="resetwav"><span class="mi" aria-hidden="true">✕</span><span class="ml">Rimuovi WAV<small>tutti i campioni</small></span></button>
         </div>
@@ -416,6 +418,18 @@
         <button class="btn sm" data-mact="link">+ COLLEGA</button>
       </div>
       <small class="hint">Ogni macro muove insieme fino a 8 parametri (tracce, effetti, master), ognuno dal valore "da" al valore "a".</small>
+    </div>
+  </div>
+
+  <div id="audioSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="audioTitle" hidden>
+    <div class="sheet-box">
+      <div class="sheet-title" id="audioTitle">USCITA AUDIO</div>
+      <p id="aoInfo" class="hint"></p>
+      <div id="aoList" class="ao-list"></div>
+      <div class="lab-row">
+        <button class="btn sm" data-ao="refresh" title="Rilegge i dispositivi collegati (cuffie, schede USB)">RILEGGI DISPOSITIVI</button>
+        <button class="btn sm" data-close>CHIUDI</button>
+      </div>
     </div>
   </div>
 

@@ -51,6 +51,27 @@
     <!-- ===== Griglia step sequencer (generata da ui.js) ===== -->
     <main id="grid" class="grid" data-page="0" aria-label="Step sequencer. Frecce per spostarsi, Invio per attivare."></main>
 
+    <!-- ===== Modalità performance ===== -->
+    <section id="perf" class="perf" aria-label="Performance">
+      <div id="xy" class="xy" role="application" aria-label="Pad XY: filtro in orizzontale, risonanza in verticale">
+        <div class="xy-grid"></div><div class="xy-dot"></div>
+        <span class="xy-lbl">← LP · FILTRO · HP →<br>↕ RISONANZA</span>
+      </div>
+      <div class="perf-ctl">
+        <div class="perf-row stut" role="group" aria-label="Beat repeat (tieni premuto)">
+          <button class="btn" data-st="8">1/2</button><button class="btn" data-st="4">1/4</button>
+          <button class="btn" data-st="2">1/8</button><button class="btn" data-st="1">1/16</button>
+        </div>
+        <div class="perf-row">
+          <button id="fillBtn" class="btn fill" aria-label="Fill (tieni premuto)">FILL</button>
+          <button id="snapBtn" class="btn on" aria-pressed="true" aria-label="Il pad XY torna al rilascio">SNAP</button>
+          <button id="recOutBtn" class="btn" aria-pressed="false" aria-label="Registra l'uscita in WAV">● REC</button>
+        </div>
+        <div id="muteGrid" class="perf-mutes" role="group" aria-label="Mute rapidi"></div>
+        <label class="row-ctl"><small>SIDECHAIN</small><input id="perfSc" type="range" min="0" max="1" step="0.01" aria-label="Sidechain"><output></output></label>
+      </div>
+    </section>
+
     <!-- ===== Pannello: strumenti, parametri traccia, pad ===== -->
     <aside class="side" data-tab="pads" aria-label="Strumenti, parametri e pad">
       <div class="tools" role="toolbar" aria-label="Strumenti">
@@ -83,10 +104,11 @@
       <!-- Sezione SYNTH: parametri e pad a note -->
       <section id="sparams" class="panel params sparams" data-pg="snd" aria-label="Parametri synth">
         <div class="params-head">
-          <select id="presetSel" class="sel preset" aria-label="Preset"></select>
+          <button id="presetBtn" class="btn preset" aria-haspopup="dialog">Suono</button>
           <button id="smuteBtn" class="btn sm ms" aria-label="Mute" aria-pressed="false">M</button>
           <button id="ssoloBtn" class="btn sm ms" aria-label="Solo" aria-pressed="false">S</button>
-          <button id="spgBtn" class="btn sm" aria-label="Pagina parametri">MIX</button>
+          <button id="sarpBtn" class="btn sm" aria-label="Arpeggiatore" aria-haspopup="dialog" aria-pressed="false">ARP</button>
+          <button id="spgBtn" class="btn sm" aria-label="Pagina parametri">MOD</button>
         </div>
         <div id="ssliders" class="sliders"></div>
       </section>
@@ -106,10 +128,17 @@
   <!-- ===== Fogli modali ===== -->
   <div id="menu" class="sheet" role="dialog" aria-modal="true" aria-label="Menu" hidden>
     <div class="sheet-box">
+      <button class="btn" data-act="projects">Progetti…</button>
+      <button class="btn" data-act="share">Condividi pattern (link)</button>
+      <button class="btn" data-act="gen">Generatore (euclideo, varia, humanize)…</button>
+      <button class="btn" data-act="kits">Crea kit personalizzato…</button>
       <button class="btn" data-act="clear">Clear pattern</button>
       <button class="btn" data-act="demo">Carica demo (batteria o synth)</button>
       <button class="btn" data-act="wav-pattern">Esporta WAV (pattern × 4)</button>
       <button class="btn" data-act="wav-song">Esporta WAV (song)</button>
+      <button class="btn" data-act="mid-pattern">Esporta MIDI (pattern × 4)</button>
+      <button class="btn" data-act="mid-song">Esporta MIDI (song)</button>
+      <button class="btn" data-act="recout">Registra l'uscita (WAV)</button>
       <button class="btn" data-act="export">Esporta JSON (pattern, song, FX)</button>
       <button class="btn" data-act="import">Importa JSON</button>
       <button class="btn" data-act="midi">MIDI…</button>
@@ -140,6 +169,10 @@
         </div>
       </div>
       <label class="row-ctl"><small>NUDGE</small><input type="range" data-k="n" min="-50" max="50" step="5" aria-label="Nudge"><output></output></label>
+      <div class="lock-title">PARAMETER LOCK (solo questo step)</div>
+      <label class="row-ctl"><small>TUNE</small><input type="range" data-dlock="tune" min="-12" max="12" step="0.5" aria-label="Lock TUNE"><output>—</output></label>
+      <label class="row-ctl"><small>DECAY</small><input type="range" data-dlock="decay" min="0.2" max="2.5" step="0.01" aria-label="Lock DECAY"><output>—</output></label>
+      <label class="row-ctl"><small>VEL</small><input type="range" data-dlock="vel" min="0.1" max="1" step="0.01" aria-label="Lock VEL"><output>—</output></label>
       <div class="sheet-actions">
         <button class="btn" data-act="step-reset">Reset opzioni</button>
         <button class="btn close" data-close>Chiudi</button>
@@ -174,10 +207,97 @@
           <button class="btn sm" data-v="sus4">SUS</button><button class="btn sm" data-v="single">1</button>
         </div>
       </div>
+      <div class="lock-title">PARAMETER LOCK (solo questo step)</div>
+      <label class="row-ctl"><small>CUT</small><input type="range" data-lock="cut" min="-1" max="1" step="0.01" aria-label="Lock CUT"><output>—</output></label>
+      <label class="row-ctl"><small>DECAY</small><input type="range" data-lock="dec" min="0.25" max="3" step="0.01" aria-label="Lock DECAY"><output>—</output></label>
+      <label class="row-ctl"><small>VEL</small><input type="range" data-lock="vel" min="0.1" max="1" step="0.01" aria-label="Lock VEL"><output>—</output></label>
+      <button class="btn" data-act="sstep-unlock">Rimuovi i lock</button>
       <div class="sheet-actions">
         <button class="btn" data-act="sstep-del">Elimina nota</button>
         <button class="btn close" data-close>Chiudi</button>
       </div>
+    </div>
+  </div>
+
+  <div id="libSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="libTitle" hidden>
+    <div class="sheet-box lib-box">
+      <div class="sheet-title" id="libTitle">LIBRERIA</div>
+      <input id="libSearch" class="search" type="search" placeholder="Cerca per nome o tag (warm, fm, vintage…)" aria-label="Cerca suoni" autocomplete="off">
+      <div id="libCats" class="lib-cats" role="group" aria-label="Categorie"></div>
+      <small id="libCount" class="hint"></small>
+      <div id="libList" class="lib-list"></div>
+      <button class="btn close" data-close>Chiudi</button>
+    </div>
+  </div>
+
+  <div id="arpSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="arpTitle" hidden>
+    <div class="sheet-box">
+      <div class="sheet-title" id="arpTitle">ARPEGGIATORE</div>
+      <div class="row-ctl"><small>STATO</small><div class="seg" data-k="on"><button class="btn sm" data-v="0">OFF</button><button class="btn sm" data-v="1">ON</button></div></div>
+      <div class="row-ctl"><small>ACCORDI DA</small><div class="seg" id="arpSrc" data-k="src"></div></div>
+      <div class="row-ctl"><small>MODO</small><div class="seg" id="arpMode" data-k="mode"></div></div>
+      <div class="row-ctl"><small>VELOCITÀ</small><div class="seg" id="arpRate" data-k="rate"></div></div>
+      <div class="row-ctl"><small>OTTAVE</small><div class="seg" data-k="oct"><button class="btn sm" data-v="1">1</button><button class="btn sm" data-v="2">2</button><button class="btn sm" data-v="3">3</button></div></div>
+      <label class="row-ctl"><small>GATE</small><input id="arpGate" type="range" min="0.1" max="1" step="0.05" aria-label="Gate arpeggio"><output></output></label>
+      <small class="hint">L'arpeggio suona gli accordi della traccia scelta (PAD o KEYS) nel registro di questa traccia.</small>
+      <button class="btn close" data-close>Chiudi</button>
+    </div>
+  </div>
+
+  <div id="genSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="genTitle" hidden>
+    <div class="sheet-box">
+      <div class="sheet-title" id="genTitle">GENERATORE</div>
+      <div class="lock-title" id="genTrack">RITMO EUCLIDEO</div>
+      <label class="row-ctl"><small>COLPI</small><input id="genHits" type="range" min="0" max="16" step="1" value="4" aria-label="Colpi"><output></output></label>
+      <label class="row-ctl"><small>ROTAZIONE</small><input id="genRot" type="range" min="0" max="15" step="1" value="0" aria-label="Rotazione"><output></output></label>
+      <button class="btn" data-act="gen-euclid">Applica alla traccia selezionata</button>
+      <div class="lock-title">VARIAZIONI</div>
+      <label class="row-ctl"><small>QUANTITÀ</small><input id="genAmt" type="range" min="0.1" max="1" step="0.05" value="0.35" aria-label="Quantità variazione"><output></output></label>
+      <div class="sheet-actions">
+        <button class="btn" data-act="gen-vary-drums">Varia batteria</button>
+        <button class="btn" data-act="gen-vary-synth">Varia synth</button>
+      </div>
+      <label class="row-ctl"><small>HUMANIZE</small><input id="genHuman" type="range" min="0" max="1" step="0.05" aria-label="Humanize"><output></output></label>
+      <button class="btn close" data-close>Chiudi</button>
+    </div>
+  </div>
+
+  <div id="kitSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="kitTitle" hidden>
+    <div class="sheet-box">
+      <div class="sheet-title" id="kitTitle">KIT PERSONALIZZATO</div>
+      <label class="row-ctl"><small>NOME</small><input id="kitName" class="text" type="text" maxlength="24" placeholder="Il mio kit" aria-label="Nome kit"></label>
+      <label class="row-ctl"><small>LO-FI</small><select id="kitCrush" class="sel" aria-label="Bit crush del kit"><option value="0">Off</option><option value="12">12 bit</option><option value="10">10 bit</option><option value="8">8 bit</option></select></label>
+      <div id="kitRows" class="kit-rows"></div>
+      <div class="sheet-actions">
+        <button class="btn" data-act="kit-save">Salva e usa</button>
+        <button class="btn" data-act="kit-delete">Elimina kit</button>
+      </div>
+      <button class="btn close" data-close>Chiudi</button>
+    </div>
+  </div>
+
+  <div id="projSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="projTitle" hidden>
+    <div class="sheet-box">
+      <div class="sheet-title" id="projTitle">PROGETTI</div>
+      <label class="row-ctl"><small>NOME</small><input id="projName" class="text" type="text" maxlength="32" placeholder="Senza titolo" aria-label="Nome progetto"></label>
+      <div class="sheet-actions">
+        <button class="btn" data-act="proj-save">Salva</button>
+        <button class="btn" data-act="proj-new">Nuovo progetto</button>
+      </div>
+      <div id="projList" class="proj-list"></div>
+      <small class="hint">Prima di aprire un altro progetto, il lavoro corrente viene salvato in "Auto-salvataggio".</small>
+      <button class="btn close" data-close>Chiudi</button>
+    </div>
+  </div>
+
+  <div id="sampleSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sampleTitle" hidden>
+    <div class="sheet-box">
+      <div class="sheet-title" id="sampleTitle">CAMPIONE</div>
+      <button class="btn" data-act="smp-file">Carica file audio…</button>
+      <button class="btn" id="micBtn" data-act="smp-mic" aria-pressed="false">● Registra dal microfono</button>
+      <small id="micStatus" class="hint">Tocca per iniziare, tocca di nuovo per fermare (max 6 s). Il silenzio iniziale viene tagliato.</small>
+      <button class="btn" data-act="smp-clear">Rimuovi campione (torna al suono del kit)</button>
+      <button class="btn close" data-close>Chiudi</button>
     </div>
   </div>
 
@@ -236,6 +356,7 @@
     <button id="updateBtn" class="btn sm">Aggiorna</button>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="recBadge" class="rec-badge" hidden>● REC <span id="recTime">0:00</span></div>
   <input id="importFile" type="file" accept=".json,application/json" hidden>
   <input id="wavFile" type="file" accept="audio/*,.wav" hidden>
 

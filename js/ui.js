@@ -4,7 +4,7 @@
  * La sezione SYNTH è in synthui.js.
  */
 
-import { KITS, kitById } from './kits.js';
+import { KITS, USER_KITS, kitById, setUserKits } from './kits.js';
 import { Engine, DEFAULT_FX } from './engine.js';
 import { Sequencer, createPattern, normalizePattern, normalizeOpt, parseRows, defaultTrack,
   isEmpty, clonePattern, STEPS, TRACKS, STEP_DEFAULT } from './sequencer.js';
@@ -13,6 +13,8 @@ import { Midi } from './midi.js';
 import { saveSample, loadSamples, clearSamples } from './idb.js';
 import { APP_VERSION } from './version.js';
 import { initSynthUI } from './synthui.js';
+import { initPanels } from './panels.js';
+import { initPerformance } from './performance.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -38,12 +40,17 @@ const state = {
   song: { on: false, chain: [] },   // catena { slot, rep }
   lock: null,                       // id kit bloccato o null
   midi: { opts: { ...midi.opts }, input: '', output: '' },
-  view: 'drum',                     // 'drum' | 'synth'
+  view: 'drum',                     // 'drum' | 'synth' | 'perf'
+  favs: [],                         // preset preferiti della libreria
+  userKits: [],                     // definizioni dei kit personalizzati
+  projectName: '',                  // progetto aperto
 };
 
 /** Stato solo di interfaccia (non salvato). */
 const ui = { edit: false, rec: false, met: false, clip: null, songIdx: -1, songPos: null, view: 'drum' };
 let synthUI = null;
+let panels = null;      // fogli secondari (panels.js)
+let perf = null;        // vista performance (performance.js)
 
 function normalizeFx(o) {
   const fx = { ...DEFAULT_FX };
@@ -54,6 +61,7 @@ function normalizeFx(o) {
   fx.rev = clamp(fx.rev, 0, 1); fx.size = clamp(fx.size, 0.3, 6);
   fx.dly = clamp(fx.dly, 0, 1); fx.fb = clamp(fx.fb, 0, 0.9);
   fx.div = clamp(fx.div, 0.5, 8); fx.master = clamp(fx.master, 0, 1);
+  fx.sc = clamp(fx.sc, 0, 1); fx.scRel = clamp(fx.scRel, 0.05, 0.8);
   return fx;
 }
 
@@ -68,12 +76,17 @@ function loadState() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORE_KEY));
     if (raw && Array.isArray(raw.slots) && raw.slots.length === SLOTS) {
+      // I kit utente vanno registrati prima di leggere i pattern che li usano
+      state.userKits = Array.isArray(raw.userKits) ? raw.userKits : [];
+      setUserKits(state.userKits);
       state.slots = raw.slots.map(normalizePattern);
+      state.favs = Array.isArray(raw.favs) ? raw.favs.filter((x) => typeof x === 'string') : [];
+      state.projectName = typeof raw.projectName === 'string' ? raw.projectName : '';
       state.slot = clamp(raw.slot | 0, 0, SLOTS - 1);
       state.fx = normalizeFx(raw.fx);
       state.song = normalizeSong(raw.song);
       state.lock = KITS.some((k) => k.id === raw.lock) ? raw.lock : null;
-      state.view = raw.view === 'synth' ? 'synth' : 'drum';
+      state.view = ['synth', 'perf'].includes(raw.view) ? raw.view : 'drum';
       if (raw.midi && raw.midi.opts) {
         state.midi = { opts: { ...state.midi.opts, ...raw.midi.opts }, input: raw.midi.input || '', output: raw.midi.output || '' };
       }
@@ -91,6 +104,7 @@ function save() {
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         slot: state.slot, slots: state.slots, fx: state.fx, song: state.song, lock: state.lock, midi: state.midi, view: state.view,
+        favs: state.favs, userKits: state.userKits, projectName: state.projectName,
       }));
     } catch (_) { /* quota / navigazione privata */ }
     // Le modifiche cambiano le voci: pre-renderizza in background quelle nuove
@@ -195,8 +209,15 @@ function buildPads() {
   }
 }
 
+function buildKitSelect() {
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  $('#kit').innerHTML = KITS.map((k) => `<option value="${k.id}">${k.name}</option>`).join('')
+    + (USER_KITS.length ? `<optgroup label="Kit personalizzati">${USER_KITS.map((k) => `<option value="${k.id}">${esc(k.name)}</option>`).join('')}</optgroup>` : '');
+  $('#kit').value = kitOf(pat()).id;
+}
+
 function buildSelects() {
-  $('#kit').innerHTML = KITS.map((k) => `<option value="${k.id}">${k.name}</option>`).join('');
+  buildKitSelect();
   $('#slot').innerHTML = Array.from({ length: SLOTS }, (_, i) => `<option value="${i}">P${i + 1}</option>`).join('');
 }
 
@@ -210,6 +231,8 @@ const PARAMS = [
   { k: 'pan', label: 'PAN', min: -1, max: 1, step: 0.05, fmt: (v) => (Math.abs(v) < 0.03 ? 'C' : (v < 0 ? 'L' : 'R') + Math.round(Math.abs(v) * 100)), pg: 'mix' },
   { k: 'rev', label: 'REV', min: 0, max: 1, step: 0.01, fmt: pct, pg: 'mix' },
   { k: 'dly', label: 'DLY', min: 0, max: 1, step: 0.01, fmt: pct, pg: 'mix' },
+  { k: 'drv', label: 'DRIVE', min: 0, max: 1, step: 0.05, fmt: pct, pg: 'fx' },
+  { k: 'crush', label: 'CRUSH', min: 0, max: 12, step: 1, fmt: (v) => (v < 4 ? 'OFF' : `${v}bit`), pg: 'fx' },
 ];
 
 function buildSliders() {
@@ -220,7 +243,7 @@ function buildSliders() {
     l.innerHTML = `<small>${d.label}</small><input type="range" data-param="${d.k}" min="${d.min}" max="${d.max}" step="${d.step}" aria-label="${d.label}"><output></output>`;
     box.appendChild(l);
   };
-  for (const pg of ['snd', 'mix']) {
+  for (const pg of ['snd', 'mix', 'fx']) {
     for (const d of PARAMS) if (d.pg === pg || d.pg === 'both') make(d, pg);
   }
 }
@@ -235,6 +258,8 @@ const FX = [
   { k: 'fb', label: 'FEEDBK', min: 0, max: 0.9, step: 0.01, fmt: pct },
   { k: 'div', label: 'TIME', options: [[1, '1/16'], [4 / 3, '1/8T'], [2, '1/8'], [3, '1/8.'], [4, '1/4'], [6, '1/4.']] },
   { k: 'master', label: 'MASTER', min: 0, max: 1, step: 0.01, fmt: pct },
+  { k: 'sc', label: 'SIDECHAIN', min: 0, max: 1, step: 0.01, fmt: pct },
+  { k: 'scRel', label: 'SC REL', min: 0.05, max: 0.8, step: 0.01, fmt: (v) => `${Math.round(v * 1000)}ms` },
 ];
 
 function buildFx() {
@@ -319,11 +344,12 @@ function renderTools() {
   setToggle($('[data-cmd="edit"]'), ui.edit);
   setToggle($('[data-cmd="met"]'), ui.met);
   const vb = $('[data-cmd="view"]');
-  vb.textContent = ui.view === 'synth' ? 'DRM' : 'SYN';
-  vb.setAttribute('aria-label', ui.view === 'synth' ? 'Mostra batteria' : 'Mostra synth');
-  vb.classList.toggle('on', ui.view === 'synth');
+  const next = { drum: 'synth', synth: 'perf', perf: 'drum' }[ui.view];
+  vb.textContent = { drum: 'DRM▸', synth: 'SYN▸', perf: 'PRF▸' }[ui.view];
+  vb.setAttribute('aria-label', `Vista ${{ drum: 'batteria', synth: 'synth', perf: 'performance' }[ui.view]}; tocca per ${{ drum: 'batteria', synth: 'synth', perf: 'performance' }[next]}`);
+  vb.classList.toggle('on', ui.view !== 'drum');
   $('[data-cmd="song"]').classList.toggle('on', state.song.on);
-  const fxOn = state.fx.filter !== 0 || pat().tracks.some((t) => t.rev > 0 || t.dly > 0);
+  const fxOn = state.fx.filter !== 0 || state.fx.sc > 0 || pat().tracks.some((t) => t.rev > 0 || t.dly > 0 || t.drv > 0 || t.crush > 0);
   $('[data-cmd="fx"]').classList.toggle('on', fxOn);
   $('[data-cmd="paste"]').disabled = !ui.clip;
   grid.classList.toggle('editing', ui.edit);
@@ -337,6 +363,7 @@ function renderAll() {
   renderTransport();
   renderTools();
   if (synthUI) synthUI.render();
+  if (perf) perf.render();
 }
 
 function setToggle(el, on) {
@@ -531,7 +558,10 @@ $('#sliders').addEventListener('input', (e) => {
   if (!k) return;
   beginGesture();
   const p = pat(), tr = p.tracks[state.sel];
-  tr[k] = k === 'len' ? parseInt(inp.value, 10) : parseFloat(inp.value);
+  let v = parseFloat(inp.value);
+  if (k === 'len') v = Math.round(v);
+  if (k === 'crush') v = v < 4 ? 0 : Math.round(v);
+  tr[k] = v;
   $$(`#sliders input[data-param="${k}"]`).forEach((x) => {
     if (x !== inp) x.value = inp.value;
     x.nextElementSibling.textContent = PARAMS.find((d) => d.k === k).fmt(tr[k]);
@@ -557,7 +587,8 @@ $('#sliders').addEventListener('pointerdown', (e) => {
 
 $('#pgBtn').addEventListener('click', () => {
   const box = $('#params');
-  box.dataset.pg = box.dataset.pg === 'snd' ? 'mix' : 'snd';
+  const PG = ['snd', 'mix', 'fx'];
+  box.dataset.pg = PG[(PG.indexOf(box.dataset.pg) + 1) % PG.length];
   $('#pgBtn').textContent = box.dataset.pg === 'snd' ? 'MIX' : 'SND';
   $('#pgBtn').setAttribute('aria-label', box.dataset.pg === 'snd' ? 'Mostra mixer' : 'Mostra suono');
 });
@@ -576,7 +607,7 @@ $('#soloBtn').addEventListener('click', () => {
 });
 
 // Campione WAV per traccia (persistito in IndexedDB)
-$('#wavBtn').addEventListener('click', () => $('#wavFile').click());
+$('#wavBtn').addEventListener('click', () => panels.openSample());
 $('#wavFile').addEventListener('change', async (e) => {
   const f = e.target.files[0];
   e.target.value = '';
@@ -719,6 +750,7 @@ $('#slot').addEventListener('change', (e) => {
 function setView(v) {
   ui.view = state.view = v;
   $('#app').dataset.view = v;
+  if (v === 'perf' && perf) perf.render();
   renderTools(); save();
 }
 
@@ -781,7 +813,7 @@ $('.tools').addEventListener('click', (e) => {
       break;
     case 'song': renderSong(); openSheet('songSheet'); break;
     case 'fx': renderFx(); openSheet('fxSheet'); break;
-    case 'view': setView(ui.view === 'synth' ? 'drum' : 'synth'); break;
+    case 'view': setView({ drum: 'synth', synth: 'perf', perf: 'drum' }[ui.view]); break;
   }
   renderTools();
 });
@@ -797,7 +829,8 @@ function openSheet(id) {
   sheetOpenedAt = performance.now();
   const s = $('#' + id);
   s.hidden = false;
-  const f = s.querySelector('button, input, select');
+  // Niente focus sui campi di testo: su iOS aprirebbe la tastiera
+  const f = s.querySelector('button, input:not([type="search"]):not([type="text"]), select');
   if (f) f.focus({ preventScroll: true });
 }
 function closeSheet(s) {
@@ -834,6 +867,13 @@ function renderStepEditor() {
   $('input[data-k="p"]', sheet).nextElementSibling.textContent = o.p + '%';
   $('input[data-k="n"]', sheet).value = o.n;
   $('input[data-k="n"]', sheet).nextElementSibling.textContent = (o.n > 0 ? '+' : '') + o.n;
+  const tr = p.tracks[t], pl = o.pl || {};
+  [['tune', tr.tune, (v) => (v > 0 ? '+' : '') + v], ['decay', tr.decay, (v) => v.toFixed(2)], ['vel', p.steps[t][s] === 2 ? 1 : 0.62, (v) => `${Math.round(v * 100)}`]]
+    .forEach(([key, def, fmt]) => {
+      const inp = $(`input[data-dlock="${key}"]`, sheet);
+      inp.value = pl[key] ?? def;
+      inp.nextElementSibling.textContent = pl[key] != null ? fmt(pl[key]) : '—';
+    });
 }
 
 function setStepOpt(k, v) {
@@ -860,6 +900,14 @@ $('#stepSheet').addEventListener('click', (e) => {
 $('#stepSheet').addEventListener('input', (e) => {
   const k = e.target.dataset.k;
   if (k) setStepOpt(k, +e.target.value);
+  const lk = e.target.dataset.dlock;
+  if (lk) {
+    const { t, s } = editing, p = pat();
+    const o = p.opts[t][s] || { ...STEP_DEFAULT };
+    p.opts[t][s] = normalizeOpt({ ...o, pl: { ...(o.pl || {}), [lk]: +e.target.value } });
+    if (!p.steps[t][s]) p.steps[t][s] = 1;
+    renderCell(t, s); renderStepEditor(); save();
+  }
 });
 
 // =====================================================================
@@ -987,6 +1035,19 @@ $('#menu').addEventListener('click', async (e) => {
       return;
     }
     case 'export': exportJSON(); return;
+    case 'projects': panels.openProjects(); return;
+    case 'share': panels.share(); return;
+    case 'gen': panels.openGen(); return;
+    case 'kits': panels.openKits(); return;
+    case 'recout': panels.recordOutput(); return;
+    case 'mid-pattern': panels.exportMid(Array.from({ length: 4 }, () => clonePattern(p)), `pat${state.slot + 1}`); return;
+    case 'mid-song': {
+      const bars = [];
+      state.song.chain.forEach((c) => { for (let r = 0; r < c.rep; r++) bars.push(clonePattern(state.slots[c.slot])); });
+      if (!bars.length) { toast('Catena song vuota'); return; }
+      panels.exportMid(bars, 'song');
+      return;
+    }
     case 'import': $('#importFile').click(); return;
     case 'midi': renderMidi(); openSheet('midiSheet'); return;
     case 'resetwav':
@@ -1024,12 +1085,45 @@ async function exportAudio(bars, name) {
   }
 }
 
+/** Dati completi del progetto (export JSON, progetti salvati). */
+function exportData() {
+  return {
+    app: 'drumbort', version: 3, appVersion: APP_VERSION,
+    slot: state.slot, slots: state.slots, song: state.song, fx: state.fx, lock: state.lock, userKits: state.userKits,
+  };
+}
+
+/** Sostituisce il progetto corrente con i dati forniti. */
+function importData(o) {
+  if (Array.isArray(o.userKits)) {
+    const ids = new Set(state.userKits.map((d) => d.id));
+    state.userKits = state.userKits.concat(o.userKits.filter((d) => d && !ids.has(d.id)));
+    setUserKits(state.userKits);
+    buildKitSelect();
+  }
+  for (let i = 0; i < SLOTS; i++) state.slots[i] = o.slots[i] ? normalizePattern(o.slots[i]) : createPattern(KITS[0].id, false);
+  state.song = normalizeSong(o.song);
+  state.fx = normalizeFx(o.fx);
+  state.lock = o.lock && kitById(o.lock).id === o.lock ? o.lock : null;
+  state.slot = clamp(o.slot | 0, 0, SLOTS - 1);
+  undoStack.length = 0; redoStack.length = 0;
+  if (seq.playing) stopPlayback();
+  syncPlayback(); renderAll(); save();
+}
+
+function newProject() {
+  for (let i = 0; i < SLOTS; i++) state.slots[i] = createPattern(KITS[i % KITS.length].id, true, i % 3);
+  state.song = normalizeSong(null);
+  state.fx = { ...DEFAULT_FX };
+  state.lock = null;
+  state.slot = 0;
+  undoStack.length = 0; redoStack.length = 0;
+  if (seq.playing) stopPlayback();
+  syncPlayback(); renderAll(); save();
+}
+
 function exportJSON() {
-  const data = JSON.stringify({
-    app: 'drumbort', version: 2, appVersion: APP_VERSION,
-    slot: state.slot, slots: state.slots, song: state.song, fx: state.fx, lock: state.lock,
-  });
-  deliver(new File([data], 'drumbort-patterns.json', { type: 'application/json' }));
+  deliver(new File([JSON.stringify(exportData())], 'drumbort-patterns.json', { type: 'application/json' }));
 }
 
 $('#importFile').addEventListener('change', async (e) => {
@@ -1040,6 +1134,12 @@ $('#importFile').addEventListener('change', async (e) => {
     const o = JSON.parse(await f.text());
     snapshot();
     if (Array.isArray(o.slots)) {
+      if (Array.isArray(o.userKits)) {
+        const ids = new Set(state.userKits.map((d) => d.id));
+        state.userKits = state.userKits.concat(o.userKits.filter((d) => d && !ids.has(d.id)));
+        setUserKits(state.userKits);
+        buildKitSelect();
+      }
       for (let i = 0; i < SLOTS; i++) if (o.slots[i]) state.slots[i] = normalizePattern(o.slots[i]);
       if (o.song) state.song = normalizeSong(o.song);
       if (o.fx) state.fx = normalizeFx(o.fx);
@@ -1210,9 +1310,16 @@ buildPads();
 buildSliders();
 buildFx();
 synthUI = initSynthUI({
-  engine, seq, ui, pat, save, snapshot, toast, setToggle, isPlayingPattern,
+  engine, seq, ui, state, pat, save, snapshot, toast, setToggle, isPlayingPattern,
   openSheet, closeSheet, setPage: (n) => setPage(n),
 });
+const app = {
+  engine, seq, ui, state, pat, kitOf, save, snapshot, toast, setToggle, isPlayingPattern,
+  openSheet, closeSheet, deliver, syncPlayback, renderAll, buildKitSelect, exportData, importData, newProject,
+};
+panels = initPanels(app);
+app.recordOutput = () => panels.recordOutput();
+perf = initPerformance(app);
 ui.view = state.view;
 $('#app').dataset.view = ui.view;
 seq.pattern = pat();
@@ -1222,7 +1329,9 @@ renderAll();
 requestAnimationFrame(frame);
 
 // Esposto per debug/test
-window.drumbort = { engine, seq, state, ui, midi, version: APP_VERSION, undo, redo };
+window.drumbort = { engine, seq, state, ui, midi, version: APP_VERSION, undo, redo, panels };
+panels.handleShareHash();
+window.addEventListener('hashchange', () => panels.handleShareHash());
 
 // =====================================================================
 // PWA: service worker + avviso di aggiornamento

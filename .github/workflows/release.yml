@@ -1,7 +1,8 @@
 name: Release
 
-# Crea il tag vX.Y.Z e la GitHub Release dopo un deploy riuscito (test verdi),
-# se la versione in js/version.js non è ancora taggata.
+# Dopo un deploy riuscito (test verdi), se la versione in js/version.js non è ancora taggata:
+# compila e testa i pacchetti desktop, poi crea tag e GitHub Release con i 4 eseguibili allegati.
+# Se un pacchetto non si compila la release non viene pubblicata (si rilancia il workflow).
 # Manualmente si può taggare una versione/commit specifici.
 on:
   workflow_run:
@@ -55,10 +56,37 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+  # 1) Test e pacchetti desktop per Windows, macOS (Apple Silicon e Intel) e Linux, dal commit da rilasciare
+  desktop:
+    needs: release
+    if: needs.release.outputs.created == 'true'
+    uses: ./.github/workflows/desktop.yml
+    with:
+      ref: ${{ needs.release.outputs.ref }}
+
+  # 2) La release si crea solo ora, con i 4 eseguibili già allegati (mai una release vuota)
+  publish:
+    needs: [release, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.ref }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: DrumBortHost-*
+          merge-multiple: true
+
+      - name: Controlla i pacchetti
+        run: |
+          for r in win-x64 osx-arm64 osx-x64 linux-x64; do test -s "DrumBortHost-$r.zip" || { echo "Manca DrumBortHost-$r.zip"; exit 1; }; done
+          ls -la DrumBortHost-*.zip
+
       - name: Extract changelog section
-        if: steps.v.outputs.exists == 'false'
         env:
-          V: ${{ steps.v.outputs.version }}
+          V: ${{ needs.release.outputs.version }}
         run: |
           awk -v v="$V" '
             index($0, "## [" v "]") == 1 { on=1; next }
@@ -67,18 +95,9 @@ jobs:
           ' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "Release v$V" > notes.md
 
-      - name: Create tag and release
-        if: steps.v.outputs.exists == 'false'
+      - name: Create tag and release (con gli eseguibili)
         env:
           GH_TOKEN: ${{ github.token }}
-          V: ${{ steps.v.outputs.version }}
-          REF: ${{ steps.v.outputs.ref }}
-        run: gh release create "v$V" --target "$REF" --title "v$V" --notes-file notes.md
-
-  # Host desktop: test e pacchetti per Windows/macOS/Linux, ognuno allegato alla release appena pronto
-  desktop:
-    needs: release
-    if: needs.release.outputs.created == 'true'
-    uses: ./.github/workflows/desktop.yml
-    with:
-      tag: v${{ needs.release.outputs.version }}
+          V: ${{ needs.release.outputs.version }}
+          REF: ${{ needs.release.outputs.ref }}
+        run: gh release create "v$V" DrumBortHost-*.zip --target "$REF" --title "v$V" --notes-file notes.md

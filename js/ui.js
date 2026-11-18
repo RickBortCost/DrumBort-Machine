@@ -737,6 +737,10 @@ document.addEventListener('keydown', (e) => {
     togglePlay();
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  if (e.key.toLowerCase() === 'w' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.closest('input, select, textarea') && $('#waveSheet').hidden) {
+    e.preventDefault();
+    synthUI.openEditor();
+  }
   // Studio: 1-8 lancia la scena, "." ferma tutte le clip
   if (sessionActive() && !e.ctrlKey && !e.metaKey && !e.target.closest('input, select, textarea')) {
     if (/^[1-8]$/.test(e.key)) { e.preventDefault(); launchScene(+e.key - 1); }
@@ -1282,6 +1286,7 @@ $('#menu').addEventListener('click', async (e) => {
     case 'share': panels.share(); return;
     case 'gen': panels.openGen(); return;
     case 'kits': panels.openKits(); return;
+    case 'wt': synthUI.openEditor(); return;
     case 'recout': panels.recordOutput(); return;
     case 'mid-pattern': panels.exportMid(Array.from({ length: 4 }, () => clonePattern(p)), `pat${state.slot + 1}`); return;
     case 'mid-song': {
@@ -1582,6 +1587,7 @@ studio = initStudio({ ...app, launchClip, launchScene, stopAllClips, setView, se
 if (state.layout === null) state.layout = matchMedia('(pointer: fine) and (min-width: 1200px)').matches ? 'studio' : 'compact';
 if (state.layout === 'studio' && state.session.map.every((v) => v < 0)) { state.session.map.fill(state.slot); state.session.master = state.slot; }
 $('#layoutBtn').addEventListener('click', toggleLayout);
+$('#wtBtn').addEventListener('click', () => synthUI.openEditor());
 studioMQ.addEventListener('change', applyLayout);
 applyLayout();
 app.recordOutput = () => panels.recordOutput();

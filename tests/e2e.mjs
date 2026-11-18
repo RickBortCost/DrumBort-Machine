@@ -611,6 +611,16 @@ async function studioTests(browser, url) {
   await page.click('#play');
   await page.keyboard.press('Tab');
 
+  // Editor wavetable raggiungibile da ovunque: pulsante WT, tasto W, scelta traccia
+  await page.keyboard.press('w');
+  const wk = await page.evaluate(() => !document.querySelector('#waveSheet').hidden);
+  await page.keyboard.press('Escape');
+  await page.click('#wtBtn');
+  await page.click('#waveTracks [data-wtk="3"]');
+  const wb = await page.evaluate(() => [!document.querySelector('#waveSheet').hidden, drumbort.ui.ssel]);
+  check('editor wavetable da tasto W e pulsante WT', wk && wb[0] && wb[1] === 3, `${wk} ${wb}`);
+  await page.keyboard.press('Escape');
+
   // Menu a sezioni e cambio layout
   await page.click('#menuBtn');
   const secs = await page.evaluate(() => [...document.querySelectorAll('#menu .msec h3')].map((h) => h.textContent).join('|'));

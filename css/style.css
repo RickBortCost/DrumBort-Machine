@@ -591,6 +591,10 @@ input[type="range"]::-moz-range-thumb {
 .wave-box { max-height: calc(100dvh - env(safe-area-inset-top) - 16px); }
 .wave-canvas { width: 100%; height: 110px; border-radius: 8px; background: #0d1114; border: 1px solid var(--edge); }
 .wave-tabs { flex-wrap: wrap; }
+.wave-tracks { margin-bottom: 6px; }
+.wave-tracks .btn { flex: 1; }
+.btn.wt { color: #b9a6ff; border-color: #6c5bb8; background: linear-gradient(180deg, #2c2640, #1d1a2b); font-weight: bold; letter-spacing: .05em; }
+.btn.wt:hover { color: #d9ceff; }
 .wave-tabs .btn { flex: 1 1 60px; }
 .wave-body { display: flex; flex-direction: column; gap: 2px; }
 .wave-body .row-ctl .sel { font-size: 15px; }

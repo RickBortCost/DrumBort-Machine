@@ -157,6 +157,7 @@ export function initWaveEditor(app) {
     const t = tr(), P = patch();
     $('#waveTitle').textContent = `EDITOR WAVETABLE · ${SYNTH_TRACKS[k].name.toUpperCase()}`;
     $$('#waveTabs .btn').forEach((b) => app.setToggle(b, b.dataset.tab === tab));
+    $$('#waveTracks .btn').forEach((b) => app.setToggle(b, +b.dataset.wtk === k));
     const isWT = !!(P && P.wt);
     $('#waveNotWT').hidden = isWT;
     $('#waveMain').hidden = !isWT;
@@ -296,6 +297,14 @@ export function initWaveEditor(app) {
   body.addEventListener('pointermove', (e) => { if (drawing) paintStep(e); });
   window.addEventListener('pointerup', () => { if (drawing) { drawing = false; schedulePreview(); } });
 
+  $('#waveTracks').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-wtk]');
+    if (!b) return;
+    k = +b.dataset.wtk;
+    focusOsc = 0;
+    if (app.onTrack) app.onTrack(k);
+    render();
+  });
   $('#waveTabs').addEventListener('click', (e) => {
     const b = e.target.closest('[data-tab]');
     if (!b) return;

@@ -443,6 +443,7 @@ export function initSynthUI(app) {
     ...app,
     onChange: () => { renderLabels(); renderParams(); },
     openLibrary: (k, cat) => library.open(k, cat),
+    onTrack: (k) => { ui.ssel = k; render(); },
   });
   $('#sedBtn').addEventListener('click', () => editor.open(ui.ssel));
 
@@ -610,6 +611,7 @@ export function initSynthUI(app) {
   // ===================================================================
   return {
     render,
+    openEditor() { editor.open(ui.ssel || 0); },
     showTick,
     clearPlayhead,
     onMidiRaw,

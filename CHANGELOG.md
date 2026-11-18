@@ -2,6 +2,12 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.6.1] - 2026-11-18
+
+### Modificato
+- **Synth wavetable più visibile**: pulsante **WT** nell'intestazione (in ogni vista, anche su iPhone), voce *Synth wavetable* nel menu Suoni, tasto **W** su PC; il pulsante ✎ del pannello synth diventa **WT**.
+- L'editor wavetable ha la scelta della traccia (BASS, LEAD, PAD, KEYS) senza tornare alla vista synth.
+
 ## [1.6.0] - 2026-11-18
 
 ### Aggiunto

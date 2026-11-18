@@ -52,13 +52,13 @@ Su computer (finestra di almeno 1000×600) l'app si apre nel layout **Studio**, 
 - **Arrangement** (pulsante ARRANGE o **Tab**): timeline tracce × battute. **● REC ARR** registra i lanci della session battuta per battuta; **▶ ARR** riproduce l'arrangiamento (un lancio manuale torna alla session, come in Live). Le celle si dipingono con il pattern selezionato (trascinando), la riga TEMPO sceglie il pattern che dà tempo e swing, il righello fissa il punto di partenza; + BAR, − BAR, ×2, DA SONG (converte la catena del song mode), SVUOTA.
 - **Editor** (sotto le clip): la griglia step della batteria o le corsie note del synth per la clip selezionata.
 - **Parametri e pad** (destra), **mixer** (in basso) con fader, pan, mandate, mute/solo e indicatori di livello.
-- Tastiera: **1-8** lanciano le scene, **.** ferma tutto, **Tab** session/arrangement, **Spazio** play/stop, **Ctrl/Cmd+Z** annulla.
+- Tastiera: **1-8** lanciano le scene, **.** ferma tutto, **Tab** session/arrangement, **W** synth wavetable, **Spazio** play/stop, **Ctrl/Cmd+Z** annulla.
 
 Il pulsante **▦** nella barra (o Menu → Layout) passa tra Studio e layout compatto.
 
 ## Synth wavetable
 
-Il motore wavetable (categoria **Wavetable** della libreria, editor ✎ nei parametri synth) segue l'approccio dei grandi synth wavetable software con un'implementazione e un'interfaccia originali:
+Il motore wavetable (categoria **Wavetable** della libreria; editor dal pulsante **WT** in alto, dal menu Suoni o con il tasto W) segue l'approccio dei grandi synth wavetable software con un'implementazione e un'interfaccia originali:
 
 - **3 oscillatori** con morph continuo tra i frame di 7 tabelle generate (Analog, Sync, Vocal, Digital, Additive, Growl, FM), semitoni, fine, livello; **unisono** fino a 3 voci sull'oscillatore 1; **rumore**.
 - **2 filtri** LP/BP/HP/Notch in serie o in parallelo, con **drive**.

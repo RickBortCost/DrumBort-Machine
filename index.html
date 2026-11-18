@@ -44,6 +44,7 @@
           <button class="btn sm page" data-page="1" aria-label="Step 9-16" aria-pressed="false">9–16<i class="led"></i></button>
         </div>
         <button id="layoutBtn" class="btn sm" aria-label="Layout Studio (PC)" aria-pressed="false" title="Layout Studio">▦</button>
+        <button id="wtBtn" class="btn sm wt" aria-label="Synth wavetable (editor stile Massive)" aria-haspopup="dialog" title="Synth wavetable (W)">WT</button>
         <button id="menuBtn" class="btn sm" aria-label="Menu" aria-haspopup="dialog">☰</button>
         <button id="drawerBtn" class="btn sm" aria-label="Pannello pad e strumenti" aria-expanded="false">◧</button>
       </div>
@@ -118,7 +119,7 @@
           <button id="presetBtn" class="btn preset" aria-haspopup="dialog">Suono</button>
           <button id="smuteBtn" class="btn sm ms" aria-label="Mute" aria-pressed="false">M</button>
           <button id="ssoloBtn" class="btn sm ms" aria-label="Solo" aria-pressed="false">S</button>
-          <button id="sedBtn" class="btn sm" aria-label="Editor wavetable" aria-haspopup="dialog">✎</button>
+          <button id="sedBtn" class="btn sm wt" aria-label="Editor wavetable" aria-haspopup="dialog">WT</button>
           <button id="sarpBtn" class="btn sm" aria-label="Arpeggiatore" aria-haspopup="dialog" aria-pressed="false">ARP</button>
           <button id="spgBtn" class="btn sm" aria-label="Pagina parametri">MOD</button>
         </div>
@@ -161,6 +162,7 @@
       <section class="msec" aria-label="Suoni">
         <h3>SUONI</h3>
         <div class="mgrid">
+          <button class="btn mitem" data-act="wt"><span class="mi" aria-hidden="true">≋</span><span class="ml">Synth wavetable<small>oscillatori, filtri, LFO, matrice</small></span></button>
           <button class="btn mitem" data-act="kits"><span class="mi" aria-hidden="true">🥁</span><span class="ml">Crea kit<small>voci da kit diversi</small></span></button>
           <button class="btn mitem" data-act="midi"><span class="mi" aria-hidden="true">🎹</span><span class="ml">MIDI<small>dispositivi, clock</small></span></button>
           <button class="btn mitem" data-act="resetwav"><span class="mi" aria-hidden="true">✕</span><span class="ml">Rimuovi WAV<small>tutti i campioni</small></span></button>
@@ -266,6 +268,9 @@
   <div id="waveSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="waveTitle" hidden>
     <div class="sheet-box wave-box">
       <div class="sheet-title" id="waveTitle">EDITOR WAVETABLE</div>
+      <div id="waveTracks" class="seg wave-tracks" role="group" aria-label="Traccia synth">
+        <button class="btn sm" data-wtk="0">BASS</button><button class="btn sm" data-wtk="1">LEAD</button><button class="btn sm" data-wtk="2">PAD</button><button class="btn sm" data-wtk="3">KEYS</button>
+      </div>
       <div id="waveNotWT" hidden>
         <p class="hint">L'editor modifica i suoni del motore wavetable. Scegli un suono della categoria Wavetable oppure parti da una patch vuota.</p>
         <div class="sheet-actions">

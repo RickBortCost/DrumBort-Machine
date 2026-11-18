@@ -163,14 +163,14 @@ export function scheduleTick(engine, pat, tick, time, opt = {}) {
     }
     const pp = o && o.pl ? { ...tr, ...o.pl } : tr;      // parameter lock
     if (o && o.f) {
-      engine.trigger(t, tt, vel * 0.45, pp);
+      engine.trigger(t, tt, vel * 0.45, pp, pat.kits && pat.kits[t]);
       played.push({ t, time: tt, vel: vel * 0.45 });
       tt += FLAM_GAP;
     }
     const r = o ? o.r : 1;
     for (let k = 0; k < r; k++) {
       const kv = k ? vel * 0.8 : vel;
-      engine.trigger(t, tt + (k * sd) / r, kv, pp);
+      engine.trigger(t, tt + (k * sd) / r, kv, pp, pat.kits && pat.kits[t]);
       played.push({ t, time: tt + (k * sd) / r, vel: kv });
     }
   }

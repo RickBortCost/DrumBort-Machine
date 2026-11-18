@@ -316,7 +316,8 @@ export class Engine {
    * @param {number} vel    velocity 0..1
    * @param {object} p      { tune, decay }
    */
-  trigger(i, time, vel, p) {
+  trigger(i, time, vel, p, voiceKit = null) {
+    const kit = voiceKit || this.kit;          // session: ogni traccia può venire da un kit diverso
     const ctx = this.ctx;
     if (!ctx) return;
     const t = Math.max(time, ctx.currentTime);
@@ -340,7 +341,7 @@ export class Engine {
     this.voices[i] = v;
 
     if (this.samples[i]) { v.src = this._playSample(this.samples[i].buffer, g, t, vel, p); return; }
-    const key = this.cache && this._drumKey(this.kit, i, p);
+    const key = this.cache && this._drumKey(kit, i, p);
     const buf = key && this.cache.get(key);
     if (buf) {
       // Voce pre-renderizzata: 1 sorgente invece di oscillatori/filtri
@@ -351,8 +352,8 @@ export class Engine {
       src.start(t);
       v.src = src;
     } else {
-      this.kit.tracks[i].play(ctx, g, t, vel, p);
-      if (key) this._prerenderDrum(this.kit, i, p);
+      kit.tracks[i].play(ctx, g, t, vel, p);
+      if (key) this._prerenderDrum(kit, i, p);
     }
   }
 
@@ -374,7 +375,7 @@ export class Engine {
   /** Pre-renderizza in background le voci del pattern: batteria (kit corrente) e note synth. */
   prewarm(pattern, kit = this.kit) {
     if (!this.cache) return;
-    pattern.tracks.forEach((tr, i) => { if (!this.samples[i]) this._prerenderDrum(kit, i, tr); });
+    pattern.tracks.forEach((tr, i) => { if (!this.samples[i]) this._prerenderDrum((pattern.kits && pattern.kits[i]) || kit, i, tr); });
     if (!pattern.synth) return;
     pattern.synth.tracks.forEach((tr, k) => {
       if (tr.arp && tr.arp.on) {
@@ -472,6 +473,28 @@ export class Engine {
     }
     if (mono) this.mono[k] = v; else this.polyVoices[k].push(v);
     return v.handle || { release() {}, kill: (at) => this._kill(v, at) };
+  }
+
+  // -------------------------------------------------------------------
+  // Indicatori di livello (layout Studio)
+  // -------------------------------------------------------------------
+  /** Analizzatori sui 12 canali (post-pan) e sul master, creati alla prima richiesta. */
+  meters() {
+    if (!this.ctx) return null;
+    if (!this._meters) {
+      const mk = (node) => { const a = this.ctx.createAnalyser(); a.fftSize = 256; node.connect(a); return a; };
+      this._meters = { ch: this.channels.map((c) => mk(c.out)), master: mk(this.comp) };
+      this._mbuf = new Float32Array(256);
+    }
+    return this._meters;
+  }
+
+  /** Picco istantaneo (0..1+) di un analizzatore. */
+  level(an) {
+    an.getFloatTimeDomainData(this._mbuf);
+    let pk = 0;
+    for (let i = 0; i < this._mbuf.length; i++) { const v = Math.abs(this._mbuf[i]); if (v > pk) pk = v; }
+    return pk;
   }
 
   /** Click del metronomo (fuori dalla catena effetti). */

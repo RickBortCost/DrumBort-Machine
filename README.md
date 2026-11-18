@@ -121,7 +121,21 @@ Ogni traccia può usare qualsiasi suono della libreria. BASS e LEAD sono monofon
 | Sequential Drumtraks | 10 bit, cowbell |
 | E-mu Drumulator | 9 bit con filtro scuro, clave |
 
-Tracce: Kick, Snare, Clap/Rim, Closed Hat, Open Hat, Tom, Cymbal/Ride, Percussione. Il closed hat strozza l'open hat.
+Kit di genere (sezione *Generi* del selettore):
+
+| Kit | BPM | Suoni |
+| --- | --- | --- |
+| Dubstep | 140 | Cassa distorta, rullante a strati (rullante + clap + coda), sub drop, riser, laser |
+| Riddim | 150 | Cassa corta saturata, gunshot snare, 808 sub, snap, crash |
+| EDM Big Room | 128 | Cassa lunga con click e drive, rullante + clap, ride, riser, impact |
+| House | 124 | Cassa, clap, shaker, rim, conga |
+| Techno | 132 | Rumble kick, rim, ride, perc metallica, noise sweep |
+| Trap | 140 | 808 lungo, cassa corta, snap, hat per i roll |
+| Drum & Bass | 174 | Breakbeat con ghost snare, shaker, ride, crash |
+| Future Bass | 150 | Rullante lungo, snap, chime, downlifter |
+| Lo-Fi Hip Hop | 84 | 10 bit con filtro scuro, swing alto, crackle, shaker |
+
+Tracce dei kit classici: Kick, Snare, Clap/Rim, Closed Hat, Open Hat, Tom, Cymbal/Ride, Percussione; nei kit di genere le ultime tracce ospitano FX e percussioni tipiche del genere. Ogni voce è usabile in **Crea kit**. Il closed hat strozza l'open hat.
 
 ## Aggiungi a Home (iOS)
 

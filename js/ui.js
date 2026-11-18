@@ -257,7 +257,9 @@ function buildPads() {
 
 function buildKitSelect() {
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  $('#kit').innerHTML = KITS.map((k) => `<option value="${k.id}">${k.name}</option>`).join('')
+  const group = (label, list) => `<optgroup label="${label}">${list.map((k) => `<option value="${k.id}">${k.name}</option>`).join('')}</optgroup>`;
+  $('#kit').innerHTML = group('Drum machine classiche', KITS.filter((k) => !k.group))
+    + group('Generi: EDM, dubstep, trap…', KITS.filter((k) => k.group === 'genre'))
     + (USER_KITS.length ? `<optgroup label="Kit personalizzati">${USER_KITS.map((k) => `<option value="${k.id}">${esc(k.name)}</option>`).join('')}</optgroup>` : '');
   $('#kit').value = kitOf(pat()).id;
 }

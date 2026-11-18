@@ -222,6 +222,35 @@ export const cowbell = ({ freqs = [540, 800], bp = 2640, q = 1.2, decay = 0.35, 
     return amp;
   };
 
+/**
+ * Rumore filtrato con inviluppo e sweep del filtro: shaker, snap, riser, downlifter, crash,
+ * "gunshot". Attacchi lunghi (riser) seguono anche il parametro decay.
+ */
+export const noiseHit = ({ type = 'highpass', freq = 6000, q = 0.7, to = 0, attack = 0.001, decay = 0.1,
+  level = 0.6, drive = 0 } = {}) =>
+  (ctx, out, t, v, p) => {
+    const k = ratio(p), d = dmul(p);
+    const att = attack > 0.05 ? attack * d : attack, dur = decay * d;
+    const amp = vca(ctx, out, t, v * level, dur, att);
+    const f = filt(ctx, type, freq * k, q);
+    if (to) f.frequency.exponentialRampToValueAtTime(Math.min(to * k, ctx.sampleRate / 2 - 100), t + att + dur * 0.8);
+    const src = noiseSrc(ctx, t, att + dur);
+    if (drive) {
+      const ws = ctx.createWaveShaper();
+      ws.curve = driveCurve(drive);
+      src.connect(f).connect(ws).connect(amp);
+    } else {
+      src.connect(f).connect(amp);
+    }
+    return amp;
+  };
+
+/** Più voci sovrapposte nello stesso colpo (es. rullante + clap + coda di rumore). */
+export const layer = (...voices) => (ctx, out, t, v, p) => {
+  for (const vc of voices) vc(ctx, out, t, v, p);
+  return out;
+};
+
 // =====================================================================
 // Libreria kit
 // =====================================================================
@@ -459,6 +488,228 @@ export const KITS = [
       '................',
       '................',
       '..x..x....x..x..',
+    ],
+  },
+
+  // ===================================================================
+  // Kit di genere (elettronica moderna). group: 'genre' → sezione a parte nel selettore.
+  // ===================================================================
+  {
+    id: 'dubstep', name: 'Dubstep', group: 'genre', bpm: 140, swing: 50,
+    tracks: [
+      T('Kick', 'BD', kick({ start: 320, end: 48, sweep: 0.045, decay: 0.55, click: 0.55, drive: 0.7, level: 0.95 })),
+      T('Snare', 'SD', layer(
+        snare({ tones: [205, 410], drop: 1.5, sweep: 0.025, toneDecay: 0.13, toneLevel: 0.5, nType: 'bandpass', nFreq: 2600, nQ: 0.5, nDecay: 0.3, noiseLevel: 0.5 }),
+        clap({ freq: 1400, q: 0.9, bursts: 3, spacing: 0.008, tail: 0.2, level: 0.4 }),
+        noiseHit({ type: 'highpass', freq: 3500, decay: 0.55, level: 0.22 }))),
+      T('Clap', 'CP', clap({ freq: 1250, q: 1, bursts: 4, spacing: 0.01, tail: 0.3 }), -0.15),
+      T('Closed Hat', 'CH', metal({ freqs: METAL_909, mult: 1.7, hp: 9000, bp: 12000, bpQ: 0.7, decay: 0.04, level: 0.5, noise: 0.2 }), 0.25),
+      T('Open Hat', 'OH', metal({ freqs: METAL_909, mult: 1.7, hp: 8000, bp: 11000, bpQ: 0.7, decay: 0.38, level: 0.42, noise: 0.2 }), 0.25),
+      T('Sub Drop', 'DR', kick({ start: 110, end: 30, sweep: 0.9, decay: 1.8, drive: 0.3, noise: 0.25, noiseFreq: 250, level: 0.9 })),
+      T('Riser', 'RS', noiseHit({ type: 'bandpass', freq: 400, q: 2.5, to: 9000, attack: 1.6, decay: 0.12, level: 0.5 }), 0.2),
+      T('Laser', 'LZ', tom({ start: 2600, end: 140, sweep: 0.18, decay: 0.24, type: 'square', level: 0.32 }), -0.25),
+    ],
+    demo: [
+      'X.........x..x..',
+      '........X.......',
+      '........x.......',
+      'x.x.x.x.x.x.x.xx',
+      '......x.......x.',
+      'X...............',
+      '................',
+      '...........x..x.',
+    ],
+  },
+  {
+    id: 'riddim', name: 'Riddim', group: 'genre', bpm: 150, swing: 50,
+    tracks: [
+      T('Kick', 'BD', kick({ start: 260, end: 52, sweep: 0.03, decay: 0.32, click: 0.7, drive: 0.9, level: 0.9 })),
+      T('Gunshot Snare', 'SD', layer(
+        snare({ tones: [230], oscType: 'triangle', drop: 1.8, toneDecay: 0.08, toneLevel: 0.45, nFreq: 1500, nDecay: 0.16, noiseLevel: 0.45 }),
+        noiseHit({ type: 'lowpass', freq: 5000, to: 900, decay: 0.42, level: 0.4, drive: 0.9 }))),
+      T('Clap', 'CP', clap({ freq: 1600, q: 1.3, bursts: 3, spacing: 0.007, tail: 0.14 }), -0.15),
+      T('Closed Hat', 'CH', noiseHit({ type: 'highpass', freq: 9000, decay: 0.035, level: 0.3 }), 0.25),
+      T('Open Hat', 'OH', noiseHit({ type: 'highpass', freq: 7500, decay: 0.28, level: 0.25 }), 0.25),
+      T('808 Sub', 'SB', kick({ start: 72, end: 49, sweep: 0.08, decay: 1.5, drive: 0.4, level: 0.95 })),
+      T('Snap', 'SN', noiseHit({ type: 'bandpass', freq: 2800, q: 2, decay: 0.07, level: 1.4 }), -0.2),
+      T('Crash', 'CR', metal({ mult: 1.2, hp: 4000, bp: 7000, bpQ: 0.5, decay: 1.6, level: 0.35, noise: 0.45 }), 0.35),
+    ],
+    demo: [
+      'X...........X...',
+      '........X.......',
+      '................',
+      'x.xxx.x.x.xxx.x.',
+      '................',
+      'X..X......X.....',
+      '.......x......x.',
+      'X...............',
+    ],
+  },
+  {
+    id: 'edm', name: 'EDM Big Room', group: 'genre', bpm: 128, swing: 50,
+    tracks: [
+      T('Kick', 'BD', kick({ start: 380, end: 46, sweep: 0.05, decay: 0.75, click: 0.6, drive: 0.8, level: 0.95 })),
+      T('Snare', 'SD', layer(
+        snare({ tones: [190, 380], drop: 1.5, toneDecay: 0.12, toneLevel: 0.5, nFreq: 2200, nDecay: 0.26, noiseLevel: 0.5 }),
+        clap({ freq: 1200, q: 1.1, bursts: 3, spacing: 0.009, tail: 0.25, level: 0.45 }))),
+      T('Clap', 'CP', clap({ freq: 1150, q: 0.9, bursts: 4, spacing: 0.011, tail: 0.38 }), -0.15),
+      T('Closed Hat', 'CH', metal({ freqs: METAL_909, mult: 1.6, hp: 9000, bp: 11500, bpQ: 0.8, decay: 0.045, level: 0.52, noise: 0.15 }), 0.25),
+      T('Open Hat', 'OH', metal({ freqs: METAL_909, mult: 1.6, hp: 8000, bp: 10500, bpQ: 0.8, decay: 0.3, level: 0.45, noise: 0.15 }), 0.25),
+      T('Ride', 'RD', metal({ freqs: METAL_909, mult: 2.2, hp: 4000, bp: 7000, bpQ: 1.2, decay: 1.0, level: 0.32, noise: 0.08 }), 0.35),
+      T('Riser', 'RS', noiseHit({ type: 'bandpass', freq: 300, q: 2, to: 11000, attack: 2.2, decay: 0.15, level: 0.5 }), 0.2),
+      T('Impact', 'IM', layer(
+        kick({ start: 140, end: 32, sweep: 0.5, decay: 1.8, drive: 0.4, level: 0.8 }),
+        noiseHit({ type: 'lowpass', freq: 8000, to: 300, decay: 1.6, level: 0.35 }))),
+    ],
+    demo: [
+      'X...X...X...X...',
+      '................',
+      '....X.......X...',
+      '................',
+      '..x...x...x...x.',
+      'x.x.x.x.x.x.x.x.',
+      '................',
+      'X...............',
+    ],
+  },
+  {
+    id: 'house', name: 'House', group: 'genre', bpm: 124, swing: 56,
+    tracks: [
+      T('Kick', 'BD', kick({ start: 200, end: 50, sweep: 0.04, decay: 0.5, click: 0.35, drive: 0.35 })),
+      T('Clap', 'CP', clap({ freq: 1150, q: 1.2, bursts: 4, spacing: 0.01, tail: 0.24 }), -0.1),
+      T('Snare', 'SD', snare({ tones: [200, 340], drop: 1.4, toneDecay: 0.1, toneLevel: 0.55, nFreq: 2500, nDecay: 0.18, noiseLevel: 0.6 })),
+      T('Closed Hat', 'CH', metal({ freqs: METAL_909, mult: 1.6, hp: 8500, bp: 11000, decay: 0.05, level: 0.5, noise: 0.1 }), 0.25),
+      T('Open Hat', 'OH', metal({ freqs: METAL_909, mult: 1.6, hp: 8000, bp: 10500, decay: 0.26, level: 0.45, noise: 0.1 }), 0.25),
+      T('Shaker', 'SH', noiseHit({ type: 'highpass', freq: 6500, attack: 0.012, decay: 0.06, level: 0.45 }), -0.3),
+      T('Rim', 'RM', rim({ freqs: [480, 1650], decay: 0.035, hp: 500, level: 0.5 }), 0.2),
+      T('Conga', 'CG', tom({ start: 330, end: 290, sweep: 0.05, decay: 0.28, level: 0.75 }), -0.25),
+    ],
+    demo: [
+      'X...X...X...X...',
+      '....X.......X...',
+      '...............x',
+      'x.x.x.x.x.x.x.x.',
+      '..x...x...x...x.',
+      'xxxxxxxxxxxxxxxx',
+      '...x..x....x....',
+      '......x..x....x.',
+    ],
+  },
+  {
+    id: 'techno', name: 'Techno', group: 'genre', bpm: 132, swing: 50,
+    tracks: [
+      T('Rumble Kick', 'BD', kick({ start: 230, end: 45, sweep: 0.04, decay: 0.9, click: 0.4, drive: 0.95, level: 0.85 })),
+      T('Clap', 'CP', clap({ freq: 1050, q: 1, bursts: 4, spacing: 0.012, tail: 0.32 }), -0.1),
+      T('Rim', 'RM', rim({ freqs: [520, 1800], decay: 0.03, hp: 600, level: 0.5 }), 0.2),
+      T('Closed Hat', 'CH', metal({ freqs: METAL_909, mult: 1.8, hp: 9500, bp: 12000, decay: 0.03, level: 0.5, noise: 0.25 }), 0.25),
+      T('Open Hat', 'OH', metal({ freqs: METAL_909, mult: 1.8, hp: 8500, bp: 11000, decay: 0.22, level: 0.45, noise: 0.25 }), 0.25),
+      T('Ride', 'RD', metal({ freqs: METAL_909, mult: 2.4, hp: 4500, bp: 7500, bpQ: 1.5, decay: 0.9, level: 0.3 }), 0.35),
+      T('Perc', 'PC', tom({ start: 900, end: 420, sweep: 0.03, decay: 0.12, type: 'square', level: 0.3 }), -0.3),
+      T('Noise Sweep', 'NS', noiseHit({ type: 'bandpass', freq: 9000, q: 3, to: 500, decay: 0.9, level: 0.45 }), -0.2),
+    ],
+    demo: [
+      'X...X...X...X...',
+      '....X.......X...',
+      '.x....x...x..x..',
+      'xxx.xxx.xxx.xxx.',
+      '..x...x...x...x.',
+      '................',
+      '...x..x...x..x..',
+      '................',
+    ],
+  },
+  {
+    id: 'trap', name: 'Trap', group: 'genre', bpm: 140, swing: 50,
+    tracks: [
+      T('808', 'BD', kick({ start: 85, end: 45, sweep: 0.1, decay: 1.7, drive: 0.5, click: 0.25, level: 0.95 })),
+      T('Snare', 'SD', snare({ tones: [220, 440], drop: 1.6, toneDecay: 0.09, toneLevel: 0.5, nType: 'bandpass', nFreq: 3200, nQ: 0.6, nDecay: 0.2, noiseLevel: 0.75 })),
+      T('Clap', 'CP', clap({ freq: 1300, q: 1.1, bursts: 3, spacing: 0.009, tail: 0.2 }), -0.15),
+      T('Closed Hat', 'CH', metal({ mult: 1.4, hp: 9000, bp: 12000, decay: 0.03, level: 0.5, noise: 0.15 }), 0.25),
+      T('Open Hat', 'OH', metal({ mult: 1.4, hp: 8000, bp: 10500, decay: 0.3, level: 0.42, noise: 0.15 }), 0.25),
+      T('Kick', 'KK', kick({ start: 240, end: 55, sweep: 0.03, decay: 0.25, click: 0.6, drive: 0.6 })),
+      T('Snap', 'SN', noiseHit({ type: 'bandpass', freq: 2500, q: 2.2, decay: 0.06, level: 1.5 }), 0.2),
+      T('Perc', 'PC', rim({ freqs: [1100, 1650], type: 'sine', decay: 0.08, hp: 0, level: 0.45 }), -0.25),
+    ],
+    demo: [
+      'X......X..X.....',
+      '........X.......',
+      '........x.......',
+      'x.x.x.xxx.x.xxxx',
+      '......x.........',
+      '...............x',
+      '...............x',
+      '...x.......x....',
+    ],
+  },
+  {
+    id: 'dnb', name: 'Drum & Bass', group: 'genre', bpm: 174, swing: 50,
+    tracks: [
+      T('Kick', 'BD', kick({ start: 230, end: 55, sweep: 0.03, decay: 0.32, click: 0.5, drive: 0.5 })),
+      T('Snare', 'SD', snare({ tones: [240, 470], drop: 1.4, toneDecay: 0.1, toneLevel: 0.6, nFreq: 2800, nDecay: 0.2, noiseLevel: 0.75 })),
+      T('Ghost Snare', 'GS', snare({ tones: [260], drop: 1.2, toneDecay: 0.05, toneLevel: 0.3, nFreq: 3500, nDecay: 0.08, noiseLevel: 0.4 }), 0.1),
+      T('Closed Hat', 'CH', metal({ mult: 1.5, hp: 9000, bp: 12000, decay: 0.03, level: 0.48, noise: 0.2 }), 0.25),
+      T('Open Hat', 'OH', metal({ mult: 1.5, hp: 8000, bp: 10500, decay: 0.24, level: 0.42, noise: 0.2 }), 0.25),
+      T('Ride', 'RD', metal({ freqs: METAL_909, mult: 2.3, hp: 4200, bp: 7200, bpQ: 1.3, decay: 0.8, level: 0.3 }), 0.35),
+      T('Shaker', 'SH', noiseHit({ type: 'highpass', freq: 7000, attack: 0.01, decay: 0.05, level: 0.4 }), -0.3),
+      T('Crash', 'CR', metal({ mult: 1.2, hp: 4500, bp: 7500, bpQ: 0.5, decay: 1.5, level: 0.35, noise: 0.45 }), -0.35),
+    ],
+    demo: [
+      'X.........X.....',
+      '....X.......X...',
+      '.......x.x....x.',
+      'x.x.x.x.x.x.x.x.',
+      '..............x.',
+      '................',
+      'xxxxxxxxxxxxxxxx',
+      'X...............',
+    ],
+  },
+  {
+    id: 'futurebass', name: 'Future Bass', group: 'genre', bpm: 150, swing: 50,
+    tracks: [
+      T('Kick', 'BD', kick({ start: 300, end: 50, sweep: 0.04, decay: 0.45, click: 0.45, drive: 0.5 })),
+      T('Snare', 'SD', layer(
+        snare({ tones: [210, 420], drop: 1.5, toneDecay: 0.12, toneLevel: 0.5, nFreq: 2000, nDecay: 0.4, noiseLevel: 0.45 }),
+        noiseHit({ type: 'highpass', freq: 4000, decay: 0.7, level: 0.2 }))),
+      T('Clap', 'CP', clap({ freq: 1350, q: 1, bursts: 4, spacing: 0.01, tail: 0.35 }), -0.15),
+      T('Closed Hat', 'CH', metal({ freqs: METAL_909, mult: 1.6, hp: 9000, bp: 11500, decay: 0.04, level: 0.5, noise: 0.1 }), 0.25),
+      T('Open Hat', 'OH', metal({ freqs: METAL_909, mult: 1.6, hp: 8000, bp: 10500, decay: 0.32, level: 0.42, noise: 0.1 }), 0.25),
+      T('Snap', 'SN', noiseHit({ type: 'bandpass', freq: 2300, q: 2, decay: 0.08, level: 1.4 }), 0.2),
+      T('Chime', 'CM', rim({ freqs: [1568, 2349, 3136], type: 'sine', decay: 0.6, hp: 0, level: 0.4 }), -0.3),
+      T('Downlifter', 'DL', noiseHit({ type: 'bandpass', freq: 10000, q: 1.5, to: 200, decay: 1.4, level: 0.5 }), -0.2),
+    ],
+    demo: [
+      'X.....X...X.....',
+      '........X.......',
+      '........x.......',
+      'x.x.x.x.x.x.xxxx',
+      '..............x.',
+      '...x.......x....',
+      'x.....x.........',
+      '................',
+    ],
+  },
+  {
+    id: 'lofi', name: 'Lo-Fi Hip Hop', group: 'genre', bpm: 84, swing: 62, crush: 10, lp: 7000,
+    tracks: [
+      T('Kick', 'BD', kick({ start: 140, end: 52, sweep: 0.05, decay: 0.42, click: 0.2, drive: 0.3 })),
+      T('Snare', 'SD', snare({ tones: [190, 300], drop: 1.3, toneDecay: 0.12, toneLevel: 0.6, nType: 'bandpass', nFreq: 1800, nQ: 0.6, nDecay: 0.2, noiseLevel: 0.6 })),
+      T('Rim', 'RM', rim({ freqs: [450, 1500], decay: 0.04, hp: 400, level: 0.5 }), -0.15),
+      T('Closed Hat', 'CH', metal({ mult: 1.3, hp: 6000, bp: 8000, bpQ: 0.6, decay: 0.05, level: 0.42, noise: 0.35 }), 0.25),
+      T('Open Hat', 'OH', metal({ mult: 1.3, hp: 5500, bp: 7500, bpQ: 0.6, decay: 0.3, level: 0.36, noise: 0.35 }), 0.25),
+      T('Shaker', 'SH', noiseHit({ type: 'bandpass', freq: 5000, q: 0.8, attack: 0.015, decay: 0.07, level: 0.4 }), -0.3),
+      T('Vinyl Crackle', 'VN', noiseHit({ type: 'highpass', freq: 3000, decay: 0.02, level: 0.35 }), 0.1),
+      T('Tom', 'TM', tom({ start: 170, end: 120, sweep: 0.15, decay: 0.38, noise: 0.08 }), -0.25),
+    ],
+    demo: [
+      'X......x..X.....',
+      '....X.......X...',
+      '...........x....',
+      'x.x.xx.xx.x.x.xx',
+      '..............x.',
+      '..x...x...x...x.',
+      'x..x..x.x....x..',
+      '................',
     ],
   },
 ];

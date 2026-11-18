@@ -644,12 +644,12 @@ async function audioTests(browser, url) {
     let n = 0;
     for (const k of KITS) {
       for (const tr of k.tracks) {
-        const ctx = new OAC(1, 44100, 44100);
+        const ctx = new OAC(1, 44100 * 3, 44100);
         tr.play(ctx, ctx.destination, 0.01, 1, { tune: 0, decay: 1 });
         const d = (await ctx.startRendering()).getChannelData(0);
         let pk = 0, nan = false;
         for (let i = 0; i < d.length; i++) { if (d[i] !== d[i]) nan = true; pk = Math.max(pk, Math.abs(d[i])); }
-        if (nan || pk < 0.05) bad.push(`${k.id}/${tr.short}:${pk.toFixed(3)}${nan ? ' NaN' : ''}`);
+        if (nan || pk < 0.05 || pk > 1.6) bad.push(`${k.id}/${tr.short}:${pk.toFixed(3)}${nan ? ' NaN' : ''}`);
         n++;
       }
     }

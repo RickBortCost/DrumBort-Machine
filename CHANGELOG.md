@@ -2,6 +2,13 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.7.0] - 2026-11-18
+
+### Aggiunto
+- **9 kit di genere**, tutti sintetizzati e con groove demo: Dubstep, Riddim, EDM Big Room, House, Techno, Trap, Drum & Bass, Future Bass, Lo-Fi Hip Hop.
+- Nuove voci: rullanti a strati, gunshot snare, 808 e sub drop lunghi, riser, downlifter, impact, laser, noise sweep, shaker, snap, chime, crackle. Sono disponibili anche in *Crea kit*.
+- Selettore dei kit diviso in *Drum machine classiche* e *Generi*.
+
 ## [1.6.1] - 2026-11-18
 
 ### Modificato

@@ -16,6 +16,8 @@ import { APP_VERSION } from './version.js';
 import { initSynthUI } from './synthui.js';
 import { initPanels } from './panels.js';
 import { initPerformance } from './performance.js';
+import { composePattern, SESSION_TRACKS } from './session.js';
+import { initStudio } from './studio.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -46,12 +48,16 @@ const state = {
   userKits: [],                     // definizioni dei kit personalizzati
   userPresets: [],                  // preset synth salvati dall'editor wavetable
   projectName: '',                  // progetto aperto
+  layout: null,                     // 'compact' | 'studio' (null = scelta automatica al primo avvio)
+  session: { map: new Array(SESSION_TRACKS).fill(-1), master: 0 },   // clip in riproduzione per traccia
 };
 
 /** Stato solo di interfaccia (non salvato). */
 const ui = { edit: false, rec: false, met: false, clip: null, songIdx: -1, songPos: null, view: 'drum' };
 let synthUI = null;
 let panels = null;      // fogli secondari (panels.js)
+let studio = null;      // layout Studio (studio.js)
+ui.queued = new Array(SESSION_TRACKS).fill(null);    // clip in attesa del prossimo giro (-1 = stop)
 let perf = null;        // vista performance (performance.js)
 
 function normalizeFx(o) {
@@ -91,6 +97,10 @@ function loadState() {
       state.song = normalizeSong(raw.song);
       state.lock = KITS.some((k) => k.id === raw.lock) ? raw.lock : null;
       state.view = ['synth', 'perf'].includes(raw.view) ? raw.view : 'drum';
+      state.layout = ['compact', 'studio'].includes(raw.layout) ? raw.layout : null;
+      if (raw.session && Array.isArray(raw.session.map) && raw.session.map.length === SESSION_TRACKS) {
+        state.session = { map: raw.session.map.map((v) => (Number.isInteger(v) && v >= -1 && v < SLOTS ? v : -1)), master: clamp(raw.session.master | 0, 0, SLOTS - 1) };
+      }
       if (raw.midi && raw.midi.opts) {
         state.midi = { opts: { ...state.midi.opts, ...raw.midi.opts }, input: raw.midi.input || '', output: raw.midi.output || '' };
       }
@@ -109,6 +119,7 @@ function save() {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         slot: state.slot, slots: state.slots, fx: state.fx, song: state.song, lock: state.lock, midi: state.midi, view: state.view,
         favs: state.favs, userKits: state.userKits, userPresets: state.userPresets, projectName: state.projectName,
+        layout: state.layout, session: state.session,
       }));
     } catch (_) { /* quota / navigazione privata */ }
     // Le modifiche cambiano le voci: pre-renderizza in background quelle nuove
@@ -118,10 +129,34 @@ function save() {
 
 const pat = () => state.slots[state.slot];
 const kitOf = (p) => kitById(state.lock || p.kit);
-const isPlayingPattern = (p) => seq.pattern === p;
+/** Il pattern `p` è (anche in parte) in riproduzione? In session: se una traccia suona una sua clip. */
+const isPlayingPattern = (p) => {
+  if (state.layout === 'studio' && seq.pattern && seq.pattern.composite) {
+    const i = state.slots.indexOf(p);
+    return i >= 0 && (state.session.master === i || state.session.map.includes(i));
+  }
+  return seq.pattern === p;
+};
+
+/** Layout Studio effettivamente visibile (schermo abbastanza grande). */
+const studioMQ = matchMedia('(min-width: 1000px) and (min-height: 600px)');
+const sessionActive = () => state.layout === 'studio' && studioMQ.matches;
+
+/** Pattern composto dalle clip in riproduzione (modalità session). */
+const composeSession = () => composePattern(state.slots, state.session.map, state.session.master, state.lock);
+
+/** Pattern che fornisce tempo e swing: in session il pattern "principale" (ultima scena lanciata). */
+const tempoPattern = () => (sessionActive() ? state.slots[state.session.master] : pat());
 
 /** Allinea il motore al pattern in riproduzione (o a quello visualizzato se fermo). */
 function syncPlayback() {
+  if (sessionActive()) {
+    seq.pattern = composeSession();
+    engine.setKit(kitById(seq.pattern.kit));
+    engine.applyMix(seq.pattern);
+    engine.setFx(state.fx, seq.pattern.bpm);
+    return;
+  }
   const songPlaying = seq.playing && state.song.on && state.song.chain.length;
   if (!songPlaying) seq.pattern = pat();
   const p = seq.pattern;
@@ -334,10 +369,10 @@ function renderParams() {
 }
 
 function renderTransport() {
-  const p = pat();
-  $('#bpmVal').textContent = p.bpm;
-  $('#swing').value = p.swing;
-  $('#swingVal').textContent = p.swing + '%';
+  const p = pat(), tp = tempoPattern();
+  $('#bpmVal').textContent = tp.bpm;
+  $('#swing').value = tp.swing;
+  $('#swingVal').textContent = tp.swing + '%';
   $('#kit').value = kitOf(p).id;
   $('#slot').value = state.slot;
   setToggle($('#lockBtn'), !!state.lock);
@@ -368,6 +403,7 @@ function renderAll() {
   renderTools();
   if (synthUI) synthUI.render();
   if (perf) perf.render();
+  if (studio) studio.render();
 }
 
 function setToggle(el, on) {
@@ -642,7 +678,12 @@ async function restoreSamples() {
 
 function startPlayback() {
   if (!engine.ctx || seq.playing) return;
-  if (state.song.on && state.song.chain.length) {
+  if (sessionActive()) {
+    // Clip in attesa partono subito; senza clip si lancia la scena del pattern selezionato
+    applyQueued();
+    if (state.session.map.every((v) => v < 0)) { state.session.map.fill(state.slot); state.session.master = state.slot; }
+    seq.meta = null;
+  } else if (state.song.on && state.song.chain.length) {
     ui.songPos = { i: 0, r: 0 };
     seq.meta = 0;
     const first = state.slots[state.song.chain[0].slot];
@@ -677,13 +718,19 @@ document.addEventListener('keydown', (e) => {
     togglePlay();
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  // Studio: 1-8 lancia la scena, "." ferma tutte le clip
+  if (sessionActive() && !e.ctrlKey && !e.metaKey && !e.target.closest('input, select, textarea')) {
+    if (/^[1-8]$/.test(e.key)) { e.preventDefault(); launchScene(+e.key - 1); }
+    else if (e.key === '.') { e.preventDefault(); stopAllClips(); }
+  }
 });
 
 function setBpm(v) {
-  const p = pat();
+  const p = tempoPattern();
   p.bpm = clamp(Math.round(v), 40, 240);
   $('#bpmVal').textContent = p.bpm;
-  if (isPlayingPattern(p)) engine.setFx({}, p.bpm);
+  if (sessionActive()) { if (seq.pattern.composite) seq.pattern.bpm = p.bpm; engine.setFx({}, p.bpm); }
+  else if (isPlayingPattern(p)) engine.setFx({}, p.bpm);
   save();
 }
 
@@ -699,8 +746,8 @@ function holdRepeat(btn, fn) {
   ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => btn.addEventListener(ev, stop));
   btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
 }
-holdRepeat($('#bpmDown'), () => setBpm(pat().bpm - 1));
-holdRepeat($('#bpmUp'), () => setBpm(pat().bpm + 1));
+holdRepeat($('#bpmDown'), () => setBpm(tempoPattern().bpm - 1));
+holdRepeat($('#bpmUp'), () => setBpm(tempoPattern().bpm + 1));
 
 // Tap tempo: media degli ultimi intervalli (reset dopo 2 s)
 let taps = [];
@@ -716,8 +763,9 @@ $('#tap').addEventListener('pointerdown', (e) => {
 $('#swing').addEventListener('pointerdown', () => beginGesture());
 $('#swing').addEventListener('input', (e) => {
   beginGesture();
-  pat().swing = +e.target.value;
-  $('#swingVal').textContent = pat().swing + '%';
+  tempoPattern().swing = +e.target.value;
+  if (sessionActive() && seq.pattern.composite) seq.pattern.swing = +e.target.value;
+  $('#swingVal').textContent = e.target.value + '%';
   save();
 });
 
@@ -751,6 +799,30 @@ $('#slot').addEventListener('change', (e) => {
 
 // Paginazione step (iPhone portrait: 8 step per pagina)
 /** Vista batteria / synth. */
+/** Layout compatto (touch) o Studio (PC). */
+function applyLayout() {
+  const studioOn = sessionActive();
+  $('#app').dataset.layout = studioOn ? 'studio' : 'compact';
+  $('#layoutBtn').classList.toggle('on', state.layout === 'studio');
+  $('#layoutBtn').setAttribute('aria-pressed', state.layout === 'studio');
+  if (studioOn && ui.view === 'perf') setView('drum');
+  if (studio) studio.setActive(studioOn);
+  if (seq.playing) syncPlayback();
+  renderAll();
+}
+
+function toggleLayout() {
+  state.layout = state.layout === 'studio' ? 'compact' : 'studio';
+  if (state.layout === 'studio' && state.session.map.every((v) => v < 0)) {
+    state.session.map.fill(state.slot);
+    state.session.master = state.slot;
+  }
+  if (seq.playing) stopPlayback();
+  applyLayout();
+  save();
+  if (state.layout === 'studio' && !studioMQ.matches) toast('Il layout Studio richiede una finestra di almeno 1000×600');
+}
+
 function setView(v) {
   ui.view = state.view = v;
   $('#app').dataset.view = v;
@@ -919,7 +991,69 @@ $('#stepSheet').addEventListener('input', (e) => {
 // =====================================================================
 
 /** Chiamato dal sequencer all'inizio di ogni battuta (16 tick). */
+// =====================================================================
+// Session: lancio di clip e scene (quantizzato alla battuta)
+// =====================================================================
+
+function applyQueued() {
+  let changed = false;
+  ui.queued.forEach((q, i) => {
+    if (q === null) return;
+    state.session.map[i] = q;
+    ui.queued[i] = null;
+    changed = true;
+  });
+  return changed;
+}
+
+/** Lancia la clip `slot` sulla traccia `i` (-1 = ferma la traccia). */
+function launchClip(i, slot) {
+  if (!seq.playing) {
+    state.session.map[i] = slot;
+    if (slot >= 0 && state.session.map.filter((v) => v >= 0).length === 1) state.session.master = slot;
+    if (slot >= 0) startPlayback(); else syncPlayback();
+  } else {
+    ui.queued[i] = slot;
+  }
+  save();
+  if (studio) studio.render();
+}
+
+/** Lancia la scena `slot` (stessa riga su tutte le tracce); diventa il pattern principale. */
+function launchScene(slot) {
+  if (!seq.playing) {
+    state.session.map.fill(slot);
+    state.session.master = slot;
+    startPlayback();
+  } else {
+    ui.queued.fill(slot);
+    ui.pendingMaster = slot;
+  }
+  save();
+  if (studio) studio.render();
+}
+
+function stopAllClips() {
+  if (!seq.playing) state.session.map.fill(-1); else ui.queued.fill(-1);
+  save();
+  if (studio) studio.render();
+}
+
 seq.onBar = (tick, time) => {
+  if (sessionActive()) {
+    const changed = applyQueued();
+    if (ui.pendingMaster != null) { state.session.master = ui.pendingMaster; ui.pendingMaster = null; }
+    const next = composeSession();
+    engine.setVoiceKit(kitById(next.kit));
+    engine.applyMix(next, time);
+    engine.setFx({}, next.bpm);
+    setTimeout(() => {
+      engine.setChainKit(kitById(next.kit));
+      if (changed && studio) studio.render();
+      if (changed) save();
+    }, Math.max(0, (time - engine.ctx.currentTime) * 1000));
+    return next;
+  }
   const chain = state.song.chain;
   if (!state.song.on || !chain.length || !ui.songPos) return null;
   const pos = ui.songPos;
@@ -1010,7 +1144,8 @@ $('#fxSheet').addEventListener('click', (e) => {
 
 $('#menuBtn').addEventListener('click', () => openSheet('menu'));
 $('#menu').addEventListener('click', async (e) => {
-  const act = e.target.dataset && e.target.dataset.act;
+  const btn = e.target.closest('[data-act]');
+  const act = btn && btn.dataset.act;
   if (!act) return;
   closeSheet($('#menu'));
   const p = pat();
@@ -1040,6 +1175,7 @@ $('#menu').addEventListener('click', async (e) => {
     }
     case 'export': exportJSON(); return;
     case 'projects': panels.openProjects(); return;
+    case 'layout': toggleLayout(); return;
     case 'share': panels.share(); return;
     case 'gen': panels.openGen(); return;
     case 'kits': panels.openKits(); return;
@@ -1333,6 +1469,12 @@ const app = {
   openSheet, closeSheet, deliver, syncPlayback, renderAll, buildKitSelect, exportData, importData, newProject,
 };
 panels = initPanels(app);
+studio = initStudio({ ...app, launchClip, launchScene, stopAllClips, setView, selectTrack: (t) => selectTrack(t), tempoPattern });
+if (state.layout === null) state.layout = matchMedia('(pointer: fine) and (min-width: 1200px)').matches ? 'studio' : 'compact';
+if (state.layout === 'studio' && state.session.map.every((v) => v < 0)) { state.session.map.fill(state.slot); state.session.master = state.slot; }
+$('#layoutBtn').addEventListener('click', toggleLayout);
+studioMQ.addEventListener('change', applyLayout);
+applyLayout();
 app.recordOutput = () => panels.recordOutput();
 perf = initPerformance(app);
 ui.view = state.view;

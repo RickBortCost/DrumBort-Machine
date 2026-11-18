@@ -43,10 +43,21 @@
           <button class="btn sm page on" data-page="0" aria-label="Step 1-8" aria-pressed="true">1–8<i class="led"></i></button>
           <button class="btn sm page" data-page="1" aria-label="Step 9-16" aria-pressed="false">9–16<i class="led"></i></button>
         </div>
+        <button id="layoutBtn" class="btn sm" aria-label="Layout Studio (PC)" aria-pressed="false" title="Layout Studio">▦</button>
         <button id="menuBtn" class="btn sm" aria-label="Menu" aria-haspopup="dialog">☰</button>
         <button id="drawerBtn" class="btn sm" aria-label="Pannello pad e strumenti" aria-expanded="false">◧</button>
       </div>
     </header>
+
+    <!-- ===== Layout Studio (PC): browser, griglia clip, mixer ===== -->
+    <section id="browser" class="browser panel" aria-label="Browser">
+      <div class="seg bw-tabs"><button class="btn sm" data-btab="sounds">SUONI</button><button class="btn sm" data-btab="kits">KIT</button></div>
+      <input id="bwSearch" class="search" type="search" placeholder="Cerca…" aria-label="Cerca nel browser" autocomplete="off">
+      <div id="bwCats" class="lib-cats bw-cats"></div>
+      <div id="bwList" class="bw-list"></div>
+    </section>
+    <section id="session" class="session panel" aria-label="Clip e scene"></section>
+    <section id="mixer" class="mixer panel" aria-label="Mixer"></section>
 
     <!-- ===== Griglia step sequencer (generata da ui.js) ===== -->
     <main id="grid" class="grid" data-page="0" aria-label="Step sequencer. Frecce per spostarsi, Invio per attivare."></main>
@@ -127,24 +138,45 @@
   </div>
 
   <!-- ===== Fogli modali ===== -->
-  <div id="menu" class="sheet" role="dialog" aria-modal="true" aria-label="Menu" hidden>
-    <div class="sheet-box">
-      <button class="btn" data-act="projects">Progetti…</button>
-      <button class="btn" data-act="share">Condividi pattern (link)</button>
-      <button class="btn" data-act="gen">Generatore (euclideo, varia, humanize)…</button>
-      <button class="btn" data-act="kits">Crea kit personalizzato…</button>
-      <button class="btn" data-act="clear">Clear pattern</button>
-      <button class="btn" data-act="demo">Carica demo (batteria o synth)</button>
-      <button class="btn" data-act="wav-pattern">Esporta WAV (pattern × 4)</button>
-      <button class="btn" data-act="wav-song">Esporta WAV (song)</button>
-      <button class="btn" data-act="mid-pattern">Esporta MIDI (pattern × 4)</button>
-      <button class="btn" data-act="mid-song">Esporta MIDI (song)</button>
-      <button class="btn" data-act="recout">Registra l'uscita (WAV)</button>
-      <button class="btn" data-act="export">Esporta JSON (pattern, song, FX)</button>
-      <button class="btn" data-act="import">Importa JSON</button>
-      <button class="btn" data-act="midi">MIDI…</button>
-      <button class="btn" data-act="resetwav">Rimuovi tutti i WAV</button>
-      <button class="btn close" data-close>Chiudi</button>
+  <div id="menu" class="sheet menu-sheet" role="dialog" aria-modal="true" aria-label="Menu" hidden>
+    <div class="sheet-box menu-box">
+      <div class="menu-head"><span class="sheet-title">MENU</span><button class="btn sm close" data-close aria-label="Chiudi menu">✕</button></div>
+      <section class="msec" aria-label="Progetto">
+        <h3>PROGETTO</h3>
+        <div class="mgrid">
+          <button class="btn mitem" data-act="projects"><span class="mi" aria-hidden="true">📁</span><span class="ml">Progetti<small>apri, salva, nuovo</small></span></button>
+          <button class="btn mitem" data-act="share"><span class="mi" aria-hidden="true">🔗</span><span class="ml">Condividi link<small>pattern corrente</small></span></button>
+          <button class="btn mitem" data-act="export"><span class="mi" aria-hidden="true">⤓</span><span class="ml">Esporta JSON<small>tutto il progetto</small></span></button>
+          <button class="btn mitem" data-act="import"><span class="mi" aria-hidden="true">⤒</span><span class="ml">Importa JSON</span></button>
+        </div>
+      </section>
+      <section class="msec" aria-label="Pattern">
+        <h3>PATTERN</h3>
+        <div class="mgrid">
+          <button class="btn mitem" data-act="gen"><span class="mi" aria-hidden="true">✦</span><span class="ml">Generatore<small>euclideo, varia, humanize</small></span></button>
+          <button class="btn mitem" data-act="demo"><span class="mi" aria-hidden="true">♫</span><span class="ml">Carica demo<small>batteria o synth</small></span></button>
+          <button class="btn mitem" data-act="clear"><span class="mi" aria-hidden="true">⌫</span><span class="ml">Svuota pattern<small>vista corrente</small></span></button>
+        </div>
+      </section>
+      <section class="msec" aria-label="Suoni">
+        <h3>SUONI</h3>
+        <div class="mgrid">
+          <button class="btn mitem" data-act="kits"><span class="mi" aria-hidden="true">🥁</span><span class="ml">Crea kit<small>voci da kit diversi</small></span></button>
+          <button class="btn mitem" data-act="midi"><span class="mi" aria-hidden="true">🎹</span><span class="ml">MIDI<small>dispositivi, clock</small></span></button>
+          <button class="btn mitem" data-act="resetwav"><span class="mi" aria-hidden="true">✕</span><span class="ml">Rimuovi WAV<small>tutti i campioni</small></span></button>
+        </div>
+      </section>
+      <section class="msec" aria-label="Esporta">
+        <h3>ESPORTA E REGISTRA</h3>
+        <div class="mgrid">
+          <button class="btn mitem" data-act="wav-pattern"><span class="mi" aria-hidden="true">◉</span><span class="ml">WAV pattern<small>× 4 ripetizioni</small></span></button>
+          <button class="btn mitem" data-act="wav-song"><span class="mi" aria-hidden="true">◉</span><span class="ml">WAV song</span></button>
+          <button class="btn mitem" data-act="mid-pattern"><span class="mi" aria-hidden="true">▤</span><span class="ml">MIDI pattern<small>× 4 ripetizioni</small></span></button>
+          <button class="btn mitem" data-act="mid-song"><span class="mi" aria-hidden="true">▤</span><span class="ml">MIDI song</span></button>
+          <button class="btn mitem" data-act="recout"><span class="mi" aria-hidden="true">●</span><span class="ml">Registra uscita<small>WAV dal vivo</small></span></button>
+          <button class="btn mitem" data-act="layout"><span class="mi" aria-hidden="true">▦</span><span class="ml">Layout<small>compatto / studio</small></span></button>
+        </div>
+      </section>
       <div id="version" class="version"></div>
     </div>
   </div>

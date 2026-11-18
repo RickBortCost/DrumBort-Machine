@@ -76,6 +76,24 @@ async function layoutTests(browser, url) {
       });
       check('cassetto pad aperto e usabile', pad.inView && Math.min(pad.w, pad.h) >= MIN_TOUCH, `${Math.round(pad.w)}×${Math.round(pad.h)}`);
     }
+    // Vista SYNTH
+    await page.tap('[data-cmd="view"]');
+    await page.waitForTimeout(150);
+    const sm = await page.evaluate(() => {
+      const vis = (e) => e.offsetParent !== null;
+      const min = (sel) => [...document.querySelectorAll(sel)].filter(vis)
+        .reduce((a, e) => { const b = e.getBoundingClientRect(); return Math.min(a, b.width, b.height); }, 1e9);
+      return {
+        view: document.querySelector('#app').dataset.view,
+        scrollW: document.documentElement.scrollWidth, scrollH: document.documentElement.scrollHeight,
+        step: Math.round(min('.sstep') * 10) / 10, pad: Math.round(min('.spad') * 10) / 10,
+        ctl: Math.round(min('.keyrow .btn, .keyrow .sel, #sparams .btn, #sparams .sel') * 10) / 10,
+        playhead: document.querySelectorAll('.sstep.ph').length,
+      };
+    });
+    check('synth: vista attiva senza scroll', sm.view === 'synth' && sm.scrollW <= vp.width && sm.scrollH <= vp.height, `${sm.scrollW}×${sm.scrollH}`);
+    check('synth: step, pad e controlli ≥ 44 px', Math.min(sm.step, sm.pad, sm.ctl) >= MIN_TOUCH, `step ${sm.step}, pad ${sm.pad}, controlli ${sm.ctl}`);
+    check('synth: playhead su 3 corsie', sm.playhead === 3);
     check('nessun errore o 404', errors.length === 0, errors.join(' | '));
     await context.close();
   }
@@ -221,6 +239,84 @@ async function functionalTests(browser, url) {
   await context.close();
 }
 
+async function synthTests(browser, url) {
+  console.log(`\n[${browser.browserType().name()}] Synth (iPhone portrait)`);
+  const { context, page, errors } = await openApp(browser, url, VIEWPORTS[0]);
+  const SS = (k, s) => `.sstep[data-k="${k}"][data-s="${s}"]`;
+  const st = (k, s) => page.evaluate(([k, s]) => drumbort.state.slots[drumbort.state.slot].synth.tracks[k].steps[s], [k, s]);
+
+  await page.tap('[data-cmd="view"]');
+  check('vista synth', (await page.evaluate(() => document.querySelector('#app').dataset.view)) === 'synth');
+
+  // Pennello: il pad di grado 2 sulla traccia LEAD, poi tap su uno step vuoto
+  await page.tap('.slbl[data-k="1"]');
+  await page.evaluate(() => { drumbort.state.slots[drumbort.state.slot].synth.tracks[1].steps[2] = null; });
+  await page.tap('.spad[data-d="2"]');
+  await page.tap(SS(1, 2));
+  const ins = await st(1, 2);
+  const exp = await page.evaluate(() => { const s = drumbort.state.slots[drumbort.state.slot].synth; return 12 * (4 + s.tracks[1].oct + 1) + s.key; });
+  check('inserimento nota col pennello', ins && ins.n > exp && ins.n <= exp + 5, JSON.stringify(ins));
+  await page.tap(SS(1, 2));
+  check('tap su nota la cancella', (await st(1, 2)) === null);
+  await page.tap('[data-cmd="undo"]');
+  check('undo ripristina la nota', !!(await st(1, 2)));
+
+  // Editor step: +1 semitono, gate 3, slide
+  await page.tap('[data-cmd="edit"]');
+  await page.tap(SS(1, 2));
+  check('editor synth aperto', await page.isVisible('#sstepSheet'));
+  const before = (await st(1, 2)).n;
+  await page.tap('#sstepSheet [data-tr="1"]');
+  await page.evaluate(() => { const i = document.querySelector('#sGate'); i.value = 3; i.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.tap('#sstepSheet .seg[data-k="sl"] [data-v="1"]');
+  const ed = await st(1, 2);
+  check('nota, gate e slide modificati', ed.n === before + 1 && ed.g === 3 && ed.sl === 1, JSON.stringify(ed));
+  check('tie visualizzati', await page.evaluate(() => document.querySelectorAll('.sstep.tie[data-k="1"]').length >= 2));
+  await page.tap('#sstepSheet [data-close]');
+
+  // Accordo sul PAD
+  await page.tap(SS(2, 5));
+  await page.tap('#sstepSheet .seg[data-k="ch"] [data-v="seventh"]');
+  const chord = await st(2, 5);
+  check('accordo di settima sul pad', chord && chord.ch && chord.ch.length === 4, JSON.stringify(chord && chord.ch));
+  await page.tap('#sstepSheet [data-close]');
+  await page.tap('[data-cmd="edit"]');
+
+  // Cambio tonalità: traspone
+  const n0 = (await st(1, 2)).n;
+  const key0 = await page.evaluate(() => drumbort.state.slots[drumbort.state.slot].synth.key);
+  await page.selectOption('#keySel', String((key0 + 2) % 12));
+  const n1 = (await st(1, 2)).n;
+  check('cambio tonalità traspone le note', n1 - n0 === 2 || n1 - n0 === -10, `${n0} → ${n1}`);
+
+  // Preset e parametri
+  await page.tap('.slbl[data-k="1"]');
+  await page.selectOption('#presetSel', 'mooglead');
+  check('preset LEAD cambiato', (await page.evaluate(() => drumbort.state.slots[drumbort.state.slot].synth.tracks[1].preset)) === 'mooglead');
+
+  // Registrazione dal vivo con gate dalla pressione
+  await page.evaluate(() => { const t = drumbort.state.slots[drumbort.state.slot].synth.tracks[0]; t.steps = t.steps.map(() => null); });
+  await page.tap('.slbl[data-k="0"]');
+  await page.tap('#rec');
+  await page.tap('#play');
+  await page.waitForTimeout(300);
+  await page.tap('.spad[data-d="0"]');
+  await page.waitForTimeout(150);
+  const recd = await page.evaluate(() => drumbort.state.slots[drumbort.state.slot].synth.tracks[0].steps.filter(Boolean).length);
+  check('registrazione synth dai pad', recd === 1, `${recd} note`);
+  await page.tap('#play');
+  await page.tap('#rec');
+
+  // Persistenza e ritorno alla batteria
+  await page.waitForTimeout(400);
+  await page.reload();
+  await page.waitForFunction(() => window.drumbort);
+  check('vista e preset salvati', await page.evaluate(() => document.querySelector('#app').dataset.view === 'synth'
+    && drumbort.state.slots[drumbort.state.slot].synth.tracks[1].preset === 'mooglead'));
+  check('nessun errore o 404', errors.length === 0, errors.join(' | '));
+  await context.close();
+}
+
 async function audioTests(browser, url) {
   console.log(`\n[${browser.browserType().name()}] Audio (render offline di tutte le voci)`);
   const { context, page } = await openApp(browser, url, VIEWPORTS[3]);
@@ -243,6 +339,39 @@ async function audioTests(browser, url) {
     return { n, bad };
   });
   check(`${res.n} voci con segnale valido`, res.bad.length === 0, res.bad.join(', '));
+
+  // Preset synth: nota (o accordo) con slide e accento, picco valido e senza clipping
+  const syn = await page.evaluate(async () => {
+    const { PRESETS, playVoice } = await import('./js/synth.js');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const bad = [];
+    let n = 0;
+    for (const [id, pr] of Object.entries(PRESETS)) {
+      const ctx = new OAC(1, 44100 * 2, 44100);
+      const notes = pr.kind === 2 ? [57, 60, 64] : [pr.kind === 0 ? 45 : 69];
+      playVoice(ctx, ctx.destination, 0.01, 0.4, notes, 1, pr, {}, notes[0] - 5);
+      const d = (await ctx.startRendering()).getChannelData(0);
+      let pk = 0, nan = false;
+      for (let i = 0; i < d.length; i++) { if (d[i] !== d[i]) nan = true; pk = Math.max(pk, Math.abs(d[i])); }
+      if (nan || pk < 0.03 || pk > 1.5) bad.push(`${id}:${pk.toFixed(3)}${nan ? ' NaN' : ''}`);
+      n++;
+    }
+    return { n, bad };
+  });
+  check(`${syn.n} preset synth con segnale valido`, syn.bad.length === 0, syn.bad.join(', '));
+
+  // Export: la sezione synth finisce nel WAV
+  const wav = await page.evaluate(async () => {
+    const { renderBars } = await import('./js/export.js');
+    const { createPattern } = await import('./js/sequencer.js');
+    const p = createPattern('tr808', false, 0);       // batteria vuota, synth demo
+    const buf = await renderBars([p], { fx: drumbort.state.fx, tail: 0.5 });
+    const d = buf.getChannelData(0);
+    let pk = 0;
+    for (let i = 0; i < d.length; i++) pk = Math.max(pk, Math.abs(d[i]));
+    return pk;
+  });
+  check('export WAV include il synth', wav > 0.05, `picco ${wav.toFixed(3)}`);
   await context.close();
 }
 
@@ -291,6 +420,7 @@ for (const name of BROWSERS) {
   try {
     await layoutTests(browser, url);
     await functionalTests(browser, url);
+    await synthTests(browser, url);
     await audioTests(browser, url);
     await pwaTests(browser, url);
   } catch (err) {

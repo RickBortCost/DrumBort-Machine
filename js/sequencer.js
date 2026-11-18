@@ -19,7 +19,7 @@ export const VELOCITY = [0, 0.62, 1];      // off / normale / accento
 export const STEP_DEFAULT = Object.freeze({ p: 100, r: 1, f: 0, n: 0 });
 
 const LOOKAHEAD_MS = 25;                   // periodo del timer
-const SCHEDULE_AHEAD = 0.1;                // secondi pianificati in anticipo
+const SCHEDULE_AHEAD = 0.12;               // secondi pianificati in anticipo (tollera ~90 ms di blocco UI)
 const FLAM_GAP = 0.022;                    // distanza nota di abbellimento (s)
 
 const num = (v) => typeof v === 'number' && isFinite(v);
@@ -161,27 +161,58 @@ export function scheduleTick(engine, pat, tick, time, opt = {}) {
     const anySynthSolo = syn.tracks.some((t) => t.solo);
     syn.tracks.forEach((tr, k) => {
       if (anySynthSolo ? !tr.solo : tr.mute) return;
-      const len = tr.len || STEPS;
-      const s = tick % len;
-      const st = tr.steps[s];
-      if (!st) return;
+      const s = tick % (tr.len || STEPS);
+      if (!tr.steps[s]) return;
       if (skip && skip.delete(`s${k}:${s}`)) return;
-      const prev = tr.steps[(s - 1 + len) % len];
-      const glideFrom = k < 2 && prev && prev.sl && len > 1 ? prev.n : null;
-      const notes = st.ch ? st.ch.map((x) => st.n + x) : [st.n];
-      // Gate: le note con slide si sovrappongono alla successiva (legato)
-      const dur = st.g * sd * (st.sl ? 1.15 : 0.92);
-      const vel = st.a ? 1 : 0.7;
-      engine.playSynth(k, time, dur, notes, vel, tr, glideFrom);
-      played.push({ synth: k, notes, time, dur, vel });
+      const ev = synthEvent(pat, k, s);
+      engine.playSynth(k, time, ev.dur, ev.notes, ev.vel, tr, ev.glideFrom);
+      played.push({ synth: k, notes: ev.notes, time, dur: ev.dur, vel: ev.vel });
     });
   }
   return played;
 }
 
+/**
+ * Evento synth dello step s della traccia k (null se vuoto): note, durata, velocity, slide.
+ * Usato dallo scheduler e dal pre-render delle voci.
+ */
+export function synthEvent(pat, k, s) {
+  const tr = pat.synth.tracks[k];
+  const len = tr.len || STEPS;
+  const st = tr.steps[s];
+  if (!st) return null;
+  const prev = tr.steps[(s - 1 + len) % len];
+  const glideFrom = k < 2 && prev && prev.sl && len > 1 ? prev.n : null;
+  const notes = st.ch ? st.ch.map((x) => st.n + x) : [st.n];
+  // Gate: le note con slide si sovrappongono alla successiva (legato)
+  const dur = st.g * stepDuration(pat.bpm) * (st.sl ? 1.15 : 0.92);
+  return { notes, dur, vel: st.a ? 1 : 0.7, glideFrom };
+}
+
 // =====================================================================
 // Scheduler live
 // =====================================================================
+
+/**
+ * Timer dello scheduler in un Web Worker: non viene ritardato da un thread principale
+ * occupato né rallentato dal browser quando la pagina è in background.
+ * Fallback su setInterval se i Worker non sono disponibili.
+ */
+function createTicker(fn, ms) {
+  try {
+    const src = `let id = null;
+      onmessage = (e) => {
+        clearInterval(id);
+        id = e.data === 'start' ? setInterval(() => postMessage(0), ${ms}) : null;
+      };`;
+    const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    w.onmessage = fn;
+    return { start: () => w.postMessage('start'), stop: () => w.postMessage('stop') };
+  } catch (_) {
+    let id = null;
+    return { start: () => { clearInterval(id); id = setInterval(fn, ms); }, stop: () => clearInterval(id) };
+  }
+}
 
 export class Sequencer {
   constructor(engine) {
@@ -190,7 +221,7 @@ export class Sequencer {
     this.playing = false;
     this.tick = 0;            // prossimo tick da pianificare
     this.nextTime = 0;        // istante del prossimo tick (senza swing)
-    this.timer = null;
+    this.ticker = null;       // timer (Worker), creato al primo start
     this.queue = [];          // { tick, time, pattern } per la UI
     this.recent = [];         // ultimi tick pianificati (registrazione)
     this.skip = new Set();    // step registrati dal vivo da non ripetere
@@ -216,14 +247,14 @@ export class Sequencer {
     this.skip.clear();
     if (this.onStart) this.onStart(this.nextTime);
     this._tick();
-    this.timer = setInterval(() => this._tick(), LOOKAHEAD_MS);
+    if (!this.ticker) this.ticker = createTicker(() => { if (this.playing) this._tick(); }, LOOKAHEAD_MS);
+    this.ticker.start();
   }
 
   stop() {
     if (!this.playing) return;
     this.playing = false;
-    clearInterval(this.timer);
-    this.timer = null;
+    if (this.ticker) this.ticker.stop();
     this.queue.length = 0;
     if (this.onStop) this.onStop();
   }
@@ -247,6 +278,7 @@ export class Sequencer {
       if (this.onTick) this.onTick(this.tick, this.nextTime, sd, played);
       const entry = { tick: this.tick, time, pattern: this.pattern, meta: this.meta };
       this.queue.push(entry);
+      if (this.queue.length > 64) this.queue.shift();
       this.recent.push(entry);
       if (this.recent.length > 8) this.recent.shift();
       this.nextTime += sd;

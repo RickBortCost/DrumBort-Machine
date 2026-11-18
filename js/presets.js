@@ -104,7 +104,7 @@ const RAW = {
   robotvox: { name: 'Robot Voice', cat: 'Choir', tags: ['vocoder', 'formant', 'digital'], osc: [O('square'), O('sawtooth', 0, 0, 0.5)], formants: [[400, 9, 1], [2000, 11, 0.6], [2550, 11, 0.4]], cut: 7000, res: 0.6, envOct: 0, fdec: 0.5, a: 0.02, d: 0.5, s: 0.9, r: 0.2, gain: 2.4 },
 
   // ------------------------------------------------------------------ FX
-  riser: { name: 'Noise Riser', cat: 'FX', tags: ['riser', 'noise', 'build-up'], osc: [O('sawtooth', 0, 0, 0.3)], noise: { g: 1, hp: 150 }, cut: 200, res: 3, envOct: 6, fdec: 2, a: 2.0, d: 1, s: 0.9, r: 0.6 },
+  riser: { name: 'Noise Riser', cat: 'FX', tags: ['riser', 'noise', 'build-up'], osc: [O('sawtooth', 0, 0, 0.3)], noise: { g: 1, hp: 150 }, cut: 200, res: 3, envOct: 6, fdec: 2, a: 2.0, d: 1, s: 0.9, r: 0.6 , gain: 0.8 },
   subdrop: { name: 'Sub Drop', cat: 'FX', tags: ['impact', 'sub', 'cinematic'], osc: [O('sine')], pitch: { from: 0, to: -24, time: 1.2 }, cut: 2000, res: 0.7, envOct: 0, fdec: 0.5, a: 0.005, d: 1.2, s: 0.9, r: 0.4, drive: 0.2 , gain: 0.7 },
   zap: { name: 'Laser Zap', cat: 'FX', tags: ['retro', 'game', 'short'], osc: [O('square')], pitch: { from: 36, to: 0, time: 0.15 }, cut: 6000, res: 2, envOct: 0, fdec: 0.2, a: 0.001, d: 0.25, s: 0, r: 0.08 , gain: 0.7 },
   sweepdown: { name: 'Downlifter', cat: 'FX', tags: ['sweep', 'noise', 'transition'], osc: [O('sawtooth', 0, 0, 0.4)], noise: { g: 0.8, hp: 300 }, pitch: { from: 12, to: -12, time: 2 }, cut: 6000, res: 2, envOct: 0, fdec: 2, a: 0.01, d: 2, s: 0.6, r: 0.8, lfo: { to: 'cut', rate: 0.4, depth: 0.6 } },

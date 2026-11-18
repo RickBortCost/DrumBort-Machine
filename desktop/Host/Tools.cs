@@ -155,6 +155,25 @@ public static class Tools
         };
     }
 
+    /// <summary>Export da riga di comando (come FILE ▸ Esporta audio): mix o stem.</summary>
+    public static void ExportProject(string projectPath, string wavPath, Exporter.Options o, bool stems)
+    {
+        var json = JsonNode.Parse(File.ReadAllText(projectPath))!.AsObject();
+        var parts = new JsonObject();
+        if (json["slots"] is JsonArray slots) for (int i = 0; i < slots.Count && i < 8; i++) parts[$"p{i}"] = slots[i]?.DeepClone();
+        foreach (var k in new[] { "slot", "fx", "song", "lock", "session", "arr", "devs", "tracks" })
+            if (json[k] != null) parts[k] = json[k]!.DeepClone();
+        foreach (int? ch in stems ? Exporter.StemChannels(parts).Select(c => (int?)c) : new int?[] { null })
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var (l, r) = Exporter.Render(parts, o, ch, null, CancellationToken.None);
+            string path = ch is int c ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(wavPath))!, $"{Path.GetFileNameWithoutExtension(wavPath)}-{c:00}.wav") : wavPath;
+            Exporter.WriteWav(path, l, r, o.Rate, o.Bits);
+            double pk = 0; foreach (var v in l) pk = Math.Max(pk, Math.Abs(v));
+            Console.WriteLine($"{path}: {l.Length / (double)o.Rate:0.00} s, peak {pk:0.000}, {sw.Elapsed.TotalSeconds:0.0} s");
+        }
+    }
+
     /// <summary>Rendering offline di un progetto esportato dalla web app (play dal pattern selezionato).</summary>
     public static void RenderProject(string projectPath, double seconds, string wavPath, int rate)
     {

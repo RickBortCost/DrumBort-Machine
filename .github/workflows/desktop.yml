@@ -108,7 +108,7 @@ jobs:
         if: runner.os == 'Windows'
         with:
           name: selftest-windows
-          path: selftest.png
+          path: selftest*.png
           retention-days: 14
       - name: Zip (Windows)
         if: runner.os == 'Windows'

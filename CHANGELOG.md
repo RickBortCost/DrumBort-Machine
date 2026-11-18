@@ -2,6 +2,16 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.18.0] - 2026-11-18
+
+### Aggiunto
+- **Windows, interfaccia nativa – fase 2:**
+  - **Arrangiamento** (vista Playlist come FL Studio, Tracks area di Logic): timeline con una corsia per traccia e i pattern come regioni. Clic nel vuoto dipinge il pattern selezionato, trascinando si allunga; regioni da spostare, allungare dal bordo, copiare con Ctrl+trascina; menu col tasto destro (cambia pattern, rendi unico, apri negli step, duplica, elimina); Canc e Ctrl+D; righello per il punto di partenza; Ctrl+rotella per lo zoom. Viste STEP/ARRANGIAMENTO con Tab, F5 e F6: il motore suona quello che si vede.
+  - **Automazione** (pannello in basso): tutti i parametri automatizzabili della traccia e il filtro master; disegno col mouse (destro cancella, Shift = linea retta), forme rapide (rampe, sinusoide, quadra, casuale), linea del valore della traccia.
+  - **Esporta audio** (FILE o Ctrl+E): pattern ×1–16, arrangiamento o song; WAV 16 bit (con dither), 24 bit o 32 bit float; 44,1/48/96 kHz; normalizzazione; stem (un file per traccia, con gli effetti). Rendering in background, la riproduzione non si ferma.
+  - Pannello **EDITOR** anche per la batteria: gli step della traccia selezionata, utile in vista arrangiamento.
+- Host: `--export` per esportare da riga di comando.
+
 ## [1.17.0] - 2026-11-18
 
 ### Aggiunto

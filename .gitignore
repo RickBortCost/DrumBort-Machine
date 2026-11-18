@@ -8,3 +8,5 @@ node_modules
 # Host desktop (dotnet)
 desktop/bin/
 desktop/obj/
+desktop/Win/bin/
+desktop/Win/obj/

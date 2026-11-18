@@ -90,6 +90,12 @@ public sealed class Sequencer
     // Song
     int songI, songR;
     public long Tick => tick;
+    /// <summary>Battuta da cui parte l'arrangiamento (righello della timeline) e battuta in riproduzione.</summary>
+    public int ArrStart;
+    public int ArrBar => arrBar;
+    /// <summary>Export: si ferma prima di questo step (−1 = mai); EndTime = fine dell'ultimo step.</summary>
+    public long StopAt = -1;
+    public double EndTime;
 
     public Sequencer(Mixer m) { mx = m; ctx = m.Ctx; }
 
@@ -168,7 +174,7 @@ public sealed class Sequencer
         if (Session)
         {
             sceneBars = 0;
-            if (P.ArrOn && P.Arr.Length > 0) { Array.Fill(queued, null); pendingMaster = null; arrBar = 0; LoadArrBar(0); }
+            if (P.ArrOn && P.Arr.Length > 0) { Array.Fill(queued, null); pendingMaster = null; arrBar = Math.Clamp(ArrStart, 0, P.Arr.Length - 1); LoadArrBar(arrBar); }
             else
             {
                 arrBar = 0;
@@ -335,6 +341,7 @@ public sealed class Sequencer
         if (nextTime < now - 0.2) nextTime = now + 0.02;
         while (nextTime < now + Ahead)
         {
+            if (StopAt >= 0 && tick >= StopAt) { Playing = false; EndTime = nextTime; return; }
             if (tick > 0 && tick % Steps == 0 && OnBar(tick, nextTime) is Pattern nb) { if (nb != Pattern) origin = tick; Pattern = nb; }
             if (OnStep(tick, nextTime) is Pattern ns) Pattern = ns;
             double sd = StepDur(Pattern.Bpm);

@@ -71,6 +71,26 @@ public sealed class AudioEngine : IDisposable
         return (l, r);
     }
 
+    /// <summary>Export: rendering finché il sequencer suona (StopAt), poi `tail` secondi di coda.</summary>
+    public (float[] l, float[] r) RenderSong(double tail, double maxSeconds, Action<double>? progress, CancellationToken ct)
+    {
+        var L = new List<float[]>(); var R = new List<float[]>();
+        double end = double.MaxValue;
+        long blocks = 0;
+        while (Ctx.CurrentTime < end && Ctx.CurrentTime < maxSeconds)
+        {
+            ct.ThrowIfCancellationRequested();
+            RenderOne();
+            L.Add((float[])bl.Clone()); R.Add((float[])br.Clone());
+            if (!Seq.Playing && end == double.MaxValue) end = Seq.EndTime + tail;
+            if (++blocks % 256 == 0) progress?.Invoke(Ctx.CurrentTime);
+        }
+        int n = L.Count * AudioContext.Block;
+        var l = new float[n]; var r = new float[n];
+        for (int i = 0; i < L.Count; i++) { Array.Copy(L[i], 0, l, i * AudioContext.Block, AudioContext.Block); Array.Copy(R[i], 0, r, i * AudioContext.Block, AudioContext.Block); }
+        return (l, r);
+    }
+
     void Loop()
     {
         var sw = new System.Diagnostics.Stopwatch();

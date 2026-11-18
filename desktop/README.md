@@ -39,6 +39,7 @@ Il primo dispositivo con la drum machine che si collega porta il proprio progett
 | `--no-qr` | Non stampa il QR code nel terminale |
 | `--no-browser` | Non apre la finestra dell'interfaccia (server) |
 | `--browser-window` | Interfaccia in una finestra di Edge/Chrome invece della finestra nativa |
+| `--export prog.json out.wav` | Export offline senza interfaccia: `--source pattern\|arr\|song`, `--reps 4`, `--bits 16\|24\|32`, `--stems` (un file per traccia) |
 
 Se la scheda audio non è disponibile l'host passa da solo alla modalità browser.
 

@@ -43,6 +43,14 @@ if (Flag("--render"))
     return;
 }
 
+if (Flag("--export"))
+{
+    // --export progetto.json uscita.wav [--source pattern|arr|song] [--reps 4] [--bits 24] [--stems]
+    int i = Array.IndexOf(args, "--export");
+    Tools.ExportProject(args[i + 1], args[i + 2], new Exporter.Options(Arg("--source", "pattern"), int.Parse(Arg("--reps", "4")), rate, int.Parse(Arg("--bits", "24"))), Flag("--stems"));
+    return;
+}
+
 int port = int.Parse(Arg("--port", "8765"));
 bool native = Arg("--mode", "native") != "browser";
 AudioEngine? engine = null;

@@ -25,6 +25,11 @@ public sealed class MainWindow : Window
     readonly Doc doc;
     readonly Library library;
     readonly DeviceView devices;
+    readonly Timeline timeline;
+    readonly ScrollViewer tlScroll = new() { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled };
+    readonly AutomationView autoView;
+    ScrollViewer tracksSv = null!;
+    StepRow? drumEditor;
     readonly StackPanel heads = new(), rows = new();
     readonly ContentControl bottomHost = new();
     readonly Grid root = new();
@@ -46,7 +51,8 @@ public sealed class MainWindow : Window
     readonly TextBlock swingTxt = Txt.Make("50 %", 12, Theme.Lcd);
     readonly Dropdown slotDd = new(64), barsDd = new(70), kitDd = new(190);
     readonly Btn met = new("MET", 0, "Metronomo"), undoB = new("↶", 0, "Annulla (Ctrl+Z)"), redoB = new("↷", 0, "Ripeti (Ctrl+Y)");
-    readonly Btn libB = new("◧", 0, "Mostra/nascondi la Libreria (B)"), devTab = new("DEVICE"), rollTab = new("NOTE");
+    readonly Btn libB = new("◧", 0, "Mostra/nascondi la Libreria (B)"), devTab = new("DEVICE"), rollTab = new("EDITOR", 0, "Note del pattern della traccia selezionata"), autoTab = new("AUTOMAZIONE");
+    readonly Btn stepB = new("STEP", 0, "Pattern: step di tutte le tracce (F6)"), arrB = new("ARRANGIAMENTO", 0, "Timeline: i pattern disposti sulle battute (F5) · Tab alterna le viste");
     bool metOn;
 
     public MainWindow(string? selftest)
@@ -62,6 +68,25 @@ public sealed class MainWindow : Window
         library = new Library(doc) { Selected = () => sel };
         devices = new DeviceView(doc) { OpenLibrary = OpenLibraryFor, ShowNotes = () => SetBottom("roll") };
         library.AddDevice = t => { if (sel >= 0) { devices.Add(t, null); SetBottom("dev"); } };
+        autoView = new AutomationView(doc);
+        timeline = new Timeline(doc);
+        tlScroll.Content = timeline;
+        tlScroll.SizeChanged += (_, _) => { if (doc.ArrView) timeline.Reload(tlScroll.ActualWidth); };
+        // Rotella: scorrimento verticale dell'elenco tracce (Shift = orizzontale, Ctrl = zoom della timeline)
+        tlScroll.PreviewMouseWheel += (_, e) =>
+        {
+            var mod = Keyboard.Modifiers;
+            if (mod.HasFlag(ModifierKeys.Control)) return;
+            e.Handled = true;
+            if (mod.HasFlag(ModifierKeys.Shift)) tlScroll.ScrollToHorizontalOffset(tlScroll.HorizontalOffset - e.Delta);
+            else tracksSv.ScrollToVerticalOffset(tracksSv.VerticalOffset - e.Delta / 3.0);
+        };
+        timeline.RegionPicked += (ch, slot) =>
+        {
+            if (doc.Slot != slot) { doc.Slot = slot; doc.CommitQuiet("slot"); slotDd.Value = slot.ToString(); RefreshPatternBar(); }
+            Select(ch, false, false);
+        };
+        timeline.OpenPattern += slot => { doc.Slot = slot; doc.CommitQuiet("slot"); SetView(false); };
 
         BuildLayout();
         doc.Changed += Refresh;
@@ -110,7 +135,7 @@ public sealed class MainWindow : Window
         tracksGrid.Children.Add(heads); tracksGrid.Children.Add(rows);
         var top = new DockPanel { Background = Theme.Panel };
         top.Children.Add(TracksToolbar());
-        var sv = new ScrollViewer { Content = tracksGrid, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Background = Theme.Bg };
+        var sv = tracksSv = new ScrollViewer { Content = tracksGrid, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Background = Theme.Bg };
         sv.MouseDoubleClick += (_, e) => { if (e.OriginalSource == sv || e.OriginalSource is Grid) NewTracks(); };
         top.Children.Add(sv);
         Grid.SetRow(top, 1); Grid.SetColumn(top, 2);
@@ -128,17 +153,20 @@ public sealed class MainWindow : Window
     {
         var tb = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(6, 4, 6, 4) };
         DockPanel.SetDock(tb, Dock.Top);
+        stepB.Click += () => SetView(false); arrB.Click += () => SetView(true);
+        tb.Children.Add(stepB); tb.Children.Add(arrB);
+        tb.Children.Add(new Border { Width = 16 });
         var add = new Btn("＋ TRACCIA", 0, "Nuove tracce (Ctrl+Alt+N)") { Fg = Theme.Green };
         add.Click += NewTracks;
         tb.Children.Add(add);
         libB.Click += ToggleLibrary;
         tb.Children.Add(libB);
         tb.Children.Add(new Border { Width = 16 });
-        devTab.Click += () => SetBottom("dev"); rollTab.Click += () => SetBottom("roll");
+        devTab.Click += () => SetBottom("dev"); rollTab.Click += () => SetBottom("roll"); autoTab.Click += () => SetBottom("auto");
         tb.Children.Add(Txt.Make("IN BASSO", 10, Theme.Dim));
-        tb.Children.Add(devTab); tb.Children.Add(rollTab);
+        tb.Children.Add(devTab); tb.Children.Add(rollTab); tb.Children.Add(autoTab);
         tb.Children.Add(new Border { Width = 16 });
-        var web = new Btn("INTERFACCIA COMPLETA", 0, "Session, arrangiamento, automazioni, macro, editor wavetable: interfaccia completa in una finestra a parte");
+        var web = new Btn("INTERFACCIA COMPLETA", 0, "Session, macro, editor wavetable: interfaccia completa in una finestra a parte");
         web.Click += () => { if (Program.Web != null) Launcher.Open($"http://localhost:{Program.Port}/"); };
         tb.Children.Add(web);
         return tb;
@@ -207,6 +235,7 @@ public sealed class MainWindow : Window
             ("Nuovo progetto", () => { if (MessageBox.Show(this, "Nuovo progetto vuoto? Quello attuale resta annullabile con Ctrl+Z.", "DrumBort", MessageBoxButton.OKCancel) == MessageBoxResult.OK) { doc.New(); sel = -1; } }),
             ("Apri…  (Ctrl+O)", OpenFile),
             ("Salva con nome…  (Ctrl+S)", SaveFile),
+            ("Esporta audio (WAV, stem)…  (Ctrl+E)", ExportAudio),
         });
         sp.Children.Add(file);
         var audio = new Btn("🎧 AUDIO", 0, "Uscita audio: cuffie, casse, scheda");
@@ -235,6 +264,18 @@ public sealed class MainWindow : Window
     void Refresh()
     {
         if (sel >= 0 && !doc.Tracks.Contains(sel)) sel = doc.Tracks.Count > 0 ? doc.Tracks[0] : -1;
+        RefreshPatternBar();
+        undoB.Enabled = doc.CanUndo; redoB.Enabled = doc.CanRedo;
+        libB.IsOn = libOpen;
+        stepB.IsOn = !doc.ArrView; arrB.IsOn = doc.ArrView;
+        BuildTracks();
+        library.Render();
+        RenderBottom();
+    }
+
+    /// <summary>BPM, swing, pattern, battute e kit del pattern selezionato.</summary>
+    void RefreshPatternBar()
+    {
         bpm.Text = Bpm.ToString(CultureInfo.InvariantCulture);
         int sw = (int)Doc.Num(doc.Pat, "swing", 50);
         swing.Set(sw); swingTxt.Text = $"{sw} %";
@@ -242,17 +283,34 @@ public sealed class MainWindow : Window
         barsDd.Value = doc.Bars.ToString();
         kitDd.SetItems(Kits.All.Select(k => (k.Id, k.Name)));
         kitDd.Value = Doc.Str(doc.Pat, "kit", Kits.All[0].Id);
-        undoB.Enabled = doc.CanUndo; redoB.Enabled = doc.CanRedo;
-        libB.IsOn = libOpen;
-        BuildTracks();
-        library.Render();
-        RenderBottom();
+    }
+
+    /// <summary>Vista STEP (pattern) o ARRANGIAMENTO (timeline). Il motore suona quello che si vede.</summary>
+    void SetView(bool arr)
+    {
+        if (doc.ArrView == arr) { Refresh(); return; }
+        bool playing = Program.Engine?.Seq.Playing ?? false;
+        if (playing) doc.Op("stop");
+        doc.ArrView = arr;
+        doc.SyncArrMode();
+        Refresh();
+        if (playing) TogglePlay();
     }
 
     void BuildTracks()
     {
-        heads.Children.Clear(); rows.Children.Clear(); stepRows.Clear(); meters.Clear(); headerOf.Clear();
+        heads.Children.Clear(); stepRows.Clear(); meters.Clear(); headerOf.Clear();
         var tracks = doc.Tracks;
+        if (doc.ArrView)
+        {
+            // La timeline resta la stessa (un trascinamento in corso non si interrompe)
+            if (!(rows.Children.Count == 1 && rows.Children[0] == tlScroll)) { rows.Children.Clear(); rows.Children.Add(tlScroll); }
+            heads.Children.Add(new Border { Height = Timeline.RulerH, Background = Theme.Panel, Child = Txt.Make("  Clic: dipingi il pattern selezionato · Ctrl+trascina: copia · tasto destro: menu", 10, Theme.Dim) });
+            foreach (int ch in tracks) heads.Children.Add(TrackHeader(ch));
+            timeline.Reload(tlScroll.ActualWidth);
+            return;
+        }
+        rows.Children.Clear();
         if (tracks.Count == 0)
         {
             var t = Txt.Make("Nessuna traccia. Premi ＋ TRACCIA (Ctrl+Alt+N) o fai doppio clic qui: strumento software, voce di batteria o kit completo.", 14, Theme.Dim);
@@ -347,7 +405,16 @@ public sealed class MainWindow : Window
 
     void RenderBottom()
     {
-        devTab.IsOn = bottom == "dev"; rollTab.IsOn = bottom == "roll";
+        devTab.IsOn = bottom == "dev"; rollTab.IsOn = bottom == "roll"; autoTab.IsOn = bottom == "auto";
+        drumEditor = null;
+        if (bottom == "auto")
+        {
+            roll = null;
+            autoView.Ch = sel;
+            autoView.Render();
+            bottomHost.Content = autoView;
+            return;
+        }
         if (bottom == "roll" && sel >= 8)
         {
             if (roll != null && roll.Ch == sel && bottomHost.Content is ScrollViewer cur && cur.Content == roll) { roll.InvalidateVisual(); return; }
@@ -359,9 +426,18 @@ public sealed class MainWindow : Window
         roll = null;
         if (bottom == "roll")
         {
-            var t = Txt.Make(sel >= 0 ? "Traccia di batteria: le note si scrivono negli step qui sopra (clic, Shift o tasto destro = accento)." : "Seleziona una traccia synth per il piano roll.", 13, Theme.Dim);
-            t.Margin = new Thickness(16);
-            bottomHost.Content = new Border { Background = Theme.Panel, Child = t };
+            var dp = new DockPanel { Background = Theme.Panel };
+            string head = sel >= 0 ? $"P{doc.Slot + 1} · {doc.TrackShort(sel)} {doc.TrackName(sel)} — clic: colpo · Shift o tasto destro: accento · trascina: dipingi" : "Seleziona una traccia.";
+            var t = Txt.Make(head, 12, Theme.Dim);
+            t.Margin = new Thickness(10, 8, 10, 4);
+            DockPanel.SetDock(t, Dock.Top);
+            dp.Children.Add(t);
+            if (sel >= 0)
+            {
+                drumEditor = new StepRow(doc, sel) { Height = 90, Margin = new Thickness(10, 4, 10, 10), VerticalAlignment = VerticalAlignment.Top };
+                dp.Children.Add(drumEditor);
+            }
+            bottomHost.Content = dp;
             return;
         }
         devices.Ch = sel;
@@ -409,8 +485,11 @@ public sealed class MainWindow : Window
     void TogglePlay()
     {
         bool playing = Program.Engine?.Seq.Playing ?? false;
-        doc.Op(playing ? "stop" : "play");
+        if (playing) doc.Op("stop");
+        else doc.Op("play", doc.ArrView ? new JsonObject { ["from"] = timeline.Start } : null);
     }
+
+    void ExportAudio() => new ExportDialog(this, doc).ShowDialog();
     void Tick()
     {
         var e = Program.Engine;
@@ -422,7 +501,17 @@ public sealed class MainWindow : Window
         int step = playing ? (int)(e.Seq.Tick % n) : -1;
         foreach (var r in stepRows) if (r.Playhead != step) { r.Playhead = step; r.InvalidateVisual(); }
         if (roll != null && roll.Playhead != step) { roll.Playhead = step; roll.InvalidateVisual(); }
-        if (playing) pos.Text = $"{step / 16 + 1}.{step % 16 / 4 + 1}.{step % 4 + 1}";
+        if (drumEditor != null && drumEditor.Playhead != step) { drumEditor.Playhead = step; drumEditor.InvalidateVisual(); }
+        if (bottom == "auto" && bottomHost.Content == autoView) autoView.SetPlayhead(step);
+        if (doc.ArrView)
+        {
+            bool arrOn = playing && timeline.Length > 0;
+            double ph = arrOn ? e.Seq.ArrBar + (e.Seq.Tick % 16) / 16.0 : -1;
+            if (Math.Abs(ph - timeline.Playhead) > 1e-6) { timeline.Playhead = ph; timeline.InvalidateVisual(); }
+            if (arrOn) { long t = e.Seq.Tick % 16; pos.Text = $"{e.Seq.ArrBar + 1}.{t / 4 + 1}.{t % 4 + 1}"; }
+            else if (playing) pos.Text = $"{step / 16 + 1}.{step % 16 / 4 + 1}.{step % 4 + 1}";
+        }
+        else if (playing) pos.Text = $"{step / 16 + 1}.{step % 16 / 4 + 1}.{step % 4 + 1}";
         var pk = e.Mx.Peaks;
         foreach (var (ch, m) in meters) m.Set(pk[ch]);
         masterMeter.Set(pk[Mixer.Channels]);
@@ -454,6 +543,10 @@ public sealed class MainWindow : Window
         else if ((e.Key == Key.Y && mod == ModifierKeys.Control) || (e.Key == Key.Z && mod == (ModifierKeys.Control | ModifierKeys.Shift))) { doc.Redo(); e.Handled = true; }
         else if (e.Key == Key.S && mod == ModifierKeys.Control) { SaveFile(); e.Handled = true; }
         else if (e.Key == Key.O && mod == ModifierKeys.Control) { OpenFile(); e.Handled = true; }
+        else if (e.Key == Key.E && mod == ModifierKeys.Control) { ExportAudio(); e.Handled = true; }
+        else if (e.Key == Key.F5 && mod == ModifierKeys.None) { SetView(true); e.Handled = true; }
+        else if (e.Key == Key.F6 && mod == ModifierKeys.None) { SetView(false); e.Handled = true; }
+        else if (e.Key == Key.Tab && mod == ModifierKeys.None) { SetView(!doc.ArrView); e.Handled = true; }
         else if (e.Key == Key.N && mod == (ModifierKeys.Control | ModifierKeys.Alt)) { NewTracks(); e.Handled = true; }
         else if (e.Key == Key.B && mod == ModifierKeys.None && !(Keyboard.FocusedElement is DeviceView)) { ToggleLibrary(); e.Handled = true; }
     }
@@ -472,25 +565,61 @@ public sealed class MainWindow : Window
         pad[0] = new JsonObject { ["n"] = 57, ["g"] = 8, ["a"] = 0, ["sl"] = 0, ["ch"] = new JsonArray(0, 3, 7) };
         pad[8] = new JsonObject { ["n"] = 53, ["g"] = 8, ["a"] = 0, ["sl"] = 0, ["ch"] = new JsonArray(0, 4, 7) };
         doc.Chain(8).Add(DeviceSpecs.New("filter")); doc.Chain(8).Add(DeviceSpecs.New("comp")); doc.Chain(8).Add(DeviceSpecs.New("reverb"));
+        // Pattern 2 (variazione), arrangiamento di 8 battute e automazione del cutoff del basso
+        doc.Root["slots"]![1] = p.DeepClone();
+        var p2 = doc.PatAt(1);
+        foreach (int s in new[] { 2, 6, 10, 14 }) ((JsonArray)p2["steps"]![1]!)[s] = 1;
+        p["auto"] = new JsonObject { ["s0.cut"] = new JsonArray(Enumerable.Range(0, 16).Select(i => (JsonNode)Math.Round(0.2 + 0.6 * i / 15.0, 3)).ToArray()) };
+        var bars = new List<(int[] m, int s)>();
+        for (int b = 0; b < 8; b++)
+        {
+            var m = Enumerable.Repeat(-1, 12).ToArray();
+            int slot = b >= 4 && b < 6 ? 1 : 0;
+            m[0] = slot; m[8] = b >= 2 ? slot : -1; m[10] = b >= 4 ? slot : -1; m[1] = b >= 1 ? slot : -1; m[2] = b % 4 == 3 ? -1 : slot;
+            bars.Add((m, slot));
+        }
+        doc.ArrBars = bars;
         doc.PushAll();
         sel = 8;
+    }
+
+    void Shot(string path)
+    {
+        UpdateLayout();
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var rtb = new RenderTargetBitmap((int)(ActualWidth * dpi.DpiScaleX), (int)(ActualHeight * dpi.DpiScaleY), dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+        rtb.Render((Visual)Content);
+        var enc = new PngBitmapEncoder();
+        enc.Frames.Add(BitmapFrame.Create(rtb));
+        using var f = File.Create(path);
+        enc.Save(f);
     }
 
     void SelfTest()
     {
         try
         {
-            // Giro delle funzioni principali, poi istantanea della finestra
+            // Giro delle funzioni principali, poi istantanee della finestra
             SetBottom("roll"); RenderBottom();
             SetBottom("dev");
             library.ShowEffects();
-            UpdateLayout();
-            var dpi = VisualTreeHelper.GetDpi(this);
-            var rtb = new RenderTargetBitmap((int)(ActualWidth * dpi.DpiScaleX), (int)(ActualHeight * dpi.DpiScaleY), dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
-            rtb.Render((Visual)Content);
-            var enc = new PngBitmapEncoder();
-            enc.Frames.Add(BitmapFrame.Create(rtb));
-            using (var f = File.Create(selftest!)) enc.Save(f);
+            Shot(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-step.png"));
+            SetView(true);
+            Select(8, false, false);
+            SetBottom("auto");
+            Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
+            Shot(selftest!);
+            // Export offline (lo stesso del menu FILE): 1 ripetizione del pattern e l'arrangiamento
+            var parts = doc.Parts(null);
+            foreach (var src in new[] { "pattern", "arr" })
+            {
+                var (l, r) = Exporter.Render(parts, new Exporter.Options(src, 1), null, null, CancellationToken.None);
+                string wav = Path.Combine(Path.GetTempPath(), $"drumbort-selftest-{src}.wav");
+                Exporter.WriteWav(wav, l, r, 48000, 24);
+                double pk = l.Max(Math.Abs);
+                Console.WriteLine($"export {src}: {l.Length / 48000.0:0.00} s, peak {pk:0.000}");
+                if (pk < 0.01) throw new Exception($"export {src} silenzioso");
+            }
             Console.WriteLine($"selftest ok: {selftest}");
             Application.Current.Shutdown(0);
         }

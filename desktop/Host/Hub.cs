@@ -169,7 +169,7 @@ public sealed class Hub
         SynthTrack Tr(int k) => seq.P.Slots[seq.P.Slot].Synth.Tracks[Math.Clamp(k, 0, 3)];
         switch (J.S(m, "op", ""))
         {
-            case "play": seq.Start(); break;
+            case "play": if (m["from"] != null) seq.ArrStart = Math.Max(0, J.I(m, "from", 0)); seq.Start(); break;
             case "stop": seq.Stop(); break;
             case "launch": seq.LaunchClip(J.I(m, "i", 0), J.I(m, "s", 0)); break;
             case "scene": seq.LaunchScene(J.I(m, "s", 0)); break;

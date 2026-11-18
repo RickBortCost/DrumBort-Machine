@@ -68,7 +68,7 @@ public sealed class Doc
     public void PushAll() => hub.LocalState(Parts(null), full: true);
 
     /// <summary>Parti nel formato del protocollo (p0…p7, slot, fx, …).</summary>
-    JsonObject Parts(string[]? keys)
+    public JsonObject Parts(string[]? keys)
     {
         var p = new JsonObject();
         bool all = keys == null;
@@ -77,7 +77,7 @@ public sealed class Doc
             if ((all || keys!.Contains(k)) && Root[k] != null) p[k] = Root[k]!.DeepClone();
         if (all || keys!.Contains("session"))
             p["session"] = new JsonObject { ["quant"] = Root["session"]?["quant"]?.DeepClone() ?? 16, ["follow"] = Root["session"]?["follow"]?.DeepClone() ?? new JsonArray() };
-        if (all) p["mode"] = "pattern";
+        if (all || keys!.Contains("mode")) p["mode"] = ArrView ? "session" : "pattern";
         if (all && Root["lock"] == null) p["lock"] = null;
         return JsonNode.Parse(p.ToJsonString())!.AsObject();
     }
@@ -211,6 +211,38 @@ public sealed class Doc
     public int Base(int k) => 12 * (SynthOct[k] + (int)Num(Track(8 + k), "oct", 0) + 1) + (int)Num(Pat["synth"], "key", 9);
 
     public JsonArray Chain(int ch) => (JsonArray)Root["devs"]![ch]!;
+
+    // ------------------------------------------------------------------ arrangiamento
+    /// <summary>Vista ARRANGIAMENTO: il motore suona la timeline (modalità session + arr.on).</summary>
+    public bool ArrView;
+    public const int MaxArrBars = 256;
+    JsonObject ArrObj
+    {
+        get
+        {
+            if (Root["arr"] is not JsonObject a) Root["arr"] = a = new JsonObject { ["on"] = false, ["bars"] = new JsonArray() };
+            if (a["bars"] is not JsonArray) a["bars"] = new JsonArray();
+            return a;
+        }
+    }
+    /// <summary>Battute dell'arrangiamento: m = pattern per traccia (−1 = vuota), s = pattern principale (tempo, kit).</summary>
+    public List<(int[] m, int s)> ArrBars
+    {
+        get => ((JsonArray)ArrObj["bars"]!).Select(b => (Enumerable.Range(0, 12).Select(i => b?["m"] is JsonArray m && i < m.Count ? (int)Val(m[i], -1) : -1).ToArray(), (int)Num(b, "s", 0))).ToList();
+        set
+        {
+            var list = value.Take(MaxArrBars).ToList();
+            while (list.Count > 0 && list[^1].m.All(v => v < 0)) list.RemoveAt(list.Count - 1);
+            ArrObj["bars"] = new JsonArray(list.Select(b => (JsonNode)new JsonObject { ["m"] = new JsonArray(b.m.Select(v => (JsonNode)v).ToArray()), ["s"] = b.s }).ToArray());
+            ArrObj["on"] = ArrView && list.Count > 0;
+        }
+    }
+    /// <summary>Allinea arr.on alla vista corrente e invia modalità e arrangiamento al motore.</summary>
+    public void SyncArrMode()
+    {
+        ArrObj["on"] = ArrView && ((JsonArray)ArrObj["bars"]!).Count > 0;
+        hub.LocalState(Parts(new[] { "arr", "mode" }));
+    }
 
     // ------------------------------------------------------------------ battute del pattern
     /// <summary>Lunghezza del pattern corrente in battute (le nuove ripetono il contenuto).</summary>

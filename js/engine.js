@@ -11,7 +11,7 @@
  */
 
 import { KITS } from './kits.js';
-import { PRESETS, SYNTH_TRACKS as SYNTH_DEFS, playVoice, voiceParams, releaseTime } from './synth.js';
+import { PRESETS, SYNTH_TRACKS as SYNTH_DEFS, playVoice, voiceParams, releaseTime, presetOf } from './synth.js';
 import { VoiceCache } from './voicecache.js';
 import { synthEvent, arpEvents } from './sequencer.js';
 
@@ -391,13 +391,17 @@ export class Engine {
 
   _synthKey(tr, notes, dur, vel, glideFrom) {
     const p = voiceParams(tr);
-    return `s|${tr.preset}|${notes.join(',')}|${Math.round(dur * 1000)}|${vel.toFixed(3)}|${p.cut}|${p.res}|${p.env}|${p.dec}|${p.atk}|${p.rel}|${p.lfo}|${p.rate}|${glideFrom ?? ''}`;
+    // Patch modificata: revisione nella chiave; wavetable: il tempo conta (LFO e step a tempo)
+    const pr = presetOf(tr);
+    const id = tr.patch && tr.patch.wt ? `${tr.preset}#${tr.patch.rev || 0}` : tr.preset;
+    const tempo = pr && pr.wt ? `|${this.bpm}` : '';
+    return `s|${id}|${notes.join(',')}|${Math.round(dur * 1000)}|${vel.toFixed(3)}|${p.cut}|${p.res}|${p.env}|${p.dec}|${p.atk}|${p.rel}|${p.lfo}|${p.rate}|${p.pos}|${glideFrom ?? ''}${tempo}`;
   }
 
   _prerenderSynth(tr, notes, dur, vel, glideFrom) {
-    const pr = PRESETS[tr.preset];
+    const pr = presetOf(tr);
     if (!pr) return;
-    const params = voiceParams(tr);
+    const params = { ...voiceParams(tr), bpm: this.bpm };
     const rel = releaseTime(pr, params);
     this.cache.request(this._synthKey(tr, notes, dur, vel, glideFrom), dur + rel * 1.7 + 0.1,
       (octx, o) => playVoice(octx, o, 0, dur, notes, vel, pr, params, glideFrom));
@@ -434,7 +438,7 @@ export class Engine {
   playSynth(k, time, dur, notes, vel, tr, glideFrom = null) {
     const ctx = this.ctx;
     if (!ctx) return null;
-    const pr = PRESETS[tr.preset];
+    const pr = presetOf(tr);
     if (!pr) return null;
     const t = Math.max(time, ctx.currentTime);
     const out = this.channels[SYNTH_CH + k].gain;
@@ -462,7 +466,7 @@ export class Engine {
       src.start(t);
       v = { g, src, end: t + buf.duration };
     } else {
-      const handle = playVoice(ctx, g, t, dur, notes, vel, pr, voiceParams(tr), glideFrom);
+      const handle = playVoice(ctx, g, t, dur, notes, vel, pr, { ...voiceParams(tr), bpm: this.bpm }, glideFrom);
       v = { g, handle, end: dur != null ? t + dur + rel * 1.7 : Infinity };
       if (key) this._prerenderSynth(tr, notes, dur, vel, glideFrom);
     }

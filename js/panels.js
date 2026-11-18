@@ -11,6 +11,8 @@ import { encodeWav } from './export.js';
 import { listProjects, saveProject, deleteProject, getProject, shareUrl, decodeShare } from './projects.js';
 import { saveSample, deleteSample } from './idb.js';
 import { clonePattern, normalizePattern } from './sequencer.js';
+import { PRESETS } from './presets.js';
+import { SYNTH_TRACKS } from './synth.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -254,7 +256,15 @@ export function initPanels(app) {
   // Condivisione via link
   // ===================================================================
   async function share() {
-    const url = await shareUrl(clonePattern(app.pat()));
+    // I preset utente non esistono su altri dispositivi: viaggiano come patch
+    const p = clonePattern(app.pat());
+    p.synth.tracks.forEach((t, i) => {
+      if (t.preset.startsWith('up:') && !t.patch && PRESETS[t.preset]) {
+        t.patch = JSON.parse(JSON.stringify(PRESETS[t.preset]));
+        t.preset = SYNTH_TRACKS[i].preset;
+      }
+    });
+    const url = await shareUrl(p);
     if (navigator.share) {
       try { await navigator.share({ title: 'DrumBort pattern', url }); return; } catch (_) { /* annullato */ }
     }

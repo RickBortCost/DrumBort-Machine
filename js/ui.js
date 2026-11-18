@@ -5,6 +5,7 @@
  */
 
 import { KITS, USER_KITS, kitById, setUserKits } from './kits.js';
+import { setUserPresets } from './presets.js';
 import { Engine, DEFAULT_FX } from './engine.js';
 import { Sequencer, createPattern, normalizePattern, normalizeOpt, parseRows, defaultTrack,
   isEmpty, clonePattern, STEPS, TRACKS, STEP_DEFAULT } from './sequencer.js';
@@ -43,6 +44,7 @@ const state = {
   view: 'drum',                     // 'drum' | 'synth' | 'perf'
   favs: [],                         // preset preferiti della libreria
   userKits: [],                     // definizioni dei kit personalizzati
+  userPresets: [],                  // preset synth salvati dall'editor wavetable
   projectName: '',                  // progetto aperto
 };
 
@@ -79,6 +81,8 @@ function loadState() {
       // I kit utente vanno registrati prima di leggere i pattern che li usano
       state.userKits = Array.isArray(raw.userKits) ? raw.userKits : [];
       setUserKits(state.userKits);
+      state.userPresets = Array.isArray(raw.userPresets) ? raw.userPresets : [];
+      setUserPresets(state.userPresets);
       state.slots = raw.slots.map(normalizePattern);
       state.favs = Array.isArray(raw.favs) ? raw.favs.filter((x) => typeof x === 'string') : [];
       state.projectName = typeof raw.projectName === 'string' ? raw.projectName : '';
@@ -104,7 +108,7 @@ function save() {
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         slot: state.slot, slots: state.slots, fx: state.fx, song: state.song, lock: state.lock, midi: state.midi, view: state.view,
-        favs: state.favs, userKits: state.userKits, projectName: state.projectName,
+        favs: state.favs, userKits: state.userKits, userPresets: state.userPresets, projectName: state.projectName,
       }));
     } catch (_) { /* quota / navigazione privata */ }
     // Le modifiche cambiano le voci: pre-renderizza in background quelle nuove
@@ -1090,11 +1094,13 @@ function exportData() {
   return {
     app: 'drumbort', version: 3, appVersion: APP_VERSION,
     slot: state.slot, slots: state.slots, song: state.song, fx: state.fx, lock: state.lock, userKits: state.userKits,
+    userPresets: state.userPresets,
   };
 }
 
 /** Sostituisce il progetto corrente con i dati forniti. */
 function importData(o) {
+  mergeUserPresets(o.userPresets);
   if (Array.isArray(o.userKits)) {
     const ids = new Set(state.userKits.map((d) => d.id));
     state.userKits = state.userKits.concat(o.userKits.filter((d) => d && !ids.has(d.id)));
@@ -1109,6 +1115,14 @@ function importData(o) {
   undoStack.length = 0; redoStack.length = 0;
   if (seq.playing) stopPlayback();
   syncPlayback(); renderAll(); save();
+}
+
+/** Aggiunge i preset utente non ancora presenti (prima di leggere i pattern che li usano). */
+function mergeUserPresets(list) {
+  if (!Array.isArray(list)) return;
+  const ids = new Set(state.userPresets.map((p) => p.id));
+  state.userPresets = state.userPresets.concat(list.filter((p) => p && typeof p.id === 'string' && !ids.has(p.id)));
+  setUserPresets(state.userPresets);
 }
 
 function newProject() {
@@ -1134,6 +1148,7 @@ $('#importFile').addEventListener('change', async (e) => {
     const o = JSON.parse(await f.text());
     snapshot();
     if (Array.isArray(o.slots)) {
+      mergeUserPresets(o.userPresets);
       if (Array.isArray(o.userKits)) {
         const ids = new Set(state.userKits.map((d) => d.id));
         state.userKits = state.userKits.concat(o.userKits.filter((d) => d && !ids.has(d.id)));

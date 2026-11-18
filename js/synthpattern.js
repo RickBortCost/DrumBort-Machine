@@ -16,6 +16,7 @@
  */
 
 import { PRESETS, SYNTH_TRACKS, SCALES, degreeNote, diatonicChord } from './synth.js';
+import { normalizeWTPreset } from './wavetable.js';
 
 export const SYNTH_STEPS = 16;
 export const SYNTH_COUNT = SYNTH_TRACKS.length;
@@ -33,7 +34,7 @@ export function defaultSynthTrack(k) {
   return {
     preset: SYNTH_TRACKS[k].preset, oct: 0,
     vol: [0.75, 0.75, 0.6, 0.65][k], pan: [0, 0.15, -0.1, 0.2][k], rev: [0, 0.2, 0.35, 0.2][k], dly: [0, 0.25, 0.1, 0.1][k],
-    cut: 0, res: 0, env: 1, dec: 1, atk: 1, rel: 1, lfo: 1, rate: 1,
+    cut: 0, res: 0, env: 1, dec: 1, atk: 1, rel: 1, lfo: 1, rate: 1, pos: 0,
     drv: 0, crush: 0,
     arp: defaultArp(),
     mute: false, solo: false, len: SYNTH_STEPS,
@@ -143,7 +144,9 @@ export function normalizeSynth(o) {
       cut: clamp(src.cut, -1, 1, 0), res: clamp(src.res, -1, 1, 0),
       env: clamp(src.env, 0, 2, 1), dec: clamp(src.dec, 0.25, 3, 1),
       atk: clamp(src.atk, 0.1, 4, 1), rel: clamp(src.rel, 0.1, 4, 1),
-      lfo: clamp(src.lfo, 0, 2, 1), rate: clamp(src.rate, 0.25, 4, 1),
+      lfo: clamp(src.lfo, 0, 2, 1), rate: clamp(src.rate, 0.25, 4, 1), pos: clamp(src.pos, -1, 1, 0),
+      // Patch modificata nell'editor wavetable (validata come un preset)
+      ...(src.patch && typeof src.patch === 'object' && src.patch.wt ? { patch: normalizeWTPreset(src.patch) } : {}),
       drv: clamp(src.drv, 0, 1, 0), crush: clampBits(src.crush),
       arp: normalizeArp(src.arp),
       mute: !!src.mute, solo: !!src.solo,

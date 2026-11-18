@@ -2,6 +2,31 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.3.0] - 2026-11-18
+
+### Aggiunto
+- **Libreria suoni**: 59 strumenti in 13 categorie (Bass, Lead, Pad, Keys, Piano, Organ, Strings, Brass, Pluck, Mallet, Bell, Choir, FX) con ricerca per nome/tag, preferiti e ascolto immediato. Nuovi motori: piano additivo, corde pizzicate (Karplus-Strong), organo a drawbar, formanti per cori e voci, LFO, strati di rumore, inviluppi di pitch.
+- **Traccia KEYS**: quarta traccia synth polifonica (accordi), MIDI out sul canale 4.
+- **Macro synth** nella pagina MOD: ATTACK, RELEASE, LFO, RATE.
+- **Arpeggiatore** (ARP) su qualsiasi traccia synth: segue gli accordi di PAD o KEYS; modi su/giù/su-giù/random, 1/32–1/4, 1–3 ottave, gate.
+- **Effetti per traccia** (pagina FX): drive e bit crusher su batteria e synth.
+- **Sidechain**: la cassa abbassa i synth (FX master e vista performance).
+- **Parameter lock** per step: tune/decay/velocity sulla batteria, cutoff/decay/velocity sul synth.
+- **Generatore**: ritmi euclidei, "varia batteria", "varia synth", humanize per pattern.
+- **Modalità performance** (vista PRF): pad XY filtro/risonanza con ritorno automatico, beat repeat 1/2–1/16, fill, mute rapidi per gruppi, registrazione dell'uscita.
+- **Registrazione dell'uscita** in WAV (performance dal vivo compresa).
+- **Export MIDI** (.mid) di pattern e song: batteria canale 10, synth canali 1–4.
+- **Campionamento dal microfono** sulla traccia di batteria selezionata (taglio del silenzio, normalizzazione).
+- **Kit personalizzati**: combina voci di kit diversi, con bit crush opzionale.
+- **Progetti** con nome, con auto-salvataggio prima di aprirne un altro.
+- **Condivisione via link**: il pattern viaggia compresso nell'indirizzo, senza server.
+
+### Modificato
+- Il pulsante vista ruota tra batteria, synth e performance (DRM▸ / SYN▸ / PRF▸).
+- I preset synth esistenti hanno nomi descrittivi senza marchi (es. "Acid 303", "Ladder Bass", "Poly Strings 106").
+- Attacco lineare per inviluppi lunghi (pad, riser): la salita è udibile da subito.
+- La ricerca nella libreria cerca in tutte le categorie.
+
 ## [1.2.1] - 2026-11-18
 
 ### Prestazioni
@@ -84,6 +109,7 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); vers
 - Layout touch per iPhone e iPad (portrait/landscape), PWA offline.
 - Deploy automatico su GitHub Pages.
 
+[1.3.0]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.1.1...v1.1.2

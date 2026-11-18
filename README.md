@@ -38,22 +38,50 @@ Drum machine e groovebox per il web: step sequencer 16 × 8, pad live, una libre
 - PWA installabile, funziona offline, avviso "Nuova versione disponibile".
 - Accessibilità: step leggibili da VoiceOver, navigazione con frecce e Invio.
 
+## Libreria suoni
+
+Il nome del suono nella testa dei parametri synth apre la **libreria**: 59 strumenti in 13 categorie (Bass, Lead, Pad, Keys, Piano, Organ, Strings, Brass, Pluck, Mallet, Bell, Choir, FX), ricerca per nome o tag (es. *warm*, *fm*, *vintage*), preferiti ★ e ascolto al tocco. I suoni sono tutti sintetizzati: piano additivo, corde pizzicate (Karplus-Strong), organo a drawbar, cori a formanti, FM, sottrattiva con LFO e rumore. La libreria si ispira al flusso di lavoro dei *rompler* (sfoglia, ascolta, assegna) senza riprodurne nomi, grafica o suoni.
+
+## Performance
+
+La vista **PRF** (pulsante vista: DRM▸ → SYN▸ → PRF▸) trasforma l'app in uno strumento dal vivo:
+
+- **Pad XY**: filtro master (LP ← → HP) e risonanza; con SNAP torna al valore di partenza al rilascio.
+- **Beat repeat** 1/2, 1/4, 1/8, 1/16 (tieni premuto) e **FILL** (tieni premuto).
+- **Mute rapidi** per gruppi: kick, snare, hats, perc, bass, lead, pad, keys.
+- **Sidechain**: la cassa abbassa i synth.
+- **● REC**: registra l'uscita in WAV, compreso tutto ciò che suoni.
+
+## Altre funzioni (menu ☰)
+
+- **Progetti…**: salva e riapri progetti con nome.
+- **Condividi pattern (link)**: crea un link che contiene il pattern; chi lo apre lo ritrova nello slot corrente (annullabile).
+- **Generatore…**: ritmo euclideo sulla traccia selezionata, variazioni di batteria e synth, humanize.
+- **Crea kit personalizzato…**: scegli per ogni strumento una voce da qualsiasi kit.
+- **Esporta MIDI** di pattern o song, **Registra l'uscita**.
+- Pulsante **WAV** dei parametri batteria: carica un file o registra dal **microfono**.
+
 ## Synth e pad a note
 
-Il pulsante **SYN** apre la sezione melodica (**DRM** torna alla batteria). Tre tracce suonano a tempo con la batteria:
+Il pulsante vista apre la sezione melodica. Quattro tracce suonano a tempo con la batteria:
 
 | Traccia | Preset |
 | --- | --- |
-| BASS | TB-303 Acid, SH-101 Bass, Minimoog Bass, DX7 FM Bass, Reese Bass |
-| LEAD | SH-101 Lead, Minimoog Lead, MS-20 Lead, Chip Square, DX7 FM Bell |
-| PAD | Juno-106 Strings, Prophet-5 Pad, OB-X Brass, CS-80 Pad, DX7 Glass Pad |
+| BASS | Acid 303, Mono Bass 101, Ladder Bass, FM Bass, Reese, Sub, Wobble… |
+| LEAD | Mono Lead 101, Ladder Lead, Screamer Lead, Supersaw, Vox Lead… |
+| PAD | Poly Strings 106, Poly Pad 5, Dream Pad 80, Glass Pad (+ tutta la libreria) |
+| KEYS | Tine E-Piano, Grand Piano, organi, mallet… (+ tutta la libreria) |
+
+Ogni traccia può usare qualsiasi suono della libreria. BASS e LEAD sono monofoniche, PAD e KEYS suonano accordi.
 
 - **Pad a note**: 8 pad sui gradi della scala scelta (tonalità, 9 scale, ottava −/+); sulla traccia PAD suonano accordi diatonici. Tieni premuto per sostenere la nota.
 - **Corsie**: tocca uno step vuoto per inserire l'ultima nota suonata sui pad, tocca una nota per cancellarla, trascina per più step.
 - **EDIT** su uno step synth: nota ±1 semitono / ±1 ottava, gate 1–16 step, accento, slide, tipo di accordo.
-- Parametri: CUT, RESO, ENV, DECAY, LEN (pagina SND) e VOL, PAN, REV, DLY (pagina MIX).
+- Parametri a pagine: SND (CUT, RESO, ENV, DECAY, LEN), MOD (ATTACK, RELEASE, LFO, RATE), MIX (VOL, PAN, REV, DLY), FX (DRIVE, CRUSH).
+- **ARP**: arpeggiatore che segue gli accordi di PAD o KEYS (modo, velocità, ottave, gate).
+- **Parameter lock**: in EDIT ogni step può avere cutoff, decay e velocity propri (anche sulla batteria: tune, decay, velocity).
 - Con **●** attivo i pad registrano note e durata. Cambiare tonalità traspone le note esistenti.
-- MIDI: nella vista synth le note in arrivo suonano sulla traccia selezionata; in uscita BASS/LEAD/PAD usano i canali 1/2/3.
+- MIDI: nella vista synth le note in arrivo suonano sulla traccia selezionata; in uscita BASS/LEAD/PAD/KEYS usano i canali 1/2/3/4.
 
 ## Kit
 
@@ -93,6 +121,14 @@ js/synth.js             voci synth, preset, scale e accordi
 js/synthpattern.js      dati e demo della sezione synth
 js/synthui.js           interfaccia della sezione synth
 js/voicecache.js        cache delle voci pre-renderizzate (prestazioni)
+js/presets.js           libreria suoni (categorie, tag)
+js/library.js           browser della libreria
+js/performance.js       vista performance
+js/panels.js            generatore, kit, progetti, campionatore, condivisione
+js/generate.js          euclideo, variazioni, fill
+js/recorder.js          registrazione uscita e microfono
+js/midifile.js          export MIDI
+js/projects.js          progetti e link di condivisione
 js/ui.js                interfaccia, salvataggio, undo, song, PWA
 js/export.js            render offline e codifica WAV
 js/midi.js              Web MIDI (note e clock)
@@ -138,6 +174,10 @@ Versionamento [SemVer](https://semver.org/lang/it/) con tag git `vX.Y.Z`; storic
 3. commit e push su `main`: dopo test e deploy riusciti il workflow `release.yml` crea tag e GitHub Release con le note del changelog.
 
 La versione installata è visibile nel menu ☰.
+
+## Nota sui nomi
+
+Kit e suoni sono sintetizzati e descrivono lo *stile* di strumenti storici; i nomi dei modelli citati appartengono ai rispettivi proprietari e non implicano alcuna affiliazione.
 
 ## Licenza
 

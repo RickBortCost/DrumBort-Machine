@@ -16,6 +16,9 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); vers
 - MIDI: note in alla traccia synth selezionata, note out sui canali 1–3.
 - Groove synth demo al primo avvio e da menu; export WAV, song, copia/incolla e undo includono il synth.
 
+### Corretto
+- Safari/WebKit: alla prima visita compariva il banner "Nuova versione disponibile" senza aggiornamenti reali.
+
 
 
 ### Corretto

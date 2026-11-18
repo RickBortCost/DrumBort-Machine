@@ -1219,6 +1219,9 @@ window.drumbort = { engine, seq, state, ui, midi, version: APP_VERSION, undo, re
 // =====================================================================
 
 if ('serviceWorker' in navigator) {
+  // Alla prima visita (pagina non ancora gestita) non c'è nulla da aggiornare:
+  // niente banner e nessun controllo mentre il primo service worker si installa.
+  const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
   let reloadRequested = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -1228,6 +1231,7 @@ if ('serviceWorker' in navigator) {
   });
 
   const showUpdate = (worker) => {
+    if (!hadController) return;
     $('#updateBar').hidden = false;
     $('#updateBtn').onclick = () => {
       reloadRequested = true;
@@ -1248,10 +1252,10 @@ if ('serviceWorker' in navigator) {
       if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg.waiting);
       track(reg.installing);
       reg.addEventListener('updatefound', () => track(reg.installing));
-      reg.update().catch(() => {});   // controllo immediato all'avvio
+      if (hadController) reg.update().catch(() => {});   // controllo immediato all'avvio
       // Controlla aggiornamenti quando l'app torna in primo piano
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+        if (document.visibilityState === 'visible' && reg.active && !reg.installing) reg.update().catch(() => {});
       });
     }).catch(() => { /* offline non disponibile */ });
   });

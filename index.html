@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
-  <div id="app" data-drawer="closed">
+  <div id="app" data-drawer="closed" data-view="drum">
     <!-- ===== Barra superiore: trasporto, tempo, kit, pattern ===== -->
     <header class="bar">
       <div class="bar-row r1">
@@ -62,6 +62,7 @@
         <button class="btn sm" data-cmd="met" aria-label="Metronomo" aria-pressed="false">MET</button>
         <button class="btn sm" data-cmd="song" aria-label="Song mode" aria-haspopup="dialog">SONG</button>
         <button class="btn sm" data-cmd="fx" aria-label="Effetti master" aria-haspopup="dialog">FX</button>
+        <button class="btn sm" data-cmd="view" aria-label="Mostra synth">SYN</button>
       </div>
       <div class="tabs" role="tablist">
         <button class="btn sm tab on" data-tab="pads" role="tab" aria-selected="true">PAD</button>
@@ -78,6 +79,27 @@
         <div id="sliders" class="sliders"></div>
       </section>
       <section id="pads" class="panel pads" aria-label="Pad"></section>
+
+      <!-- Sezione SYNTH: parametri e pad a note -->
+      <section id="sparams" class="panel params sparams" data-pg="snd" aria-label="Parametri synth">
+        <div class="params-head">
+          <select id="presetSel" class="sel preset" aria-label="Preset"></select>
+          <button id="smuteBtn" class="btn sm ms" aria-label="Mute" aria-pressed="false">M</button>
+          <button id="ssoloBtn" class="btn sm ms" aria-label="Solo" aria-pressed="false">S</button>
+          <button id="spgBtn" class="btn sm" aria-label="Pagina parametri">MIX</button>
+        </div>
+        <div id="ssliders" class="sliders"></div>
+      </section>
+      <section id="spads" class="panel pads spads" aria-label="Pad a note">
+        <div class="keyrow">
+          <select id="keySel" class="sel key" aria-label="Tonalità"></select>
+          <select id="scaleSel" class="sel" aria-label="Scala"></select>
+          <button id="octDown" class="btn sm" aria-label="Ottava giù">−</button>
+          <output id="octVal" class="lcd mini oct" aria-label="Ottava">C3</output>
+          <button id="octUp" class="btn sm" aria-label="Ottava su">+</button>
+        </div>
+        <div id="spadGrid" class="spad-grid"></div>
+      </section>
     </aside>
   </div>
 
@@ -85,7 +107,7 @@
   <div id="menu" class="sheet" role="dialog" aria-modal="true" aria-label="Menu" hidden>
     <div class="sheet-box">
       <button class="btn" data-act="clear">Clear pattern</button>
-      <button class="btn" data-act="demo">Carica demo del kit</button>
+      <button class="btn" data-act="demo">Carica demo (batteria o synth)</button>
       <button class="btn" data-act="wav-pattern">Esporta WAV (pattern × 4)</button>
       <button class="btn" data-act="wav-song">Esporta WAV (song)</button>
       <button class="btn" data-act="export">Esporta JSON (pattern, song, FX)</button>
@@ -120,6 +142,40 @@
       <label class="row-ctl"><small>NUDGE</small><input type="range" data-k="n" min="-50" max="50" step="5" aria-label="Nudge"><output></output></label>
       <div class="sheet-actions">
         <button class="btn" data-act="step-reset">Reset opzioni</button>
+        <button class="btn close" data-close>Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="sstepSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sstepTitle" hidden>
+    <div class="sheet-box">
+      <div class="sheet-title" id="sstepTitle">Step</div>
+      <div class="note-row" role="group" aria-label="Nota">
+        <button class="btn sm" data-tr="-12" aria-label="Ottava giù">−8va</button>
+        <button class="btn sm" data-tr="-1" aria-label="Semitono giù">−1</button>
+        <output id="sNote" class="lcd">C3</output>
+        <button class="btn sm" data-tr="1" aria-label="Semitono su">+1</button>
+        <button class="btn sm" data-tr="12" aria-label="Ottava su">+8va</button>
+      </div>
+      <label class="row-ctl"><small>GATE</small><input id="sGate" type="range" min="1" max="16" step="1" aria-label="Durata in step"><output></output></label>
+      <div class="row-ctl"><small>ACCENTO</small>
+        <div class="seg" role="group" aria-label="Accento" data-k="a">
+          <button class="btn sm" data-v="0">NO</button><button class="btn sm" data-v="1">SÌ</button>
+        </div>
+      </div>
+      <div class="row-ctl" id="sSlideRow"><small>SLIDE</small>
+        <div class="seg" role="group" aria-label="Slide verso la nota successiva" data-k="sl">
+          <button class="btn sm" data-v="0">NO</button><button class="btn sm" data-v="1">SÌ</button>
+        </div>
+      </div>
+      <div class="row-ctl" id="sChordRow"><small>ACCORDO</small>
+        <div class="seg" role="group" aria-label="Accordo" data-k="ch">
+          <button class="btn sm" data-v="triad">3</button><button class="btn sm" data-v="seventh">7</button>
+          <button class="btn sm" data-v="sus4">SUS</button><button class="btn sm" data-v="single">1</button>
+        </div>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" data-act="sstep-del">Elimina nota</button>
         <button class="btn close" data-close>Chiudi</button>
       </div>
     </div>

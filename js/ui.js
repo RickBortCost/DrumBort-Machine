@@ -1,6 +1,7 @@
 /**
  * ui.js — Interfaccia: griglia, pad, parametri, strumenti, fogli modali,
  * salvataggio locale, undo/redo, song mode, registrazione, export, MIDI, PWA.
+ * La sezione SYNTH è in synthui.js.
  */
 
 import { KITS, kitById } from './kits.js';
@@ -11,6 +12,7 @@ import { renderBars, encodeWav } from './export.js';
 import { Midi } from './midi.js';
 import { saveSample, loadSamples, clearSamples } from './idb.js';
 import { APP_VERSION } from './version.js';
+import { initSynthUI } from './synthui.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -36,10 +38,12 @@ const state = {
   song: { on: false, chain: [] },   // catena { slot, rep }
   lock: null,                       // id kit bloccato o null
   midi: { opts: { ...midi.opts }, input: '', output: '' },
+  view: 'drum',                     // 'drum' | 'synth'
 };
 
 /** Stato solo di interfaccia (non salvato). */
-const ui = { edit: false, rec: false, met: false, clip: null, songIdx: -1, songPos: null };
+const ui = { edit: false, rec: false, met: false, clip: null, songIdx: -1, songPos: null, view: 'drum' };
+let synthUI = null;
 
 function normalizeFx(o) {
   const fx = { ...DEFAULT_FX };
@@ -69,14 +73,15 @@ function loadState() {
       state.fx = normalizeFx(raw.fx);
       state.song = normalizeSong(raw.song);
       state.lock = KITS.some((k) => k.id === raw.lock) ? raw.lock : null;
+      state.view = raw.view === 'synth' ? 'synth' : 'drum';
       if (raw.midi && raw.midi.opts) {
         state.midi = { opts: { ...state.midi.opts, ...raw.midi.opts }, input: raw.midi.input || '', output: raw.midi.output || '' };
       }
       return;
     }
   } catch (_) { /* storage non disponibile o dati corrotti */ }
-  // Primo caricamento: ogni slot contiene il groove demo di un kit
-  state.slots = Array.from({ length: SLOTS }, (_, i) => createPattern(KITS[i % KITS.length].id));
+  // Primo caricamento: ogni slot contiene il groove demo di un kit e un groove synth
+  state.slots = Array.from({ length: SLOTS }, (_, i) => createPattern(KITS[i % KITS.length].id, true, i % 3));
 }
 
 let saveTimer = null;
@@ -85,7 +90,7 @@ function save() {
   saveTimer = setTimeout(() => {
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
-        slot: state.slot, slots: state.slots, fx: state.fx, song: state.song, lock: state.lock, midi: state.midi,
+        slot: state.slot, slots: state.slots, fx: state.fx, song: state.song, lock: state.lock, midi: state.midi, view: state.view,
       }));
     } catch (_) { /* quota / navigazione privata */ }
   }, 250);
@@ -311,6 +316,10 @@ function renderTransport() {
 function renderTools() {
   setToggle($('[data-cmd="edit"]'), ui.edit);
   setToggle($('[data-cmd="met"]'), ui.met);
+  const vb = $('[data-cmd="view"]');
+  vb.textContent = ui.view === 'synth' ? 'DRM' : 'SYN';
+  vb.setAttribute('aria-label', ui.view === 'synth' ? 'Mostra batteria' : 'Mostra synth');
+  vb.classList.toggle('on', ui.view === 'synth');
   $('[data-cmd="song"]').classList.toggle('on', state.song.on);
   const fxOn = state.fx.filter !== 0 || pat().tracks.some((t) => t.rev > 0 || t.dly > 0);
   $('[data-cmd="fx"]').classList.toggle('on', fxOn);
@@ -325,6 +334,7 @@ function renderAll() {
   renderParams();
   renderTransport();
   renderTools();
+  if (synthUI) synthUI.render();
 }
 
 function setToggle(el, on) {
@@ -337,6 +347,7 @@ function setToggle(el, on) {
 // =====================================================================
 
 function clearPlayhead() {
+  if (synthUI) synthUI.clearPlayhead();
   phCells.forEach((c, t) => { if (c) c.classList.remove('ph'); phCells[t] = null; });
   $$('.pager .page').forEach((b) => b.classList.remove('lit'));
 }
@@ -359,6 +370,7 @@ function showTick(e) {
   }
   const page = (e.tick % STEPS) >> 3;
   $$('.pager .page').forEach((b) => b.classList.toggle('lit', +b.dataset.page === page));
+  if (synthUI) synthUI.showTick(e);
 }
 
 function frame() {
@@ -693,6 +705,13 @@ $('#slot').addEventListener('change', (e) => {
 });
 
 // Paginazione step (iPhone portrait: 8 step per pagina)
+/** Vista batteria / synth. */
+function setView(v) {
+  ui.view = state.view = v;
+  $('#app').dataset.view = v;
+  renderTools(); save();
+}
+
 function setPage(n) {
   grid.dataset.page = n;
   $$('.pager .page').forEach((x) => setToggle(x, +x.dataset.page === +n));
@@ -752,6 +771,7 @@ $('.tools').addEventListener('click', (e) => {
       break;
     case 'song': renderSong(); openSheet('songSheet'); break;
     case 'fx': renderFx(); openSheet('fxSheet'); break;
+    case 'view': setView(ui.view === 'synth' ? 'drum' : 'synth'); break;
   }
   renderTools();
 });
@@ -935,13 +955,16 @@ $('#menu').addEventListener('click', async (e) => {
   switch (act) {
     case 'clear':
       snapshot();
+      if (ui.view === 'synth') { synthUI.clear(); break; }
       p.steps = p.steps.map((r) => r.map(() => 0));
       p.opts = p.opts.map((r) => r.map(() => null));
       break;
     case 'demo': {
       snapshot();
+      if (ui.view === 'synth') { synthUI.demo(); syncPlayback(); break; }
       const kit = kitById(p.kit);
-      Object.assign(p, createPattern(kit.id));
+      const synth = p.synth;
+      Object.assign(p, createPattern(kit.id), { synth });
       syncPlayback();
       break;
     }
@@ -1028,6 +1051,7 @@ $('#importFile').addEventListener('change', async (e) => {
 
 midi.opts = { ...midi.opts, ...state.midi.opts };
 midi.onNote = (t, vel) => hitPad(t, vel);
+midi.onRaw = (note, vel, on) => (synthUI ? synthUI.onMidiRaw(note, vel, on) : false);
 midi.onStart = () => { if (engine.ctx && !seq.playing) startPlayback(); };
 midi.onStop = () => { if (seq.playing) stopPlayback(); };
 midi.onTempo = (bpm) => { if (Math.abs(bpm - pat().bpm) >= 1) setBpm(bpm); };
@@ -1037,7 +1061,10 @@ seq.onStart = (time) => midi.start(engine.ctx, time);
 seq.onStop = () => midi.stop();
 seq.onTick = (tick, time, sd, played) => {
   midi.clock(engine.ctx, time, sd);
-  for (const n of played) midi.note(engine.ctx, n.t, n.time, n.vel);
+  for (const n of played) {
+    if (n.synth !== undefined) midi.synthNotes(engine.ctx, n.synth, n.notes, n.time, n.dur, n.vel);
+    else midi.note(engine.ctx, n.t, n.time, n.vel);
+  }
 };
 
 function renderMidi() {
@@ -1172,6 +1199,12 @@ buildGrid();
 buildPads();
 buildSliders();
 buildFx();
+synthUI = initSynthUI({
+  engine, seq, ui, pat, save, snapshot, toast, setToggle, isPlayingPattern,
+  openSheet, closeSheet, setPage: (n) => setPage(n),
+});
+ui.view = state.view;
+$('#app').dataset.view = ui.view;
 seq.pattern = pat();
 engine.setKit(kitOf(pat()));
 engine.fx = { ...state.fx };

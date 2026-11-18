@@ -15,8 +15,13 @@ Applicazione per PC (Windows, macOS, Linux) che:
 Il primo dispositivo con la drum machine che si collega porta il proprio progetto sull'host; quelli successivi lo ricevono, sostituendo il progetto locale. Un telefono in **Sound Lab** invia solo i suoni che crei (synth e batteria): arrivano nella libreria del PC e al motore senza toccare il progetto. Per usare il telefono come controller della drum machine apri l'indirizzo con `?full`.
 
 - **Windows**: al primo avvio consenti l'accesso alle reti private nel firewall.
-- **macOS**: se il sistema blocca l'app scaricata, esegui `xattr -dr com.apple.quarantine <cartella>` oppure autorizzala in Impostazioni → Privacy e sicurezza.
-- **Linux**: serve ALSA, PulseAudio o PipeWire (la libreria PortAudio è inclusa).
+- **macOS**: il pacchetto non ha una firma Apple. La prima volta, nel Terminale dentro la cartella estratta:
+  ```bash
+  xattr -dr com.apple.quarantine .
+  codesign --force --sign - DrumBortHost libportaudio.dylib   # necessario sui Mac Apple Silicon
+  ./DrumBortHost
+  ```
+- **Linux**: serve ALSA, PulseAudio o PipeWire (la libreria PortAudio è inclusa). Avvio: `./DrumBortHost` (se serve, prima `chmod +x DrumBortHost`).
 
 ## Opzioni
 

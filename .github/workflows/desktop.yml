@@ -15,10 +15,18 @@ on:
         description: "Release a cui allegare i pacchetti (es. v1.9.0); vuoto = solo artifact"
         type: string
         default: ''
+      ref:
+        description: "Commit o tag da compilare (vuoto = quello del workflow; per le release passate usare il tag)"
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       tag:
         description: "Release a cui allegare i pacchetti (es. v1.9.0); vuoto = solo artifact"
+        type: string
+        default: ''
+      ref:
+        description: "Commit o tag da compilare (vuoto = quello del workflow; per le release passate usare il tag)"
         type: string
         default: ''
 
@@ -31,6 +39,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
@@ -57,25 +67,38 @@ jobs:
       fail-fast: false        # un runner non disponibile (es. macOS) non blocca gli altri pacchetti
       matrix:
         include:
-          - { rid: win-x64, os: windows-latest }
-          - { rid: osx-arm64, os: macos-latest }
-          - { rid: osx-x64, os: macos-13 }
-          - { rid: linux-x64, os: ubuntu-latest }
+          # macOS compilato su Linux: i runner Mac di GitHub spesso non vengono assegnati.
+          # Senza firma Apple: sul Mac un comando la aggiunge (vedi LEGGIMI).
+          - { rid: win-x64, os: windows-latest, bundle: true }
+          - { rid: osx-arm64, os: ubuntu-latest, bundle: false }
+          - { rid: osx-x64, os: ubuntu-latest, bundle: false }
+          - { rid: linux-x64, os: ubuntu-latest, bundle: true }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
       - name: Publish
         shell: bash
         run: |
-          dotnet publish desktop -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o "out/DrumBortHost-${{ matrix.rid }}"
+          # Eseguibile singolo; su macOS la libreria audio resta accanto (si firma insieme all'eseguibile)
+          dotnet publish desktop -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=${{ matrix.bundle }} -p:DebugType=none -o "out/DrumBortHost-${{ matrix.rid }}"
           cp desktop/README.md "out/DrumBortHost-${{ matrix.rid }}/LEGGIMI.md"
-      - name: Zip
+          ls -la "out/DrumBortHost-${{ matrix.rid }}"
+          test -f "out/DrumBortHost-${{ matrix.rid }}/DrumBortHost" || test -f "out/DrumBortHost-${{ matrix.rid }}/DrumBortHost.exe"
+      - name: Zip (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: Compress-Archive -Path "out/DrumBortHost-${{ matrix.rid }}" -DestinationPath "DrumBortHost-${{ matrix.rid }}.zip"
+      - name: Zip (macOS/Linux, con i permessi di esecuzione)
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x "out/DrumBortHost-${{ matrix.rid }}/DrumBortHost"
+          cd out && zip -qry "../DrumBortHost-${{ matrix.rid }}.zip" "DrumBortHost-${{ matrix.rid }}"
       - uses: actions/upload-artifact@v4
         with:
           name: DrumBortHost-${{ matrix.rid }}

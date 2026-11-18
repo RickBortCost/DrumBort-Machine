@@ -10,10 +10,20 @@ on:
   pull_request:
     paths: ['desktop/**', 'js/**', 'tools/**', '.github/workflows/desktop.yml']
   workflow_call:
+    inputs:
+      tag:
+        description: "Release a cui allegare i pacchetti (es. v1.9.0); vuoto = solo artifact"
+        type: string
+        default: ''
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release a cui allegare i pacchetti (es. v1.9.0); vuoto = solo artifact"
+        type: string
+        default: ''
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -71,3 +81,11 @@ jobs:
           name: DrumBortHost-${{ matrix.rid }}
           path: DrumBortHost-${{ matrix.rid }}.zip
           retention-days: 14
+      # Ogni sistema allega il proprio zip appena pronto (un runner in coda non blocca gli altri)
+      - name: Allega alla release
+        if: inputs.tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: gh release upload "$TAG" "DrumBortHost-${{ matrix.rid }}.zip" --repo "$GITHUB_REPOSITORY" --clobber

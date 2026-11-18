@@ -83,6 +83,8 @@ jobs:
 
   attach:
     needs: [release, desktop]
+    # Allega i pacchetti riusciti anche se un sistema non è stato compilato
+    if: always() && needs.release.outputs.created == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

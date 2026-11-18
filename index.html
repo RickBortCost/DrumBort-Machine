@@ -40,6 +40,10 @@
         <select id="kit" class="sel" aria-label="Kit"></select>
         <button id="lockBtn" class="btn sm" aria-label="Blocca kit al cambio pattern" aria-pressed="false">🔓</button>
         <select id="slot" class="sel slot" aria-label="Pattern"></select>
+        <div class="bars-ctl" role="group" aria-label="Battute del pattern">
+          <select id="barsSel" class="sel bars-sel" aria-label="Lunghezza del pattern"><option value="1">1 BAR</option><option value="2">2 BAR</option><option value="4">4 BAR</option></select>
+          <div id="barSeg" class="seg bar-seg" role="group" aria-label="Battuta visibile"></div>
+        </div>
         <div class="pager" role="group" aria-label="Pagina step">
           <button class="btn sm page on" data-page="0" aria-label="Step 1-8" aria-pressed="true">1–8<i class="led"></i></button>
           <button class="btn sm page" data-page="1" aria-label="Step 9-16" aria-pressed="false">9–16<i class="led"></i></button>
@@ -214,6 +218,8 @@
       <section class="msec" aria-label="Pattern">
         <h3>PATTERN</h3>
         <div class="mgrid">
+          <button class="btn mitem" data-act="macro"><span class="mi" aria-hidden="true">◎</span><span class="ml">Macro<small>4 manopole, più parametri insieme</small></span></button>
+          <button class="btn mitem" data-act="auto"><span class="mi" aria-hidden="true">∿</span><span class="ml">Automazione<small>volume, pan, filtri… per step</small></span></button>
           <button class="btn mitem" data-act="gen"><span class="mi" aria-hidden="true">✦</span><span class="ml">Generatore<small>euclideo, varia, humanize</small></span></button>
           <button class="btn mitem" data-act="demo"><span class="mi" aria-hidden="true">♫</span><span class="ml">Carica demo<small>batteria o synth</small></span></button>
           <button class="btn mitem" data-act="clear"><span class="mi" aria-hidden="true">⌫</span><span class="ml">Svuota pattern<small>vista corrente</small></span></button>
@@ -233,6 +239,7 @@
         <div class="mgrid">
           <button class="btn mitem" data-act="wav-pattern"><span class="mi" aria-hidden="true">◉</span><span class="ml">WAV pattern<small>× 4 ripetizioni</small></span></button>
           <button class="btn mitem" data-act="wav-song"><span class="mi" aria-hidden="true">◉</span><span class="ml">WAV song</span></button>
+          <button class="btn mitem" data-act="stems"><span class="mi" aria-hidden="true">≡</span><span class="ml">Stem WAV<small>una traccia per file (ZIP)</small></span></button>
           <button class="btn mitem" data-act="mid-pattern"><span class="mi" aria-hidden="true">▤</span><span class="ml">MIDI pattern<small>× 4 ripetizioni</small></span></button>
           <button class="btn mitem" data-act="mid-song"><span class="mi" aria-hidden="true">▤</span><span class="ml">MIDI song</span></button>
           <button class="btn mitem" data-act="recout"><span class="mi" aria-hidden="true">●</span><span class="ml">Registra uscita<small>WAV dal vivo</small></span></button>
@@ -373,6 +380,42 @@
       <div id="prWrap" class="pr-wrap"><canvas id="prCanvas" aria-label="Griglia note"></canvas></div>
       <div class="pr-lane-wrap"><canvas id="prLane" class="pr-lane" aria-label="Accento e slide"></canvas></div>
       <small class="hint">Clic: nota (trascina a destra per la durata) · clic su una nota: elimina · trascina in verticale: sposta · bordo destro: durata · Shift+clic: accento · tasti a sinistra: ascolto</small>
+    </div>
+  </div>
+
+  <div id="autoSheet" class="sheet auto-sheet" role="dialog" aria-modal="true" aria-labelledby="autoTitle" hidden>
+    <div class="sheet-box auto-box">
+      <div class="piano-head">
+        <div class="sheet-title" id="autoTitle">AUTOMAZIONE</div>
+        <select id="autoTarget" class="sel auto-target" aria-label="Parametro da automatizzare"></select>
+        <button class="btn sm" data-close>CHIUDI</button>
+      </div>
+      <div id="autoUsed" class="auto-used"></div>
+      <canvas id="autoCanvas" class="auto-canvas" aria-label="Corsia di automazione: trascina per disegnare"></canvas>
+      <div class="lab-row">
+        <button class="btn sm" data-auto="erase" aria-pressed="false" title="Gomma (anche tasto destro o Alt)">GOMMA</button>
+        <button class="btn sm" data-auto="ramp">RAMPA</button>
+        <button class="btn sm" data-auto="base">DAL VALORE</button>
+        <button class="btn sm" data-auto="clear">CANCELLA CORSIA</button>
+      </div>
+      <small id="autoInfo" class="hint"></small>
+    </div>
+  </div>
+
+  <div id="macroSheet" class="sheet macro-sheet" role="dialog" aria-modal="true" aria-labelledby="macroTitle" hidden>
+    <div class="sheet-box macro-box">
+      <div class="piano-head">
+        <div class="sheet-title" id="macroTitle">MACRO</div>
+        <button class="btn sm" data-close>CHIUDI</button>
+      </div>
+      <div id="macroKnobs" class="macro-knobs"></div>
+      <h4 id="macroMapTitle" class="lm-h"></h4>
+      <div id="macroMap" class="macro-map"></div>
+      <div class="lab-row">
+        <select id="macroTarget" class="sel" aria-label="Parametro da collegare"></select>
+        <button class="btn sm" data-mact="link">+ COLLEGA</button>
+      </div>
+      <small class="hint">Ogni macro muove insieme fino a 8 parametri (tracce, effetti, master), ognuno dal valore "da" al valore "a".</small>
     </div>
   </div>
 

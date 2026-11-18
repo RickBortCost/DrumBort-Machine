@@ -241,7 +241,7 @@ public sealed class BiquadFilterNode : AudioNode
 {
     public readonly AudioParam Frequency, Q, Detune, GainParam;
     public string Type;
-    double b0, b1, b2, a1, a2;
+    double b0, b1, b2, a1, a2, gainDb;
     double x1L, x2L, y1L, y2L, x1R, x2R, y1R, y2R;
     readonly float[] inL = new float[AudioContext.Block], inR = new float[AudioContext.Block];
 
@@ -256,6 +256,24 @@ public sealed class BiquadFilterNode : AudioNode
         double sr = Ctx.SampleRate, ny = sr / 2;
         f = f * (det == 0 ? 1 : Math.Pow(2, det / 1200));
         double fn = Math.Clamp(f / ny, 0, 1);
+        if (Type is "lowshelf" or "highshelf")
+        {
+            double A = Math.Pow(10, gainDb / 40), w0 = Math.PI * Math.Clamp(fn, 1e-6, 0.999999), cs = Math.Cos(w0);
+            double sal = Math.Sin(w0) / 2 * Math.Sqrt(2), sa = 2 * Math.Sqrt(A) * sal;
+            if (Type == "lowshelf")
+            {
+                double a0 = (A + 1) + (A - 1) * cs + sa;
+                Set(A * ((A + 1) - (A - 1) * cs + sa) / a0, 2 * A * ((A - 1) - (A + 1) * cs) / a0, A * ((A + 1) - (A - 1) * cs - sa) / a0,
+                    -2 * ((A - 1) + (A + 1) * cs) / a0, ((A + 1) + (A - 1) * cs - sa) / a0);
+            }
+            else
+            {
+                double a0 = (A + 1) - (A - 1) * cs + sa;
+                Set(A * ((A + 1) + (A - 1) * cs + sa) / a0, -2 * A * ((A - 1) + (A + 1) * cs) / a0, A * ((A + 1) + (A - 1) * cs - sa) / a0,
+                    2 * ((A - 1) - (A + 1) * cs) / a0, ((A + 1) - (A - 1) * cs - sa) / a0);
+            }
+            return;
+        }
         if (Type is "lowpass" or "highpass")
         {
             bool lp = Type == "lowpass";
@@ -280,8 +298,9 @@ public sealed class BiquadFilterNode : AudioNode
     {
         SumInputs(inL, inR, out bool st);
         Stereo = st;
-        Frequency.Compute(); Q.Compute(); Detune.Compute();
-        bool cst = Frequency.Constant && Q.Constant && Detune.Constant;
+        Frequency.Compute(); Q.Compute(); Detune.Compute(); GainParam.Compute();
+        gainDb = GainParam.Values[0];
+        bool cst = Frequency.Constant && Q.Constant && Detune.Constant && GainParam.Constant;
         var fq = Frequency.Values; var qv = Q.Values; var dv = Detune.Values;
         if (cst) Coefs(fq[0], qv[0], dv[0]);
         for (int i = 0; i < AudioContext.Block; i++)

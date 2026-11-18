@@ -24,7 +24,7 @@ export async function renderBars(bars, { fx, samples = [], lockKit = null, sampl
   if (cache) eng.cache = cache;     // solo benchmark: voci pre-renderizzate
 
   const kitOf = (p) => kitById(lockKit || p.kit);
-  let time = start, tick = 0, prev = null;
+  let time = start, tick = 0, prev = null, origin = 0;
   const canSuspend = typeof off.suspend === 'function';
 
   bars.forEach((p, b) => {
@@ -47,8 +47,9 @@ export async function renderBars(bars, { fx, samples = [], lockKit = null, sampl
     }
     eng.setVoiceKit(kit);   // voci create ora, al momento della pianificazione
     const sd = stepDuration(p.bpm);
+    if (p !== prev) origin = tick;     // un pattern di più battute riparte dall'inizio
     for (let i = 0; i < STEPS; i++) {
-      scheduleTick(eng, p, tick, time + swingOffset(tick, p.swing, sd));
+      scheduleTick(eng, p, tick - origin, time + swingOffset(tick, p.swing, sd));
       time += sd;
       tick++;
     }

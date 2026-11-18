@@ -1112,3 +1112,35 @@ input[type="range"]::-moz-range-thumb {
 .sparams .params-head { flex-wrap: wrap; }
 .sparams .params-head .preset { flex: 1 1 100%; }
 .sparams .params-head .btn.sm { flex: 1 1 0; min-width: 44px; padding: 0 4px; }
+
+
+/* ----- Battute del pattern ----- */
+.bars-ctl { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; }
+.bars-sel { flex: 0 0 auto; width: 78px; font-size: 11px; padding-right: 20px; }
+.bar-seg { display: none; }
+.bars-ctl.multi .bar-seg { display: flex; }
+.bar-seg .btn { min-width: 34px; }
+/* Telefono (drum machine completa con ?full): niente spazio per le battute, restano su tablet e PC */
+@media (max-width: 699px), (max-height: 499px) { .bars-ctl { display: none; } }
+
+
+/* ----- Automazione ----- */
+.auto-box { width: min(1100px, 100% - 16px); gap: 8px; }
+.auto-target { flex: 0 1 320px; }
+.auto-used { display: flex; flex-wrap: wrap; gap: 4px; min-height: 30px; }
+.auto-canvas { width: 100%; height: 240px; border: 1px solid var(--edge); border-radius: 3px; touch-action: none; cursor: crosshair; }
+
+
+/* ----- Macro ----- */
+.macro-box { width: min(760px, 100% - 16px); gap: 8px; }
+.macro-knobs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.mc { display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 4px; background: #2a3137; border: 1px solid var(--edge); }
+.mc.sel { border-color: var(--orange); box-shadow: inset 0 0 0 1px rgba(255,155,61,.35); }
+.mc-name { min-height: 32px; border: 1px solid var(--edge); border-radius: 3px; background: #1b2025; color: var(--orange); font: inherit; font-weight: 600; letter-spacing: .06em; text-align: center; }
+.mc b { text-align: center; font-size: 18px; font-weight: normal; color: var(--lcd-ink); font-variant-numeric: tabular-nums; }
+.mc small { text-align: center; font-size: 10px; color: var(--ink-dim); }
+.macro-map { display: flex; flex-direction: column; gap: 4px; }
+.mc-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center; padding: 4px 8px; border-radius: 3px; background: #2a3137; }
+.mc-row input { width: 72px; min-height: 30px; border: 1px solid var(--edge); border-radius: 3px; background: #1b2025; color: var(--ink); font: inherit; padding: 0 6px; }
+.mc-row label { font-size: 10px; color: var(--ink-dim); display: flex; gap: 4px; align-items: center; }
+@media (max-width: 600px) { .macro-knobs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

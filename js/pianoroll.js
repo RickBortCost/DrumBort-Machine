@@ -12,7 +12,7 @@
  */
 
 import { SYNTH_TRACKS, SCALES, noteName, isChordTrack } from './synth.js';
-import { trackBase, SYNTH_STEPS } from './synthpattern.js';
+import { trackBase } from './synthpattern.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -30,6 +30,8 @@ export function initPianoRoll(app) {
 
   const syn = () => app.pat().synth;
   const tr = () => syn().tracks[k];
+  /** Step mostrati: tutte le battute del pattern. */
+  const N = () => tr().steps.length;
   const mono = () => !isChordTrack(k);
 
   // ---------------------------------------------------------------
@@ -37,8 +39,8 @@ export function initPianoRoll(app) {
   // ---------------------------------------------------------------
   function size() {
     const dpr = window.devicePixelRatio || 1;
-    colW = Math.max(28, Math.floor((wrap.clientWidth - KEY_W - 2) / SYNTH_STEPS));
-    const w = KEY_W + colW * SYNTH_STEPS, h = ROWS * ROW_H;
+    colW = Math.max(28, Math.floor((wrap.clientWidth - KEY_W - 2) / Math.min(N(), 32)));
+    const w = KEY_W + colW * N(), h = ROWS * ROW_H;
     cv.style.width = `${w}px`; cv.style.height = `${h}px`;
     cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
     lane.style.width = `${w}px`;
@@ -49,10 +51,10 @@ export function initPianoRoll(app) {
     if (!open) return;
     const dpr = window.devicePixelRatio || 1, g = cv.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const s = syn(), t = tr(), len = t.len || SYNTH_STEPS;
+    const s = syn(), t = tr(), len = t.len || N();
     const scale = (SCALES[s.scale] || SCALES.minor).iv;
     const inScale = (n) => scale.includes((((n - s.key) % 12) + 12) % 12);
-    const W = KEY_W + colW * SYNTH_STEPS;
+    const W = KEY_W + colW * N();
     // Righe: tasti neri più scuri, note della scala evidenziate, tonica marcata
     for (let r = 0; r < ROWS; r++) {
       const n = HI - r, y = r * ROW_H, pc = ((n % 12) + 12) % 12;
@@ -71,11 +73,11 @@ export function initPianoRoll(app) {
       }
     }
     // Colonne: battiti marcati, oltre la lunghezza della traccia oscurato
-    for (let c = 0; c <= SYNTH_STEPS; c++) {
-      g.fillStyle = c % 4 === 0 ? '#151a1e' : '#232a30';
-      g.fillRect(KEY_W + c * colW, 0, c % 4 === 0 ? 2 : 1, ROWS * ROW_H);
+    for (let c = 0; c <= N(); c++) {
+      g.fillStyle = c % 16 === 0 ? '#0b0e10' : c % 4 === 0 ? '#151a1e' : '#232a30';
+      g.fillRect(KEY_W + c * colW, 0, c % 16 === 0 ? 3 : c % 4 === 0 ? 2 : 1, ROWS * ROW_H);
     }
-    if (len < SYNTH_STEPS) { g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(KEY_W + len * colW, 0, (SYNTH_STEPS - len) * colW, ROWS * ROW_H); }
+    if (len < N()) { g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(KEY_W + len * colW, 0, (N() - len) * colW, ROWS * ROW_H); }
     // Playhead
     if (playTick >= 0) {
       g.fillStyle = 'rgba(155,214,90,.16)';
@@ -87,7 +89,7 @@ export function initPianoRoll(app) {
       if (!st) return;
       for (const n of notesOf(st)) {
         if (n < LO || n > HI) continue;
-        const x = KEY_W + s0 * colW + 1, y = (HI - n) * ROW_H + 1, w = Math.min(st.g, SYNTH_STEPS - s0) * colW - 2;
+        const x = KEY_W + s0 * colW + 1, y = (HI - n) * ROW_H + 1, w = Math.min(st.g, N() - s0) * colW - 2;
         g.fillStyle = st.a ? '#ffd29e' : col;
         g.fillRect(x, y, w, ROW_H - 2);
         g.fillStyle = 'rgba(0,0,0,.35)';
@@ -106,7 +108,7 @@ export function initPianoRoll(app) {
     g.fillStyle = '#9aa6af'; g.font = '10px system-ui, sans-serif';
     g.fillText('ACCENTO', 4, rh / 2 + 4);
     if (rows === 2) g.fillText('SLIDE', 4, rh + rh / 2 + 4);
-    for (let s = 0; s < SYNTH_STEPS; s++) {
+    for (let s = 0; s < N(); s++) {
       const st = t.steps[s], x = KEY_W + s * colW;
       for (let r = 0; r < rows; r++) {
         const on = st && (r === 0 ? st.a : st.sl);
@@ -126,7 +128,7 @@ export function initPianoRoll(app) {
     if (!u.length) { steps[s] = null; return; }
     const prev = keep || steps[s] || {};
     steps[s] = {
-      n: u[0], g: clamp(Math.round(gate ?? prev.g ?? 1), 1, SYNTH_STEPS), a: prev.a ? 1 : 0, sl: prev.sl ? 1 : 0,
+      n: u[0], g: clamp(Math.round(gate ?? prev.g ?? 1), 1, N()), a: prev.a ? 1 : 0, sl: prev.sl ? 1 : 0,
       ch: u.length > 1 ? u.map((n) => n - u[0]) : null,
       ...(prev.pl ? { pl: prev.pl } : {}),
     };
@@ -135,7 +137,7 @@ export function initPianoRoll(app) {
   /** Nota che copre la cella (step, altezza): { s, st }. */
   function hit(step, pitch) {
     const steps = tr().steps;
-    for (let s = 0; s < SYNTH_STEPS; s++) {
+    for (let s = 0; s < N(); s++) {
       const st = steps[s];
       if (st && step >= s && step < s + st.g && notesOf(st).includes(pitch)) return { s, st };
     }
@@ -159,7 +161,7 @@ export function initPianoRoll(app) {
     e.preventDefault();
     const c = cell(e);
     if (c.x < KEY_W) { audition([c.pitch]); return; }
-    if (c.step < 0 || c.step >= SYNTH_STEPS || c.pitch < LO || c.pitch > HI) return;
+    if (c.step < 0 || c.step >= N() || c.pitch < LO || c.pitch > HI) return;
     cv.setPointerCapture(e.pointerId);
     app.snapshot();
     const h = hit(c.step, c.pitch);
@@ -184,7 +186,7 @@ export function initPianoRoll(app) {
     const c = cell(e), st = tr().steps[drag.s];
     if (!st) return;
     if (drag.mode === 'len') {
-      const g = clamp(c.step - drag.s + 1, 1, SYNTH_STEPS - drag.s);
+      const g = clamp(c.step - drag.s + 1, 1, N() - drag.s);
       if (g !== st.g) { st.g = g; draw(); }
     } else if (drag.mode === 'move' && c.pitch !== drag.to && c.pitch >= LO && c.pitch <= HI) {
       const notes = notesOf(st).filter((n) => n !== drag.to);
@@ -213,7 +215,7 @@ export function initPianoRoll(app) {
     const r = lane.getBoundingClientRect();
     const s = Math.floor((e.clientX - r.left - KEY_W) / colW);
     const st = tr().steps[s];
-    if (s < 0 || s >= SYNTH_STEPS || !st) return;
+    if (s < 0 || s >= N() || !st) return;
     app.snapshot();
     const row = mono() && e.clientY - r.top > r.height / 2 ? 'sl' : 'a';
     st[row] = st[row] ? 0 : 1;
@@ -253,6 +255,8 @@ export function initPianoRoll(app) {
   }
 
   window.addEventListener('resize', () => { if (open) { size(); draw(); } });
+  // La corsia accento/slide scorre in orizzontale insieme alla griglia
+  wrap.addEventListener('scroll', () => { lane.style.transform = `translateX(${-wrap.scrollLeft}px)`; });
 
   // ---------------------------------------------------------------
   // Tastiera del computer come tastiera musicale (A W S E D F T G Y H U J K O L P; Z/X ottava)

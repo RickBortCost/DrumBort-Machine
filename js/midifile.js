@@ -40,10 +40,11 @@ export function exportMidi(bars) {
   const drums = [{ tick: 0, order: 0, data: name('Drums') }];
   const synth = SYNTH_TRACKS.map((d) => [{ tick: 0, order: 0, data: name(d.name) }]);
 
-  let barTime = 0, barTick = 0, curBpm = null, tick = 0;
+  let barTime = 0, barTick = 0, curBpm = null, tick = 0, origin = 0, prevP = null;
   const toTick = (time, bpm) => barTick + Math.round((time - barTime) * (bpm / 60) * PPQ);
 
   bars.forEach((p) => {
+    if (p !== prevP) { origin = tick; prevP = p; }
     if (p.bpm !== curBpm) {
       const us = Math.round(60000000 / p.bpm);
       tempo.push({ tick: barTick, order: 1, data: [0xff, 0x51, 3, (us >> 16) & 255, (us >> 8) & 255, us & 255] });
@@ -66,7 +67,7 @@ export function exportMidi(bars) {
     };
     for (let i = 0; i < STEPS; i++) {
       const t = barTime + i * sd + swingOffset(tick, p.swing, sd);
-      scheduleTick(eng, p, tick, t, { random: () => 0 });
+      scheduleTick(eng, p, tick - origin, t, { random: () => 0 });
       tick++;
     }
     barTime += STEPS * sd;

@@ -8,7 +8,7 @@ import { KITS, USER_KITS, kitById, findKit, setUserKits, setUserSounds, normaliz
 import { setUserPresets } from './presets.js';
 import { Engine, DEFAULT_FX } from './engine.js';
 import { Sequencer, createPattern, normalizePattern, normalizeOpt, parseRows, defaultTrack,
-  isEmpty, clonePattern, STEPS, TRACKS, STEP_DEFAULT } from './sequencer.js';
+  isEmpty, clonePattern, STEPS, TRACKS, STEP_DEFAULT, patSteps, setPatternBars } from './sequencer.js';
 import { renderBars, encodeWav } from './export.js';
 import { Midi } from './midi.js';
 import { saveSample, loadSamples, clearSamples } from './idb.js';
@@ -21,6 +21,9 @@ import { initStudio } from './studio.js';
 import { initRemote, hostInfo } from './remote.js';
 import { initLab, isSoundPack } from './lab.js';
 import { initPianoRoll } from './pianoroll.js';
+import { makeZip } from './zip.js';
+import { initAutomation } from './automation.js';
+import { initMacros, normalizeMacros, defaultMacros } from './macros.js';
 import { decodeShare } from './projects.js';
 import { fillPattern } from './generate.js';
 
@@ -36,6 +39,8 @@ const QS = new URLSearchParams(location.search);
 const LAB = QS.has('lab') || (!QS.has('full') && matchMedia('(pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px)').matches);
 let lab = null;
 let piano = null;       // piano roll (pianoroll.js)
+let auto = null;        // editor dell'automazione (automation.js)
+let macros = null;      // macro di progetto (macros.js)
 
 const engine = new Engine();
 const seq = new Sequencer(engine);
@@ -62,6 +67,7 @@ const state = {
   userKits: [],                     // definizioni dei kit personalizzati
   userPresets: [],                  // preset synth salvati dall'editor wavetable
   userSounds: [],                   // suoni di batteria creati nel Sound Lab
+  macros: defaultMacros(),          // 4 macro di progetto (macros.js)
   projectName: '',                  // progetto aperto
   layout: null,                     // 'compact' | 'studio' (null = scelta automatica al primo avvio)
   session: normalizeSession(null),  // clip in riproduzione per traccia, quantizzazione, follow action
@@ -127,6 +133,7 @@ function loadState() {
       state.layout = ['compact', 'studio'].includes(raw.layout) ? raw.layout : null;
       state.session = normalizeSession(raw.session);
       state.arr = normalizeArr(raw.arr);
+      state.macros = normalizeMacros(raw.macros);
       if (raw.midi && raw.midi.opts) {
         state.midi = { opts: { ...state.midi.opts, ...raw.midi.opts }, input: raw.midi.input || '', output: raw.midi.output || '' };
       }
@@ -146,7 +153,7 @@ function save() {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         slot: state.slot, slots: state.slots, fx: state.fx, song: state.song, lock: state.lock, midi: state.midi, view: state.view,
         favs: state.favs, userKits: state.userKits, userPresets: state.userPresets, userSounds: state.userSounds, projectName: state.projectName,
-        layout: state.layout, session: state.session, arr: state.arr,
+        layout: state.layout, session: state.session, arr: state.arr, macros: state.macros,
       }));
     } catch (_) { /* quota / navigazione privata */ }
     // Le modifiche cambiano le voci: pre-renderizza in background quelle nuove
@@ -301,6 +308,10 @@ const PARAMS = [
   { k: 'dly', label: 'DLY', min: 0, max: 1, step: 0.01, fmt: pct, pg: 'mix' },
   { k: 'drv', label: 'DRIVE', min: 0, max: 1, step: 0.05, fmt: pct, pg: 'fx' },
   { k: 'crush', label: 'CRUSH', min: 0, max: 12, step: 1, fmt: (v) => (v < 4 ? 'OFF' : `${v}bit`), pg: 'fx' },
+  { k: 'flt', label: 'FILTER', min: -1, max: 1, step: 0.02, fmt: (v) => (Math.abs(v) < 0.03 ? 'OFF' : (v < 0 ? 'LP' : 'HP') + Math.round(Math.abs(v) * 100)), pg: 'fx' },
+  { k: 'lo', label: 'LOW', min: -12, max: 12, step: 0.5, fmt: (v) => `${v > 0 ? '+' : ''}${v}dB`, pg: 'fx' },
+  { k: 'hi', label: 'HIGH', min: -12, max: 12, step: 0.5, fmt: (v) => `${v > 0 ? '+' : ''}${v}dB`, pg: 'fx' },
+  { k: 'cmp', label: 'COMP', min: 0, max: 1, step: 0.05, fmt: (v) => (v ? `${Math.round(v * 100)}` : 'OFF'), pg: 'fx' },
 ];
 
 function buildSliders() {
@@ -349,8 +360,14 @@ function buildFx() {
 // Render
 // =====================================================================
 
+/** Primo step della battuta visibile. */
+const off = () => ui.bar * STEPS;
+
 function renderCell(t, s) {
-  const p = pat(), v = p.steps[t][s], c = cells[t][s];
+  const col = s - off();
+  if (col < 0 || col >= STEPS) return;
+  const p = pat(), v = p.steps[t][s], c = cells[t][col];
+  c.dataset.s = s;
   const o = p.opts[t][s];
   c.classList.toggle('on', v === 1);
   c.classList.toggle('acc', v === 2);
@@ -362,7 +379,43 @@ function renderCell(t, s) {
   c.setAttribute('aria-label', label);
 }
 
-function renderRow(t) { for (let s = 0; s < STEPS; s++) renderCell(t, s); }
+function renderRow(t) { for (let c = 0; c < STEPS; c++) renderCell(t, off() + c); }
+
+// ----- Battute del pattern (clip lunghe) -----
+ui.bar = 0;
+function renderBarsCtl() {
+  const n = pat().bars || 1;
+  if (ui.bar >= n) ui.bar = 0;
+  $('#barsSel').value = String(n);
+  const seg = $('#barSeg');
+  if (seg.childElementCount !== n) seg.innerHTML = Array.from({ length: n }, (_, i) => `<button class="btn sm" data-bar="${i}" aria-label="Battuta ${i + 1}">${i + 1}</button>`).join('');
+  $$('[data-bar]', seg).forEach((b) => setToggle(b, +b.dataset.bar === ui.bar));
+  $('.bars-ctl').classList.toggle('multi', n > 1);
+}
+/** Mostra la battuta `b` del pattern nella griglia, nelle corsie synth e nel piano roll. */
+function setBar(b) {
+  const n = pat().bars || 1;
+  b = clamp(b, 0, n - 1);
+  if (b === ui.bar) return;
+  ui.bar = b;
+  clearPlayhead();
+  for (let t = 0; t < TRACKS; t++) renderRow(t);
+  renderBarsCtl();
+  if (synthUI) synthUI.render();
+}
+$('#barSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-bar]');
+  if (b) { ui.follow = !seq.playing; setBar(+b.dataset.bar); }
+});
+$('#barsSel').addEventListener('change', (e) => {
+  snapshot();
+  setPatternBars(pat(), +e.target.value, true);
+  ui.bar = Math.min(ui.bar, pat().bars - 1);
+  syncPlayback(); renderAll(); save();
+  toast(`Pattern di ${pat().bars} ${pat().bars > 1 ? 'battute (contenuto ripetuto)' : 'battuta'}`);
+  e.target.blur();
+});
+ui.follow = true;
 
 function renderTrackLabels() {
   const p = pat(), kit = kitOf(p);
@@ -371,7 +424,7 @@ function renderTrackLabels() {
     const tr = p.tracks[t], k = kit.tracks[t];
     const wav = engine.samples[t] ? '•' : '';
     labels[t].querySelector('b').textContent = k.short + wav;
-    labels[t].querySelector('i').textContent = k.name + (tr.len < STEPS ? ` /${tr.len}` : '');
+    labels[t].querySelector('i').textContent = k.name + (tr.len < patSteps(p) ? ` /${tr.len}` : '');
     labels[t].classList.toggle('sel', t === state.sel);
     labels[t].classList.toggle('muted', anySolo ? !tr.solo : tr.mute);
     labels[t].classList.toggle('solo', tr.solo);
@@ -392,6 +445,7 @@ function renderParams() {
   setToggle($('#soloBtn'), tr.solo);
   $$('#sliders input[data-param]').forEach((inp) => {
     const d = PARAMS.find((x) => x.k === inp.dataset.param);
+    if (d.k === 'len') inp.max = patSteps(p);
     inp.value = tr[d.k];
     inp.nextElementSibling.textContent = d.fmt(tr[d.k]);
   });
@@ -425,6 +479,7 @@ function renderTools() {
 }
 
 function renderAll() {
+  renderBarsCtl();
   for (let t = 0; t < TRACKS; t++) renderRow(t);
   renderTrackLabels();
   renderParams();
@@ -472,15 +527,17 @@ function showTick(e) {
   }
   if (e.meta !== ui.songIdx) { ui.songIdx = e.meta; if (!$('#songSheet').hidden) renderSong(); }
   const p = pat();
+  if (ui.follow && (p.bars || 1) > 1 && (e.pattern === p || e.pattern.composite)) setBar(Math.floor((e.tick % patSteps(p)) / STEPS));
   for (let t = 0; t < TRACKS; t++) {
-    const c = cells[t][e.tick % p.tracks[t].len];
+    const col = (e.tick % p.tracks[t].len) - off();
+    const c = col >= 0 && col < STEPS ? cells[t][col] : null;
     if (phCells[t] !== c) {
       if (phCells[t]) phCells[t].classList.remove('ph');
-      c.classList.add('ph');
+      if (c) c.classList.add('ph');
       phCells[t] = c;
     }
   }
-  const page = (e.tick % STEPS) >> 3;
+  const page = ((e.tick % patSteps(p)) % STEPS) >> 3;
   if (page !== litPage) {
     litPage = page;
     pagerBtns.forEach((b) => b.classList.toggle('lit', +b.dataset.page === page));
@@ -558,12 +615,12 @@ grid.addEventListener('keydown', (e) => {
     let t = +c.dataset.t, s = +c.dataset.s;
     const narrow = getComputedStyle(document.documentElement).getPropertyValue('--cols').trim() === '8';
     switch (e.key) {
-      case 'ArrowRight': s = Math.min(STEPS - 1, s + 1); break;
+      case 'ArrowRight': s = Math.min(patSteps(pat()) - 1, s + 1); break;
       case 'ArrowLeft': s = Math.max(0, s - 1); break;
       case 'ArrowDown': t = Math.min(TRACKS - 1, t + 1); break;
       case 'ArrowUp': t = Math.max(0, t - 1); break;
-      case 'Home': s = 0; break;
-      case 'End': s = STEPS - 1; break;
+      case 'Home': s = off(); break;
+      case 'End': s = off() + STEPS - 1; break;
       case 'Enter': case ' ':
         e.preventDefault(); e.stopPropagation();
         activateStep(t, s);
@@ -571,8 +628,9 @@ grid.addEventListener('keydown', (e) => {
       default: return;
     }
     e.preventDefault();
-    if (narrow && String(s >> 3) !== grid.dataset.page) setPage(s >> 3);
-    setFocusCell(cells[t][s]);
+    if ((s >> 4) !== ui.bar) { ui.follow = false; setBar(s >> 4); }
+    if (narrow && String((s & 15) >> 3) !== grid.dataset.page) setPage((s & 15) >> 3);
+    setFocusCell(cells[t][s & 15]);
   } else if (e.target.closest('.lbl') && (e.key === 'Enter' || e.key === ' ')) {
     e.preventDefault(); e.stopPropagation();
     selectTrack(+e.target.closest('.lbl').dataset.t);
@@ -746,6 +804,7 @@ function startPlayback(fromRemote = false) {
     seq.pattern = pat();
   }
   syncPlayback();
+  ui.follow = true;
   seq.start();
   setToggle($('#play'), true);
   $('#play').setAttribute('aria-label', 'Stop');
@@ -776,6 +835,14 @@ document.addEventListener('keydown', (e) => {
     togglePlay();
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  if (e.key.toLowerCase() === 'm' && !LAB && sessionActive() && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.closest('input, select, textarea') && $('#macroSheet').hidden) {
+    e.preventDefault();
+    macros.open();
+  }
+  if (e.key.toLowerCase() === 'a' && !LAB && sessionActive() && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.closest('input, select, textarea') && $('#autoSheet').hidden) {
+    e.preventDefault();
+    auto.open();
+  }
   if (e.key.toLowerCase() === 'p' && !LAB && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.closest('input, select, textarea') && $('#pianoSheet').hidden) {
     e.preventDefault();
     piano.open();
@@ -1215,7 +1282,8 @@ seq.onBar = (tick, time) => {
   const pos = ui.songPos;
   pos.r++;
   if (pos.i >= chain.length) pos.i = 0;
-  if (pos.r >= chain[pos.i].rep) { pos.i = (pos.i + 1) % chain.length; pos.r = 0; }
+  // Ripetizioni contate in battute: un pattern di 2 battute ripetuto 2 volte dura 4 battute
+  if (pos.r >= chain[pos.i].rep * (state.slots[chain[pos.i].slot].bars || 1)) { pos.i = (pos.i + 1) % chain.length; pos.r = 0; }
   seq.meta = pos.i;
   const next = state.slots[chain[pos.i].slot];
   const kit = kitOf(next);
@@ -1321,10 +1389,17 @@ $('#menu').addEventListener('click', async (e) => {
       syncPlayback();
       break;
     }
-    case 'wav-pattern': exportAudio(Array.from({ length: 4 }, () => clonePattern(p)), `pat${state.slot + 1}`); return;
+    case 'wav-pattern': exportAudio(new Array(4 * (p.bars || 1)).fill(clonePattern(p)), `pat${state.slot + 1}`); return;
+    case 'stems': {
+      const bars = [];
+      if (state.song.on) state.song.chain.forEach((c) => { const cp = clonePattern(state.slots[c.slot]); for (let r = 0; r < c.rep * (cp.bars || 1); r++) bars.push(cp); });
+      if (!bars.length) { const cp = clonePattern(p); for (let r = 0; r < 4 * (p.bars || 1); r++) bars.push(cp); }
+      exportStems(bars, state.song.on && state.song.chain.length ? 'song' : `pat${state.slot + 1}`);
+      return;
+    }
     case 'wav-song': {
       const bars = [];
-      state.song.chain.forEach((c) => { for (let r = 0; r < c.rep; r++) bars.push(clonePattern(state.slots[c.slot])); });
+      state.song.chain.forEach((c) => { const cp = clonePattern(state.slots[c.slot]); for (let r = 0; r < c.rep * (cp.bars || 1); r++) bars.push(cp); });
       if (!bars.length) { toast('Catena song vuota'); return; }
       exportAudio(bars, 'song');
       return;
@@ -1335,12 +1410,14 @@ $('#menu').addEventListener('click', async (e) => {
     case 'share': panels.share(); return;
     case 'gen': panels.openGen(); return;
     case 'kits': panels.openKits(); return;
+    case 'macro': macros.open(); return;
+    case 'auto': auto.open(ui.view === 'synth' ? `s${ui.ssel || 0}.cut` : `d${state.sel}.vol`); return;
     case 'wt': synthUI.openEditor(); return;
     case 'recout': panels.recordOutput(); return;
-    case 'mid-pattern': panels.exportMid(Array.from({ length: 4 }, () => clonePattern(p)), `pat${state.slot + 1}`); return;
+    case 'mid-pattern': panels.exportMid(new Array(4 * (p.bars || 1)).fill(clonePattern(p)), `pat${state.slot + 1}`); return;
     case 'mid-song': {
       const bars = [];
-      state.song.chain.forEach((c) => { for (let r = 0; r < c.rep; r++) bars.push(clonePattern(state.slots[c.slot])); });
+      state.song.chain.forEach((c) => { const cp = clonePattern(state.slots[c.slot]); for (let r = 0; r < c.rep * (cp.bars || 1); r++) bars.push(cp); });
       if (!bars.length) { toast('Catena song vuota'); return; }
       panels.exportMid(bars, 'song');
       return;
@@ -1382,12 +1459,47 @@ async function exportAudio(bars, name) {
   }
 }
 
+/**
+ * Stem: un WAV per traccia (8 batteria + 4 synth) con gli effetti master, in uno ZIP.
+ * Le tracce mute o vuote vengono saltate.
+ */
+async function exportStems(bars, name) {
+  const SY = ['BASS', 'LEAD', 'PAD', 'KEYS'];
+  const used = (i) => bars.some((p) => (i < TRACKS ? p.steps[i].some(Boolean) && !p.tracks[i].mute
+    : (p.synth.tracks[i - TRACKS].steps.some(Boolean) || p.synth.tracks[i - TRACKS].arp.on) && !p.synth.tracks[i - TRACKS].mute));
+  const list = Array.from({ length: TRACKS + 4 }, (_, i) => i).filter(used);
+  if (!list.length) { toast('Nessuna traccia da esportare'); return; }
+  const files = [];
+  try {
+    for (const [n, i] of list.entries()) {
+      toast(`Stem ${n + 1}/${list.length}…`);
+      const made = new Map();
+      const solo = bars.map((src) => {
+        if (made.has(src)) return made.get(src);
+        const p = clonePattern(src);
+        p.tracks.forEach((t, j) => { t.solo = false; t.mute = j !== i; });
+        p.synth.tracks.forEach((t, k) => { t.solo = false; t.mute = TRACKS + k !== i; });
+        made.set(src, p);
+        return p;
+      });
+      const buf = await renderBars(solo, { fx: state.fx, samples: engine.samples, lockKit: state.lock });
+      const label = i < TRACKS ? kitOf(bars[0]).tracks[i].name : SY[i - TRACKS];
+      const fname = `${String(n + 1).padStart(2, '0')}-${label.replace(/[^A-Za-z0-9]+/g, '_')}.wav`;
+      files.push({ name: fname, data: new Uint8Array(await encodeWav(buf).arrayBuffer()) });
+    }
+    await deliver(new File([makeZip(files)], `drumbort-${name}-stem-${bars[0].bpm}bpm.zip`, { type: 'application/zip' }));
+    toast(`${files.length} stem pronti`);
+  } catch (err) {
+    toast('Export degli stem non riuscito');
+  }
+}
+
 /** Dati completi del progetto (export JSON, progetti salvati). */
 function exportData() {
   return {
     app: 'drumbort', version: 3, appVersion: APP_VERSION,
     slot: state.slot, slots: state.slots, song: state.song, fx: state.fx, lock: state.lock, userKits: state.userKits,
-    userPresets: state.userPresets, userSounds: state.userSounds, session: state.session, arr: state.arr,
+    userPresets: state.userPresets, userSounds: state.userSounds, session: state.session, arr: state.arr, macros: state.macros,
   };
 }
 
@@ -1407,6 +1519,7 @@ function importData(o) {
   state.lock = o.lock && kitById(o.lock).id === o.lock ? o.lock : null;
   state.slot = clamp(o.slot | 0, 0, SLOTS - 1);
   if (o.session) state.session = normalizeSession(o.session);
+  if (o.macros) state.macros = normalizeMacros(o.macros);
   state.arr = normalizeArr(o.arr);
   undoStack.length = 0; redoStack.length = 0;
   if (seq.playing) stopPlayback();
@@ -1798,7 +1911,13 @@ const app = {
   openSheet, closeSheet, deliver, syncPlayback, renderAll, buildKitSelect, exportData, importData, newProject,
 };
 panels = initPanels(app);
-studio = initStudio({ ...app, launchClip, launchScene, stopAllClips, setView, selectTrack: (t) => selectTrack(t), tempoPattern, useSoundOnTrack,
+auto = initAutomation(app);
+macros = initMacros({
+  ...app, renderParams: () => { renderParams(); synthUI.render(); if (studio) studio.render(); },
+  /** Pattern che contiene i parametri della traccia i (0-7 batteria, 8-11 synth) in riproduzione. */
+  trackPattern: (i) => (sessionActive() ? state.slots[state.session.map[i] >= 0 ? state.session.map[i] : state.session.master] : pat()),
+});
+studio = initStudio({ ...app, openAuto: (k) => auto.open(k), openMacros: () => macros.open(), launchClip, launchScene, stopAllClips, setView, selectTrack: (t) => selectTrack(t), tempoPattern, useSoundOnTrack,
   toggleArr, setArrRec, songToArr, startPlayback });
 if (state.layout === null) state.layout = matchMedia('(pointer: fine) and (min-width: 1200px)').matches ? 'studio' : 'compact';
 if (state.layout === 'studio' && state.session.map.every((v) => v < 0)) { state.session.map.fill(state.slot); state.session.master = state.slot; }

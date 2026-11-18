@@ -2,6 +2,15 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.12.0] - 2026-11-18
+
+### Aggiunto
+- **Clip lunghe**: pattern di 1, 2 o 4 battute (selettore BAR nella barra, su tablet e PC). Allungando, il contenuto viene ripetuto; la griglia mostra una battuta alla volta e segue la riproduzione; il piano roll mostra tutte le battute. Song mode, export WAV/MIDI/stem e motore C# contano le battute.
+- **Automazione disegnabile** (∿ AUTO nel layout Studio, tasto **A**, Menu → Automazione): corsie per step su volume, pan, tune, decay e mandate della batteria; volume, pan, cutoff, risonanza e mandate dei synth; filtro master. Gomma, rampa, "dal valore", cancella. In session ogni traccia usa l'automazione della propria clip. Applicata anche nell'export e nel motore C#.
+- **Effetti per traccia** (pagina FX dei parametri): filtro LP/HP, EQ a due bande (shelf 200 Hz e 5 kHz, ±12 dB), compressore, oltre a drive e bit crusher; anche nel motore C# (EQ verificato identico a Chrome).
+- **4 macro di progetto** (◎ MACRO, tasto **M**, Menu → Macro): ogni macro muove insieme fino a 8 parametri di tracce, effetti o master, ognuno nel proprio intervallo.
+- **Export degli stem**: Menu → Stem WAV crea uno ZIP con un WAV per traccia (batteria e synth, effetti master inclusi), dal pattern o dalla song.
+
 ## [1.11.0] - 2026-11-18
 
 ### Aggiunto

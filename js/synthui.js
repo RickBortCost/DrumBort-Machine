@@ -37,11 +37,15 @@ const SPARAMS = [
   { k: 'dly', label: 'DLY', min: 0, max: 1, step: 0.01, fmt: pct, pg: 'mix' },
   { k: 'drv', label: 'DRIVE', min: 0, max: 1, step: 0.05, fmt: pct, pg: 'fx' },
   { k: 'crush', label: 'CRUSH', min: 0, max: 12, step: 1, fmt: (v) => (v < 4 ? 'OFF' : `${v}bit`), pg: 'fx' },
+  { k: 'flt', label: 'FILTER', min: -1, max: 1, step: 0.02, fmt: (v) => (Math.abs(v) < 0.03 ? 'OFF' : (v < 0 ? 'LP' : 'HP') + Math.round(Math.abs(v) * 100)), pg: 'fx' },
+  { k: 'lo', label: 'LOW', min: -12, max: 12, step: 0.5, fmt: (v) => `${v > 0 ? '+' : ''}${v}dB`, pg: 'fx' },
+  { k: 'hi', label: 'HIGH', min: -12, max: 12, step: 0.5, fmt: (v) => `${v > 0 ? '+' : ''}${v}dB`, pg: 'fx' },
+  { k: 'cmp', label: 'COMP', min: 0, max: 1, step: 0.05, fmt: (v) => (v ? `${Math.round(v * 100)}` : 'OFF'), pg: 'fx' },
 ];
 const PAGES = ['snd', 'mod', 'mix', 'fx'];
 /** Nome del suono di una traccia (* = patch modificata nell'editor). */
 const soundName = (t) => (t.patch && t.patch.wt ? `${t.patch.name} *` : (PRESETS[t.preset] || {}).name || '—');
-const MIX_KEYS = ['vol', 'pan', 'rev', 'dly', 'drv', 'crush'];
+const MIX_KEYS = ['vol', 'pan', 'rev', 'dly', 'drv', 'crush', 'flt', 'lo', 'hi', 'cmp'];
 
 /** Tipo di accordo dedotto dagli intervalli salvati. */
 function chordTypeOf(ch) {
@@ -62,6 +66,7 @@ export function initSynthUI(app) {
 
   const syn = () => app.pat().synth;
   const tr = (k = ui.ssel) => syn().tracks[k];
+  const off = () => (ui.bar || 0) * SYNTH_STEPS;    // battuta visibile (clip lunghe)
 
   // ===================================================================
   // DOM
@@ -147,13 +152,14 @@ export function initSynthUI(app) {
     let hi = notes.length ? Math.max(...notes) : lo + 12;
     if (hi - lo < 12) { const m = (hi + lo) / 2; lo = m - 6; hi = m + 6; }
     const y = (n) => 10 + ((n - lo) / (hi - lo)) * 62;
-    const tie = new Array(SYNTH_STEPS).fill(null);
+    const tie = new Array(t.steps.length).fill(null);
     t.steps.forEach((st, s) => {
       if (!st) return;
       for (let i = 1; i < st.g && s + i < t.len; i++) if (!t.steps[s + i]) tie[s + i] = st;
     });
-    for (let s = 0; s < SYNTH_STEPS; s++) {
-      const st = t.steps[s], c = cells[s], tt = tie[s];
+    for (let col = 0; col < SYNTH_STEPS; col++) {
+      const s = off() + col, st = t.steps[s], c = cells[col], tt = tie[s];
+      c.dataset.s = s;
       c.classList.toggle('on', !!st);
       c.classList.toggle('acc', !!(st && st.a));
       c.classList.toggle('sl', !!(st && st.sl));
@@ -175,7 +181,7 @@ export function initSynthUI(app) {
     for (let k = 0; k < K; k++) {
       const t = s.tracks[k];
       slabels[k].querySelector('b').textContent = SYNTH_TRACKS[k].short;
-      slabels[k].querySelector('i').textContent = t.arp.on ? `ARP ← ${SYNTH_TRACKS[t.arp.src].short}` : soundName(t) + (t.len < SYNTH_STEPS ? ` /${t.len}` : '');
+      slabels[k].querySelector('i').textContent = t.arp.on ? `ARP ← ${SYNTH_TRACKS[t.arp.src].short}` : soundName(t) + (t.len < t.steps.length ? ` /${t.len}` : '');
       slabels[k].classList.toggle('sel', k === ui.ssel);
       slabels[k].classList.toggle('muted', anySolo ? !t.solo : t.mute);
       slabels[k].classList.toggle('solo', t.solo);
@@ -193,6 +199,7 @@ export function initSynthUI(app) {
     app.setToggle($('#ssoloBtn'), t.solo);
     $$('#ssliders input').forEach((inp) => {
       const d = SPARAMS.find((x) => x.k === inp.dataset.sparam);
+      if (d.k === 'len') inp.max = t.steps.length;
       inp.value = t[d.k];
       inp.nextElementSibling.textContent = d.fmt(t[d.k]);
     });
@@ -231,10 +238,11 @@ export function initSynthUI(app) {
   function showTick(e) {
     const s = syn();
     for (let k = 0; k < K; k++) {
-      const c = scells[k][e.tick % s.tracks[k].len];
+      const col = (e.tick % s.tracks[k].len) - off();
+      const c = col >= 0 && col < SYNTH_STEPS ? scells[k][col] : null;
       if (phCells[k] !== c) {
         if (phCells[k]) phCells[k].classList.remove('ph');
-        c.classList.add('ph');
+        if (c) c.classList.add('ph');
         phCells[k] = c;
       }
     }
@@ -302,8 +310,8 @@ export function initSynthUI(app) {
     if (!c) return;
     let k = +c.dataset.k, s = +c.dataset.s;
     switch (e.key) {
-      case 'ArrowRight': s = Math.min(SYNTH_STEPS - 1, s + 1); break;
-      case 'ArrowLeft': s = Math.max(0, s - 1); break;
+      case 'ArrowRight': s = Math.min(off() + SYNTH_STEPS - 1, s + 1); break;
+      case 'ArrowLeft': s = Math.max(off(), s - 1); break;
       case 'ArrowDown': k = Math.min(K - 1, k + 1); break;
       case 'ArrowUp': k = Math.max(0, k - 1); break;
       case 'Enter': case ' ':
@@ -316,8 +324,8 @@ export function initSynthUI(app) {
     }
     e.preventDefault();
     const narrow = getComputedStyle(document.documentElement).getPropertyValue('--cols').trim() === '8';
-    if (narrow && String(s >> 3) !== grid.dataset.page) app.setPage(s >> 3);
-    focusCell(scells[k][s]);
+    if (narrow && String((s & 15) >> 3) !== grid.dataset.page) app.setPage((s & 15) >> 3);
+    focusCell(scells[k][s & 15]);
   });
 
   // ===================================================================
@@ -368,7 +376,7 @@ export function initSynthUI(app) {
     if (h.rec) {
       // Gate registrato = durata della pressione, arrotondata agli step
       const st = h.rec.p.synth.tracks[h.rec.k].steps[h.rec.s];
-      if (st) st.g = clamp(Math.round((now - h.rec.start) / h.rec.sd), 1, SYNTH_STEPS);
+      if (st) st.g = clamp(Math.round((now - h.rec.start) / h.rec.sd), 1, h.rec.p.synth.tracks[h.rec.k].steps.length);
       if (h.rec.p === app.pat()) renderRow(h.rec.k);
       app.save();
     }

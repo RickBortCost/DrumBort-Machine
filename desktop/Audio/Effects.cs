@@ -166,6 +166,14 @@ public sealed class CompressorNode : AudioNode
         kneeK = k;
         yKneeDb = Db(KneeCurve(kneeThr, k));
     }
+    /// <summary>Nuove impostazioni (la curva statica viene ricalcolata).</summary>
+    public void Configure(float threshold, float ratio, float knee, float attack, float release)
+    {
+        if (threshold == Threshold && ratio == Ratio && knee == Knee && attack == Attack && release == Release) return;
+        Threshold = threshold; Ratio = ratio; Knee = knee; Attack = attack; Release = release;
+        kneeK = -1;
+    }
+
     float Curve(float db)
     {
         if (kneeK < 0) InitCurve();

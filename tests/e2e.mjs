@@ -612,6 +612,50 @@ async function studioTests(browser, url) {
   await page.click('#play');
   await page.keyboard.press('Tab');
 
+  // Clip lunghe: 2 battute, contenuto ripetuto, pagina della battuta
+  await page.keyboard.press('Escape');
+  await page.selectOption('#barsSel', '2');
+  const bars = await page.evaluate(() => { const p = drumbort.state.slots[drumbort.state.slot]; return [p.bars, p.steps[0].length, p.tracks[0].len, p.synth.tracks[0].steps.length, JSON.stringify(p.steps[0].slice(0, 16)) === JSON.stringify(p.steps[0].slice(16))]; });
+  check('pattern di 2 battute (contenuto ripetuto)', bars[0] === 2 && bars[1] === 32 && bars[2] === 32 && bars[3] === 32 && bars[4], JSON.stringify(bars));
+  await page.click('#barSeg [data-bar="1"]');
+  await page.click('.step[data-t="2"][data-s="16"]').catch(() => {});
+  const b2 = await page.evaluate(() => [drumbort.ui.bar, document.querySelector('.row .step').dataset.s]);
+  check('seconda battuta visibile e modificabile', b2[0] === 1 && b2[1] === '16', JSON.stringify(b2));
+
+  // Automazione: corsia disegnata sul volume della cassa, applicata in riproduzione
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await page.click('#sxAuto');
+  await page.selectOption('#autoTarget', 'd0.vol');
+  const ab = await page.locator('#autoCanvas').boundingBox();
+  await page.mouse.move(ab.x + 5, ab.y + ab.height * 0.8); await page.mouse.down();
+  await page.mouse.move(ab.x + ab.width - 5, ab.y + ab.height * 0.2, { steps: 12 }); await page.mouse.up();
+  const lane = await page.evaluate(() => { const a = drumbort.state.slots[drumbort.state.slot].auto; return a && a['d0.vol'] && a['d0.vol'].filter((v) => v != null).length; });
+  check('corsia di automazione disegnata', lane >= 28, `${lane} step`);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => document.querySelector('#play').click());
+  await page.waitForTimeout(800);
+  const applied = await page.evaluate(() => drumbort.engine._autoLast && drumbort.engine._autoLast[0] !== undefined);
+  await page.evaluate(() => document.querySelector('#play').click());
+  check('automazione applicata al mixer in riproduzione', applied);
+  await page.evaluate(() => { const p = drumbort.state.slots[drumbort.state.slot]; delete p.auto; });
+  await page.selectOption('#barsSel', '1');
+
+  // FX per traccia e macro: la macro 1 muove filtro e compressore della cassa
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await page.click('#sxMacro');
+  await page.selectOption('#macroTarget', 'd0.flt');
+  await page.click('[data-mact="link"]');
+  await page.selectOption('#macroTarget', 'd0.cmp');
+  await page.click('[data-mact="link"]');
+  await page.evaluate(() => { const r = document.querySelector('[data-mv="0"]'); r.value = 1; r.dispatchEvent(new Event('input', { bubbles: true })); });
+  const mac = await page.evaluate(() => {
+    const m = drumbort.state.slots, map = drumbort.state.session.map[0], slot = map >= 0 ? map : drumbort.state.session.master;
+    const tr = m[slot].tracks[0], ch = drumbort.engine.channels[0];
+    return [drumbort.state.macros[0].map.length, tr.flt, tr.cmp, !!ch.nodes.flt, !!ch.nodes.cmp];
+  });
+  check('macro collegata a filtro e compressore della traccia', mac[0] === 2 && mac[1] === 1 && mac[2] === 1 && mac[3] && mac[4], JSON.stringify(mac));
+  await page.keyboard.press('Escape');
+
   // Piano roll: P apre, clic+trascina crea una nota lunga, clic la elimina
   await page.keyboard.press('Escape');
   await page.evaluate(() => document.activeElement && document.activeElement.blur());
@@ -645,6 +689,14 @@ async function studioTests(browser, url) {
   const wb = await page.evaluate(() => [!document.querySelector('#waveSheet').hidden, drumbort.ui.ssel]);
   check('editor wavetable da tasto W e pulsante WT', wk && wb[0] && wb[1] === 3, `${wk} ${wb}`);
   await page.keyboard.press('Escape');
+
+  // Export degli stem: ZIP con un WAV per traccia usata
+  await page.click('#menuBtn');
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 90000 }), page.click('#menu [data-act="stems"]')]);
+  const zpath = await dl.path();
+  const zbuf = (await import('node:fs')).readFileSync(zpath);
+  const nWav = (zbuf.toString('latin1').match(/\.wav/g) || []).length / 2;
+  check('stem esportati in uno ZIP', dl.suggestedFilename().endsWith('.zip') && zbuf.readUInt32LE(0) === 0x04034b50 && nWav >= 4, `${dl.suggestedFilename()} · ${nWav} WAV`);
 
   // Menu a sezioni e cambio layout
   await page.click('#menuBtn');

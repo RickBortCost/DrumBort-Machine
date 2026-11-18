@@ -35,7 +35,7 @@ export function defaultSynthTrack(k) {
     preset: SYNTH_TRACKS[k].preset, oct: 0,
     vol: [0.75, 0.75, 0.6, 0.65][k], pan: [0, 0.15, -0.1, 0.2][k], rev: [0, 0.2, 0.35, 0.2][k], dly: [0, 0.25, 0.1, 0.1][k],
     cut: 0, res: 0, env: 1, dec: 1, atk: 1, rel: 1, lfo: 1, rate: 1, pos: 0,
-    drv: 0, crush: 0,
+    drv: 0, crush: 0, flt: 0, lo: 0, hi: 0, cmp: 0,
     arp: defaultArp(),
     mute: false, solo: false, len: SYNTH_STEPS,
     steps: new Array(SYNTH_STEPS).fill(null),
@@ -92,6 +92,13 @@ export function demoSynth(i = 0) {
   return syn;
 }
 
+/** Ridimensiona gli step di una traccia synth a `n` (le battute nuove ripetono le esistenti). */
+export function resizeSynthTrack(t, n, dup = true) {
+  const old = t.steps.length;
+  t.steps = Array.from({ length: n }, (_, s) => (s < old ? t.steps[s] : dup && old ? (t.steps[s % old] ? JSON.parse(JSON.stringify(t.steps[s % old])) : null) : null));
+  if (t.len === old || t.len > n) t.len = Math.min(n, t.len === old ? n : t.len);
+}
+
 function normalizeLock(o) {
   if (!o || typeof o !== 'object') return null;
   const pl = {};
@@ -106,7 +113,7 @@ export function normalizeSynthStep(o) {
   const ch = Array.isArray(o.ch) ? o.ch.filter(num).map((x) => Math.round(clamp(x, -24, 24, 0))).slice(0, 6) : null;
   const st = {
     n: Math.round(clamp(o.n, 12, 108, 60)),
-    g: Math.round(clamp(o.g, 1, SYNTH_STEPS, 1)),
+    g: Math.round(clamp(o.g, 1, 64, 1)),
     a: o.a ? 1 : 0,
     sl: o.sl ? 1 : 0,
     ch: ch && ch.length ? ch : null,
@@ -129,8 +136,9 @@ function normalizeArp(o) {
   };
 }
 
-export function normalizeSynth(o) {
+export function normalizeSynth(o, n = SYNTH_STEPS) {
   const syn = emptySynth();
+  if (n !== SYNTH_STEPS) syn.tracks.forEach((t) => resizeSynthTrack(t, n, false));
   if (!o || typeof o !== 'object') return syn;
   syn.key = Math.round(clamp(o.key, 0, 11, 9));
   syn.scale = SCALES[o.scale] ? o.scale : 'minor';
@@ -148,10 +156,11 @@ export function normalizeSynth(o) {
       // Patch modificata nell'editor wavetable (validata come un preset)
       ...(src.patch && typeof src.patch === 'object' && src.patch.wt ? { patch: normalizeWTPreset(src.patch) } : {}),
       drv: clamp(src.drv, 0, 1, 0), crush: clampBits(src.crush),
+      flt: clamp(src.flt, -1, 1, 0), lo: clamp(src.lo, -12, 12, 0), hi: clamp(src.hi, -12, 12, 0), cmp: clamp(src.cmp, 0, 1, 0),
       arp: normalizeArp(src.arp),
       mute: !!src.mute, solo: !!src.solo,
-      len: Math.round(clamp(src.len, 1, SYNTH_STEPS, SYNTH_STEPS)),
-      steps: Array.from({ length: SYNTH_STEPS }, (_, s) => normalizeSynthStep(Array.isArray(src.steps) && src.steps[s])),
+      len: Math.round(clamp(src.len, 1, n, n)),
+      steps: Array.from({ length: n }, (_, s) => normalizeSynthStep(Array.isArray(src.steps) && src.steps[s])),
     };
   });
   return syn;

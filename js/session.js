@@ -38,6 +38,13 @@ export function composePattern(slots, map, master, lock = null) {
     p.tracks[t] = (s || base).tracks[t];
     p.kits[t] = kitById(lock || (s || base).kit);
   }
+  // Automazione: ogni traccia porta quella della propria clip, il master quella del pattern principale
+  const auto = {};
+  const take = (from, prefix) => { if (from && from.auto) for (const [k, v] of Object.entries(from.auto)) if (k.startsWith(prefix)) auto[k] = v; };
+  for (let t = 0; t < DRUM_TRACKS; t++) take(src(t), `d${t}.`);
+  for (let k = 0; k < SYNTH_COUNT; k++) take(src(DRUM_TRACKS + k), `s${k}.`);
+  take(base, 'fx.');
+  if (Object.keys(auto).length) p.auto = auto;
   for (let k = 0; k < SYNTH_COUNT; k++) {
     const s = src(DRUM_TRACKS + k);
     const bt = base.synth.tracks[k];

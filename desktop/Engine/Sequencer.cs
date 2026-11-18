@@ -68,7 +68,7 @@ public sealed class Sequencer
     public bool Playing { get; private set; }
     public bool Metronome;
     public Pattern Pattern = Pattern.Parse(null);
-    long tick; double nextTime;
+    long tick, origin; double nextTime;
     (long from, int len)? stutter;
     public Pattern? FillPattern;
     public HashSet<int> MuteD = new(), MuteS = new();
@@ -90,14 +90,21 @@ public sealed class Sequencer
     // =================================================================
     // Pattern e mixer
     // =================================================================
-    static readonly int[] EmptyRow = new int[16];
-    static readonly StepOpt?[] EmptyOpts = new StepOpt?[16];
+    static readonly int[] EmptyRow = new int[64];
+    static readonly StepOpt?[] EmptyOpts = new StepOpt?[64];
 
     /// <summary>Pattern composto dalle clip della session (riferimenti, nessuna copia).</summary>
     Pattern Compose()
     {
         var b = P.Slots[Master];
         var p = new Pattern { Kit = P.Lock ?? b.Kit, Bpm = b.Bpm, Swing = b.Swing, Human = b.Human, Kits = new KitDef?[8] };
+        // Automazione: ogni traccia dalla propria clip, il master dal pattern principale
+        var auto = new Dictionary<string, double?[]>();
+        void Take(Pattern? from, string prefix) { if (from?.Auto != null) foreach (var (k, v) in from.Auto) if (k.StartsWith(prefix)) auto[k] = v; }
+        for (int t = 0; t < 8; t++) Take(Map[t] >= 0 ? P.Slots[Map[t]] : null, $"d{t}.");
+        for (int k = 0; k < 4; k++) Take(Map[8 + k] >= 0 ? P.Slots[Map[8 + k]] : null, $"s{k}.");
+        Take(b, "fx.");
+        if (auto.Count > 0) p.Auto = auto;
         p.Synth = new SynthSection { Key = b.Synth.Key, Scale = b.Synth.Scale };
         for (int t = 0; t < 8; t++)
         {
@@ -162,7 +169,7 @@ public sealed class Sequencer
         }
         else if (P.SongOn && P.Chain.Length > 0) { songI = 0; songR = 0; }
         Playing = true;
-        tick = 0;
+        tick = 0; origin = 0;
         nextTime = ctx.CurrentTime + 0.03;
         Sync();
     }
@@ -296,7 +303,8 @@ public sealed class Sequencer
         if (Session || !P.SongOn || P.Chain.Length == 0) return null;
         songR++;
         if (songI >= P.Chain.Length) songI = 0;
-        if (songR >= P.Chain[songI].rep) { songI = (songI + 1) % P.Chain.Length; songR = 0; }
+        // Ripetizioni in battute: un pattern di 2 battute ripetuto 2 volte dura 4 battute
+        if (songR >= P.Chain[songI].rep * P.Slots[P.Chain[songI].slot].Bars) { songI = (songI + 1) % P.Chain.Length; songR = 0; }
         var next = P.Slots[P.Chain[songI].slot];
         mx.Kit = P.KitOf(next);
         mx.ApplyMix(next, time);
@@ -318,11 +326,11 @@ public sealed class Sequencer
         if (nextTime < now - 0.2) nextTime = now + 0.02;
         while (nextTime < now + Ahead)
         {
-            if (tick > 0 && tick % Steps == 0 && OnBar(tick, nextTime) is Pattern nb) Pattern = nb;
+            if (tick > 0 && tick % Steps == 0 && OnBar(tick, nextTime) is Pattern nb) { if (nb != Pattern) origin = tick; Pattern = nb; }
             if (OnStep(tick, nextTime) is Pattern ns) Pattern = ns;
             double sd = StepDur(Pattern.Bpm);
             double time = nextTime + SwingOffset(tick, Pattern.Swing, sd);
-            long pt = stutter is var (from, len) ? from + (tick - from) % len : tick;
+            long pt = (stutter is var (from, len) ? from + (tick - from) % len : tick) - origin;
             ScheduleTick(FillPattern ?? Pattern, pt, time);
             if (Metronome && tick % 4 == 0) mx.Click(time, tick % Steps == 0);
             nextTime += sd;
@@ -353,8 +361,65 @@ public sealed class Sequencer
         return f;
     }
 
+    // ----- Automazione (stesse mappature di js/automation.js) -----
+    static double AutoTo(string p, double v) => p switch
+    {
+        "pan" or "cut" or "res" or "filter" => v * 2 - 1,
+        "tune" => Math.Round(v * 24 - 12),
+        "decay" => 0.2 + v * 2.3,
+        _ => v,
+    };
+    static double? At(Pattern pat, string key, long s)
+    {
+        if (pat.Auto == null || !pat.Auto.TryGetValue(key, out var lane) || lane.Length == 0) return null;
+        return lane[(int)(s % lane.Length)];
+    }
+    readonly Dictionary<int, string> autoLast = new();
+    double? autoFx;
+
+    void ApplyAuto(Pattern pat, long tick, double time)
+    {
+        if (pat.Auto == null && autoLast.Count == 0 && autoFx == null) return;
+        void Chan(int i, string key, MixParams m, int len)
+        {
+            double vol = m.Vol, pan = m.Pan, rev = m.Rev, dly = m.Dly;
+            long s = tick % Math.Max(1, len);
+            double? av = At(pat, $"{key}.vol", s), ap = At(pat, $"{key}.pan", s), ar = At(pat, $"{key}.rev", s), ad = At(pat, $"{key}.dly", s);
+            bool any = av != null || ap != null || ar != null || ad != null;
+            if (!any && !autoLast.ContainsKey(i)) return;
+            double v = av ?? vol, pn = ap != null ? ap.Value * 2 - 1 : pan, r = ar ?? rev, d = ad ?? dly;
+            string sig = $"{v}|{pn}|{r}|{d}";
+            if (autoLast.TryGetValue(i, out var last) && last == sig) return;
+            if (any) autoLast[i] = sig; else autoLast.Remove(i);
+            mx.SetChannel(i, m with { Vol = v, Pan = pn, Rev = r, Dly = d }, time);
+        }
+        for (int t = 0; t < 8; t++) Chan(t, $"d{t}", pat.Tracks[t].Mix, pat.Tracks[t].Len);
+        for (int k = 0; k < 4; k++) Chan(8 + k, $"s{k}", pat.Synth.Tracks[k].Mix, pat.Synth.Tracks[k].Len);
+        double? f = At(pat, "fx.filter", tick % Math.Max(1, pat.Steps[0].Length));
+        double? fv = f != null ? f.Value * 2 - 1 : null;
+        if (fv != autoFx) { autoFx = fv; mx.SetFilterAt(fv, time); }
+    }
+
+    static DrumTrack DrumAuto(Pattern pat, int t, long s, DrumTrack tr)
+    {
+        double? tu = At(pat, $"d{t}.tune", s), de = At(pat, $"d{t}.decay", s);
+        if (tu == null && de == null) return tr;
+        return new DrumTrack { Vol = tr.Vol, Tune = tu != null ? AutoTo("tune", tu.Value) : tr.Tune, Decay = de != null ? AutoTo("decay", de.Value) : tr.Decay, Pan = tr.Pan, Rev = tr.Rev, Dly = tr.Dly, Drv = tr.Drv, Crush = tr.Crush, Len = tr.Len };
+    }
+
+    static SynthTrack SynthAuto(Pattern pat, int k, long s, SynthTrack tr)
+    {
+        double? c = At(pat, $"s{k}.cut", s), r = At(pat, $"s{k}.res", s);
+        if (c == null && r == null) return tr;
+        var x = tr.With(new SynthStep { Cut = c != null ? AutoTo("cut", c.Value) : null });
+        if (x == tr) x = tr.With(new SynthStep { Dec = tr.Dec });
+        if (r != null) x.Res = AutoTo("res", r.Value);
+        return x;
+    }
+
     void ScheduleTick(Pattern pat, long t, double time)
     {
+        ApplyAuto(pat, t, time);
         double sd = StepDur(pat.Bpm), human = pat.Human;
         bool anySolo = pat.Tracks.Any(x => x.Solo);
         for (int tr = 0; tr < TracksN; tr++)
@@ -370,7 +435,7 @@ public sealed class Sequencer
             double tt = time + (o != null ? o.N / 100.0 * sd : 0);
             double vel = o?.Vel ?? Velocity[v];
             if (human > 0) { tt += (rnd.NextDouble() - 0.5) * 0.02 * human; vel *= 1 - rnd.NextDouble() * 0.3 * human; }
-            var pp = track.With(o);
+            var pp = DrumAuto(pat, tr, s, track).With(o);
             var kit = pat.Kits?[tr];
             if (o != null && o.F) { mx.Trigger(tr, tt, vel * 0.45, pp, kit); tt += FlamGap; }
             int r = o?.R ?? 1;
@@ -387,13 +452,14 @@ public sealed class Sequencer
             double tj = human > 0 ? time + (rnd.NextDouble() - 0.5) * 0.01 * human : time;
             if (tr.Arp.On)
             {
-                foreach (var e in ArpEvents(pat, k, t)) mx.PlaySynth(k, tj + e.offset, e.dur, e.notes, e.vel, tr);
+                var atr = SynthAuto(pat, k, t % Math.Max(1, tr.Len), tr);
+                foreach (var e in ArpEvents(pat, k, t)) mx.PlaySynth(k, tj + e.offset, e.dur, e.notes, e.vel, atr);
                 continue;
             }
             int s = (int)(t % Math.Max(1, tr.Len));
             if (tr.Steps[s] == null) continue;
             var ev = SynthEvent(pat, k, s)!.Value;
-            mx.PlaySynth(k, tj, ev.dur, ev.notes, ev.vel, ev.track, ev.glideFrom);
+            mx.PlaySynth(k, tj, ev.dur, ev.notes, ev.vel, SynthAuto(pat, k, s, ev.track), ev.glideFrom);
         }
     }
 

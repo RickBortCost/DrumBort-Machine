@@ -37,15 +37,17 @@ public sealed class StepOpt
 
 public sealed class DrumTrack
 {
-    public double Vol = 0.8, Tune, Decay = 1, Pan, Rev, Dly, Drv; public int Len = 16, Crush; public bool Mute, Solo;
-    public static DrumTrack Parse(JsonNode? n) => new()
+    public double Vol = 0.8, Tune, Decay = 1, Pan, Rev, Dly, Drv, Flt, Lo, Hi, Cmp; public int Len = 16, Crush; public bool Mute, Solo;
+    public MixParams Mix => new(Vol, Pan, Rev, Dly, Drv, Crush, Flt, Lo, Hi, Cmp);
+    public static DrumTrack Parse(JsonNode? n, int steps = 16) => new()
     {
         Vol = J.D(n, "vol", 0.8), Tune = J.D(n, "tune", 0), Decay = J.D(n, "decay", 1), Pan = J.D(n, "pan", 0),
         Rev = J.D(n, "rev", 0), Dly = J.D(n, "dly", 0), Drv = J.D(n, "drv", 0), Crush = J.I(n, "crush", 0),
-        Len = Math.Clamp(J.I(n, "len", 16), 1, 16), Mute = J.B(n, "mute"), Solo = J.B(n, "solo"),
+        Flt = J.D(n, "flt", 0), Lo = J.D(n, "lo", 0), Hi = J.D(n, "hi", 0), Cmp = J.D(n, "cmp", 0),
+        Len = Math.Clamp(J.I(n, "len", steps), 1, steps), Mute = J.B(n, "mute"), Solo = J.B(n, "solo"),
     };
     public DrumTrack With(StepOpt? o) => o == null || (o.Tune == null && o.Decay == null) ? this
-        : new DrumTrack { Vol = Vol, Tune = o.Tune ?? Tune, Decay = o.Decay ?? Decay, Pan = Pan, Rev = Rev, Dly = Dly, Drv = Drv, Crush = Crush, Len = Len };
+        : new DrumTrack { Vol = Vol, Tune = o.Tune ?? Tune, Decay = o.Decay ?? Decay, Pan = Pan, Rev = Rev, Dly = Dly, Drv = Drv, Crush = Crush, Len = Len, Flt = Flt, Lo = Lo, Hi = Hi, Cmp = Cmp };
 }
 
 public sealed class SynthStep
@@ -76,24 +78,27 @@ public sealed class SynthTrack
 {
     public string Preset = "acid303"; public Preset? Patch;
     public int Oct, Len = 16, Crush;
-    public double Vol = 0.7, Pan, Rev, Dly, Cut, Res, Env = 1, Dec = 1, Atk = 1, Rel = 1, Lfo = 1, Rate = 1, Pos, Drv;
+    public double Vol = 0.7, Pan, Rev, Dly, Cut, Res, Env = 1, Dec = 1, Atk = 1, Rel = 1, Lfo = 1, Rate = 1, Pos, Drv, Flt, Lo, Hi, Cmp;
+    public MixParams Mix => new(Vol, Pan, Rev, Dly, Drv, Crush, Flt, Lo, Hi, Cmp);
     public bool Mute, Solo;
     public Arp Arp = new();
     public SynthStep?[] Steps = new SynthStep?[16];
 
-    public static SynthTrack Parse(JsonNode? n, int k)
+    public static SynthTrack Parse(JsonNode? n, int k, int steps = 16)
     {
         var t = new SynthTrack
         {
+            Steps = new SynthStep?[steps],
             Preset = J.S(n, "preset", SynthDefs.Tracks[k].Preset), Oct = J.I(n, "oct", 0),
             Vol = J.D(n, "vol", 0.7), Pan = J.D(n, "pan", 0), Rev = J.D(n, "rev", 0), Dly = J.D(n, "dly", 0),
             Cut = J.D(n, "cut", 0), Res = J.D(n, "res", 0), Env = J.D(n, "env", 1), Dec = J.D(n, "dec", 1),
             Atk = J.D(n, "atk", 1), Rel = J.D(n, "rel", 1), Lfo = J.D(n, "lfo", 1), Rate = J.D(n, "rate", 1), Pos = J.D(n, "pos", 0),
             Drv = J.D(n, "drv", 0), Crush = J.I(n, "crush", 0), Mute = J.B(n, "mute"), Solo = J.B(n, "solo"),
-            Len = Math.Clamp(J.I(n, "len", 16), 1, 16), Arp = Arp.Parse(n?["arp"]),
+            Flt = J.D(n, "flt", 0), Lo = J.D(n, "lo", 0), Hi = J.D(n, "hi", 0), Cmp = J.D(n, "cmp", 0),
+            Len = Math.Clamp(J.I(n, "len", steps), 1, steps), Arp = Arp.Parse(n?["arp"]),
         };
         if (n?["patch"] is JsonObject p && p["wt"] != null) t.Patch = Engine.Preset.Parse("patch", p);
-        if (n?["steps"] is JsonArray st) for (int s = 0; s < 16 && s < st.Count; s++) t.Steps[s] = SynthStep.Parse(st[s]);
+        if (n?["steps"] is JsonArray st) for (int s = 0; s < steps && s < st.Count; s++) t.Steps[s] = SynthStep.Parse(st[s]);
         return t;
     }
 
@@ -109,47 +114,62 @@ public sealed class SynthTrack
     public VoiceParams Params(double bpm) => new(Cut, Res, Env, Dec, Atk, Rel, Lfo, Rate, Pos, bpm);
 }
 
+/// <summary>Mixer e insert di un canale.</summary>
+public readonly record struct MixParams(double Vol, double Pan, double Rev, double Dly, double Drv, int Crush, double Flt, double Lo, double Hi, double Cmp);
+
 public readonly record struct VoiceParams(double Cut, double Res, double Env, double Dec, double Atk, double Rel, double Lfo, double Rate, double Pos, double Bpm);
 
 public sealed class SynthSection
 {
     public int Key = 9; public string Scale = "minor";
     public SynthTrack[] Tracks = new SynthTrack[4];
-    public static SynthSection Parse(JsonNode? n)
+    public static SynthSection Parse(JsonNode? n, int steps = 16)
     {
         var s = new SynthSection { Key = J.I(n, "key", 9), Scale = J.S(n, "scale", "minor") };
         var tr = n?["tracks"] as JsonArray;
-        for (int k = 0; k < 4; k++) s.Tracks[k] = SynthTrack.Parse(tr != null && k < tr.Count ? tr[k] : null, k);
+        for (int k = 0; k < 4; k++) s.Tracks[k] = SynthTrack.Parse(tr != null && k < tr.Count ? tr[k] : null, k, steps);
         return s;
     }
 }
 
 public sealed class Pattern
 {
-    public string Kit = "tr808"; public int Bpm = 120, Swing = 50; public double Human;
+    public string Kit = "tr808"; public int Bpm = 120, Swing = 50, Bars = 1; public double Human;
     public int[][] Steps = Enumerable.Range(0, 8).Select(_ => new int[16]).ToArray();
     public StepOpt?[][] Opts = Enumerable.Range(0, 8).Select(_ => new StepOpt?[16]).ToArray();
     public DrumTrack[] Tracks = Enumerable.Range(0, 8).Select(_ => new DrumTrack()).ToArray();
     public SynthSection Synth = SynthSection.Parse(null);
     /// <summary>Session: kit di ogni traccia (null = kit del pattern).</summary>
     public KitDef?[]? Kits;
+    /// <summary>Automazione: bersaglio ("d0.vol", "s1.cut", "fx.filter") → valore 0..1 per step (null = valore della traccia).</summary>
+    public Dictionary<string, double?[]>? Auto;
 
     public static Pattern Parse(JsonNode? n)
     {
-        var p = new Pattern { Kit = J.S(n, "kit", "tr808"), Bpm = Math.Clamp(J.I(n, "bpm", 120), 40, 240), Swing = Math.Clamp(J.I(n, "swing", 50), 50, 75), Human = J.D(n, "human", 0) };
+        int bars = J.I(n, "bars", 1) is var b && (b == 2 || b == 4) ? b : 1, N = 16 * bars;
+        var p = new Pattern { Kit = J.S(n, "kit", "tr808"), Bpm = Math.Clamp(J.I(n, "bpm", 120), 40, 240), Swing = Math.Clamp(J.I(n, "swing", 50), 50, 75), Human = J.D(n, "human", 0), Bars = bars };
+        p.Steps = Enumerable.Range(0, 8).Select(_ => new int[N]).ToArray();
+        p.Opts = Enumerable.Range(0, 8).Select(_ => new StepOpt?[N]).ToArray();
         var st = n?["steps"] as JsonArray; var op = n?["opts"] as JsonArray; var tr = n?["tracks"] as JsonArray;
         for (int t = 0; t < 8; t++)
         {
             var row = st != null && t < st.Count ? st[t] as JsonArray : null;
             var orow = op != null && t < op.Count ? op[t] as JsonArray : null;
-            for (int s = 0; s < 16; s++)
+            for (int s = 0; s < N; s++)
             {
                 if (row != null && s < row.Count && row[s] is JsonValue v && v.TryGetValue(out double d)) p.Steps[t][s] = d >= 2 ? 2 : d > 0 ? 1 : 0;
                 if (orow != null && s < orow.Count) p.Opts[t][s] = StepOpt.Parse(orow[s]);
             }
-            p.Tracks[t] = DrumTrack.Parse(tr != null && t < tr.Count ? tr[t] : null);
+            p.Tracks[t] = DrumTrack.Parse(tr != null && t < tr.Count ? tr[t] : null, N);
         }
-        p.Synth = SynthSection.Parse(n?["synth"]);
+        p.Synth = SynthSection.Parse(n?["synth"], N);
+        if (n?["auto"] is JsonObject au)
+        {
+            p.Auto = new();
+            foreach (var (k, v) in au)
+                if (v is JsonArray a)
+                    p.Auto[k] = Enumerable.Range(0, N).Select(i => i < a.Count && a[i] is JsonValue jv && jv.TryGetValue(out double d) ? (double?)Math.Clamp(d, 0, 1) : null).ToArray();
+        }
         return p;
     }
 

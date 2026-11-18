@@ -38,6 +38,7 @@ public static class Tools
         res["_speed"] = Math.Round(audioSec / sw.Elapsed.TotalSeconds, 1);
         res["_comp"] = CompressorProbe(rate);
         res["_rev"] = ReverbProbe(rate);
+        res["_eq"] = EqProbe(rate);
         File.WriteAllText(outPath, res.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"{res.Count - 1} voci → {outPath} ({audioSec / sw.Elapsed.TotalSeconds:0}× tempo reale)");
     }
@@ -96,6 +97,25 @@ public static class Tools
             double Win(double a, double z) { double s = 0; int n = 0; for (int i = (int)(a * rate); i < (int)(z * rate); i++) { s += L[i] * L[i] + R[i] * R[i]; n += 2; } return Math.Sqrt(s / n); }
             res[$"{size}"] = new JsonArray(new[] { Win(0.02, 0.3), Win(0.4, 0.8), Win(0.8, 1.4), Win(1.4, 2.2), Win(2.2, 2.99) }.Select(x => (JsonNode)double.Parse(x.ToString("E3"))).ToArray());
         }
+        return res;
+    }
+
+    /// <summary>Guadagno dei filtri shelf (EQ per traccia) su sinusoidi di prova.</summary>
+    public static JsonObject EqProbe(int rate)
+    {
+        var res = new JsonObject();
+        foreach (var (type, fc, g) in new[] { ("lowshelf", 200.0, 6.0), ("highshelf", 5000.0, -9.0) })
+            foreach (var f in new[] { 60.0, 200.0, 1000.0, 5000.0, 12000.0 })
+            {
+                var ctx = new AudioContext(rate);
+                var o = ctx.Oscillator(); o.Frequency.Value = (float)f;
+                var bq = ctx.Biquad(type); bq.Frequency.Value = (float)fc; bq.GainParam.Value = (float)g;
+                o.Connect(ctx.Gain(0.5f)).Connect(bq).Connect(ctx.Destination); o.Start(0);
+                var l = new float[AudioContext.Block]; var r = new float[AudioContext.Block];
+                double pk = 0;
+                for (int k = 0; k < rate; k += AudioContext.Block) { ctx.RenderBlock(l, r, 0); if (k >= rate / 2) foreach (var v in l) pk = Math.Max(pk, Math.Abs(v)); }
+                res[$"{type}|{f}"] = Math.Round(20 * Math.Log10(pk / 0.5), 2);
+            }
         return res;
     }
 

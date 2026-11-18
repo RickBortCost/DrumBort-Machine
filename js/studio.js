@@ -45,6 +45,8 @@ export function initStudio(app) {
       <label class="sx-q">LANCIO <select id="sxQuant" aria-label="Quantizzazione del lancio">${QUANTS.map((q) => `<option value="${q.v}">${q.label}</option>`).join('')}</select></label>
       <button id="arrPlay" class="btn sm" aria-pressed="false" title="Riproduci l'arrangiamento">▶ ARR</button>
       <button id="arrRec" class="btn sm" aria-pressed="false" title="Registra i lanci della session nell'arrangiamento">● REC ARR</button>
+      <button id="sxAuto" class="btn sm" title="Automazione della clip selezionata (A)">∿ AUTO</button>
+      <button id="sxMacro" class="btn sm" title="Macro (M)">◎ MACRO</button>
       <span class="sx-info" id="sxInfo"></span>
     </div>
     <div class="sx-sess" id="sxSess"></div>
@@ -89,13 +91,15 @@ export function initStudio(app) {
     g.clearRect(0, 0, w, h);
     g.fillStyle = 'rgba(0,0,0,.55)';
     if (!isSynth(i)) {
-      p.steps[i].forEach((v, s) => { if (v) g.fillRect(s * (w / 16) + 1, v === 2 ? 2 : 6, w / 16 - 2, v === 2 ? h - 4 : h - 8); });
+      const n = p.steps[i].length;
+      p.steps[i].forEach((v, s) => { if (v) g.fillRect(s * (w / n) + 1, v === 2 ? 2 : 6, Math.max(1, w / n - 2), v === 2 ? h - 4 : h - 8); });
     } else {
       const t = p.synth.tracks[i - DRUM_TRACKS];
       const ns = t.steps.filter(Boolean).map((x) => x.n);
       if (!ns.length) { if (t.arp.on) { g.fillText('ARP', 4, 13); } return; }
       const lo = Math.min(...ns), hi = Math.max(...ns, lo + 6);
-      t.steps.forEach((x, s) => { if (x) g.fillRect(s * (w / 16), h - 4 - ((x.n - lo) / (hi - lo)) * (h - 6), Math.max(2, x.g * (w / 16) - 1), 3); });
+      const n = t.steps.length;
+      t.steps.forEach((x, s) => { if (x) g.fillRect(s * (w / n), h - 4 - ((x.n - lo) / (hi - lo)) * (h - 6), Math.max(2, x.g * (w / n) - 1), 3); });
     }
   }
 
@@ -157,6 +161,8 @@ export function initStudio(app) {
     const v = e.target.closest('[data-sxv]');
     if (v) { setView(v.dataset.sxv); return; }
     if (e.target.closest('#arrPlay')) { app.toggleArr(); return; }
+    if (e.target.closest('#sxMacro')) { app.openMacros(); return; }
+    if (e.target.closest('#sxAuto')) { app.openAuto(selTrack < DRUM_TRACKS ? `d${selTrack}.vol` : `s${selTrack - DRUM_TRACKS}.cut`); return; }
     if (e.target.closest('#arrRec')) {
       app.setArrRec(!ui.arrRec);
       if (ui.arrRec) app.toast(seq.playing ? 'Registrazione dalla prossima battuta' : 'REC ARR armato: premi play');

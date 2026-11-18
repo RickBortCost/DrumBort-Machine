@@ -25,7 +25,8 @@ public sealed class Mixer
     sealed class Channel
     {
         public required GainNode Gain; public required StereoPannerNode Pan; public required GainNode Rev, Dly;
-        public List<AudioNode> Ins = new(); public double Drv = -1; public int Crush = -1;
+        public List<AudioNode> Ins = new(); public string Shape = "";
+        public BiquadFilterNode? LoN, HiN, FltN; public CompressorNode? CmpN;
     }
     readonly Channel[] ch = new Channel[Channels];
     readonly GainNode master, kitIn, kitOut, revIn, revOut, dlyIn, dlyFb, dlyOut, duck;
@@ -78,7 +79,7 @@ public sealed class Mixer
             pan.Connect(rev).Connect(revIn);
             pan.Connect(dly).Connect(dlyIn);
             ch[i] = new Channel { Gain = gain, Pan = pan, Rev = rev, Dly = dly };
-            SetInserts(ch[i], 0, 0);
+            SetInserts(ch[i], default, 0);
         }
         BuildKitChain();
         SetFx(Fx, 120, true);
@@ -131,41 +132,57 @@ public sealed class Mixer
     }
 
     // ----- Mixer ed effetti -----
-    public void SetChannel(int i, double vol, double pan, double rev, double dly, double drv, int crushBits, double time)
+    public void SetChannel(int i, MixParams m, double time)
     {
         var c = ch[i];
         double t = Math.Max(time, Ctx.CurrentTime);
-        c.Gain.GainParam.SetTargetAtTime((float)(vol * vol * 1.2), t, 0.01);
-        c.Pan.Pan.SetTargetAtTime((float)pan, t, 0.01);
-        c.Rev.GainParam.SetTargetAtTime((float)rev, t, 0.01);
-        c.Dly.GainParam.SetTargetAtTime((float)dly, t, 0.01);
-        SetInserts(c, Math.Round(drv * 20) / 20, crushBits);
+        c.Gain.GainParam.SetTargetAtTime((float)(m.Vol * m.Vol * 1.2), t, 0.01);
+        c.Pan.Pan.SetTargetAtTime((float)m.Pan, t, 0.01);
+        c.Rev.GainParam.SetTargetAtTime((float)m.Rev, t, 0.01);
+        c.Dly.GainParam.SetTargetAtTime((float)m.Dly, t, 0.01);
+        SetInserts(c, m, t);
     }
 
-    void SetInserts(Channel c, double drv, int crushBits)
+    /// <summary>Drive → bit crusher → EQ (shelf 200 Hz / 5 kHz) → filtro LP/HP → compressore (come engine.js).</summary>
+    void SetInserts(Channel c, MixParams m, double t)
     {
-        if (c.Drv == drv && c.Crush == crushBits) return;
-        c.Drv = drv; c.Crush = crushBits;
-        c.Gain.Disconnect();
-        foreach (var n in c.Ins) n.Disconnect();
-        c.Ins.Clear();
-        AudioNode node = c.Gain;
-        if (drv > 0)
+        double drv = Math.Round(m.Drv * 20) / 20;
+        bool eq = m.Lo != 0 || m.Hi != 0, fl = Math.Abs(m.Flt) > 0.02, cp = m.Cmp > 0;
+        string shape = $"{drv}|{m.Crush}|{eq}|{fl}|{cp}";
+        if (c.Shape != shape)
         {
-            var ws = Ctx.Shaper(DriveCurve(drv));
-            var comp = Ctx.Gain((float)(1 / (1 + drv * 1.5)));
-            node.Connect(ws).Connect(comp);
-            node = comp;
-            c.Ins.Add(ws); c.Ins.Add(comp);
+            c.Shape = shape;
+            c.Gain.Disconnect();
+            foreach (var n in c.Ins) n.Disconnect();
+            c.Ins.Clear();
+            c.LoN = c.HiN = c.FltN = null; c.CmpN = null;
+            AudioNode node = c.Gain;
+            T Add<T>(T n) where T : AudioNode { node.Connect(n); node = n; c.Ins.Add(n); return n; }
+            if (drv > 0) { Add(Ctx.Shaper(DriveCurve(drv))); Add(Ctx.Gain((float)(1 / (1 + drv * 1.5)))); }
+            if (m.Crush > 0) Add(Ctx.Shaper(CrushCurve(m.Crush)));
+            if (eq)
+            {
+                c.LoN = Add(Ctx.Biquad("lowshelf")); c.LoN.Frequency.Value = 200;
+                c.HiN = Add(Ctx.Biquad("highshelf")); c.HiN.Frequency.Value = 5000;
+            }
+            if (fl) { c.FltN = Add(Ctx.Biquad("lowpass")); c.FltN.Q.Value = 1; }
+            if (cp) c.CmpN = Add(new CompressorNode(Ctx));
+            node.Connect(c.Pan);
         }
-        if (crushBits > 0) { var ws = Ctx.Shaper(CrushCurve(crushBits)); node.Connect(ws); node = ws; c.Ins.Add(ws); }
-        node.Connect(c.Pan);
+        if (c.LoN != null) { c.LoN.GainParam.SetTargetAtTime((float)m.Lo, t, 0.02); c.HiN!.GainParam.SetTargetAtTime((float)m.Hi, t, 0.02); }
+        if (c.FltN != null)
+        {
+            var (l, h) = FilterFreqs(m.Flt);
+            c.FltN.Type = m.Flt < 0 ? "lowpass" : "highpass";
+            c.FltN.Frequency.SetTargetAtTime((float)(m.Flt < 0 ? l : h), t, 0.02);
+        }
+        c.CmpN?.Configure((float)(-6 - 30 * m.Cmp), (float)(1.5 + 8.5 * m.Cmp), 6, 0.005f, 0.15f);
     }
 
     public void ApplyMix(Pattern p, double time)
     {
-        for (int i = 0; i < Tracks; i++) { var t = p.Tracks[i]; SetChannel(i, t.Vol, t.Pan, t.Rev, t.Dly, t.Drv, t.Crush, time); }
-        for (int k = 0; k < 4; k++) { var t = p.Synth.Tracks[k]; SetChannel(SynthCh + k, t.Vol, t.Pan, t.Rev, t.Dly, t.Drv, t.Crush, time); }
+        for (int i = 0; i < Tracks; i++) SetChannel(i, p.Tracks[i].Mix, time);
+        for (int k = 0; k < 4; k++) SetChannel(SynthCh + k, p.Synth.Tracks[k].Mix, time);
     }
 
     public static (double lp, double hp) FilterFreqs(double f) =>
@@ -187,6 +204,17 @@ public sealed class Mixer
         dlyFb.GainParam.SetTargetAtTime((float)Math.Min(0.9, f.Fb), t, tc);
         delay.DelayTime.SetTargetAtTime((float)Math.Min(4, 60 / Bpm / 4 * f.Div), t, immediate ? 0.001 : 0.05);
         if (Math.Abs(f.Size - revSize) > 0.05) { revSize = f.Size; reverb.SetSize(f.Size); }
+    }
+
+    /// <summary>Automazione del filtro master all'istante `time` (null = valore degli effetti).</summary>
+    public void SetFilterAt(double? v, double time)
+    {
+        double f = v ?? Fx.Filter, t = Math.Max(time, Ctx.CurrentTime);
+        var (l, h) = FilterFreqs(f);
+        lp.Frequency.SetTargetAtTime((float)l, t, 0.015);
+        hp.Frequency.SetTargetAtTime((float)h, t, 0.015);
+        lp.Q.SetValueAtTime((float)(f < -0.02 ? Fx.Res : 0.7), t);
+        hp.Q.SetValueAtTime((float)(f > 0.02 ? Fx.Res : 0.7), t);
     }
 
     /// <summary>Filtro/risonanza dal vivo (pad XY): non tocca il resto degli effetti.</summary>

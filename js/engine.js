@@ -168,7 +168,7 @@ export class Engine {
       dly.gain.value = 0;
       post.connect(rev).connect(this.revIn);
       post.connect(dly).connect(this.dlyIn);
-      this.channels.push({ gain, pan: pan.pan ? pan : null, out: pan, ins: [], drv: 0, crush: 0 });
+      this.channels.push({ gain, pan: pan.pan ? pan : null, out: pan, ins: [], nodes: {}, shape: '' });
       this.channels[i].rev = rev;
       this.channels[i].dly = dly;
     }
@@ -247,35 +247,58 @@ export class Engine {
     if (ch.pan && typeof tr.pan === 'number') ch.pan.pan.setTargetAtTime(tr.pan, t, 0.01);
     ch.rev.gain.setTargetAtTime(tr.rev || 0, t, 0.01);
     ch.dly.gain.setTargetAtTime(tr.dly || 0, t, 0.01);
-    this._setInserts(ch, Math.round((tr.drv || 0) * 20) / 20, tr.crush || 0);
+    this._setInserts(ch, tr, t);
   }
 
-  /** Insert per traccia: drive (saturazione) e bit crusher; ricostruiti solo se cambiano. */
-  _setInserts(ch, drv, crush) {
-    if (ch.drv === drv && ch.crush === crush) return;
-    ch.drv = drv; ch.crush = crush;
-    ch.gain.disconnect();
-    ch.ins.forEach((n) => n.disconnect());
-    ch.ins = [];
-    let node = ch.gain;
-    if (drv > 0) {
-      const ws = this.ctx.createWaveShaper();
-      ws.curve = driveCurve(drv);
-      ws.oversample = '2x';
-      const comp = this.ctx.createGain();
-      comp.gain.value = 1 / (1 + drv * 1.5);     // compensa il volume
-      node.connect(ws).connect(comp);
-      node = comp;
-      ch.ins.push(ws, comp);
+  /**
+   * Insert per traccia: drive → bit crusher → EQ (shelf basso 200 Hz, alto 5 kHz) → filtro
+   * (LP ← → HP) → compressore. La catena si ricostruisce solo se cambia la sua struttura;
+   * i valori si aggiornano sui nodi esistenti.
+   */
+  _setInserts(ch, tr, t) {
+    const drv = Math.round((tr.drv || 0) * 20) / 20, crush = tr.crush || 0;
+    const lo = tr.lo || 0, hi = tr.hi || 0, flt = tr.flt || 0, cmp = tr.cmp || 0;
+    const eq = lo !== 0 || hi !== 0, fl = Math.abs(flt) > 0.02, cp = cmp > 0;
+    const shape = `${drv}|${crush}|${eq}|${fl}|${cp}`;
+    if (ch.shape !== shape) {
+      ch.shape = shape;
+      ch.gain.disconnect();
+      ch.ins.forEach((n) => n.disconnect());
+      ch.ins = [];
+      ch.nodes = {};
+      const ctx = this.ctx;
+      let node = ch.gain;
+      const add = (n) => { node.connect(n); node = n; ch.ins.push(n); return n; };
+      if (drv > 0) {
+        const ws = ctx.createWaveShaper();
+        ws.curve = driveCurve(drv);
+        ws.oversample = '2x';
+        add(ws);
+        const comp = ctx.createGain();
+        comp.gain.value = 1 / (1 + drv * 1.5);     // compensa il volume
+        add(comp);
+      }
+      if (crush > 0) { const ws = ctx.createWaveShaper(); ws.curve = crushCurve(crush); add(ws); }
+      if (eq) {
+        ch.nodes.lo = add(ctx.createBiquadFilter()); ch.nodes.lo.type = 'lowshelf'; ch.nodes.lo.frequency.value = 200;
+        ch.nodes.hi = add(ctx.createBiquadFilter()); ch.nodes.hi.type = 'highshelf'; ch.nodes.hi.frequency.value = 5000;
+      }
+      if (fl) { ch.nodes.flt = add(ctx.createBiquadFilter()); ch.nodes.flt.Q.value = 1; }
+      if (cp) {
+        const c = add(ctx.createDynamicsCompressor());
+        c.knee.value = 6; c.attack.value = 0.005; c.release.value = 0.15;
+        ch.nodes.cmp = c;
+      }
+      node.connect(ch.out);
     }
-    if (crush > 0) {
-      const ws = this.ctx.createWaveShaper();
-      ws.curve = crushCurve(crush);
-      node.connect(ws);
-      node = ws;
-      ch.ins.push(ws);
+    const n = ch.nodes;
+    if (n.lo) { n.lo.gain.setTargetAtTime(lo, t, 0.02); n.hi.gain.setTargetAtTime(hi, t, 0.02); }
+    if (n.flt) {
+      const { lp, hp } = filterFreqs(flt);
+      n.flt.type = flt < 0 ? 'lowpass' : 'highpass';
+      n.flt.frequency.setTargetAtTime(flt < 0 ? lp : hp, t, 0.02);
     }
-    node.connect(ch.out);
+    if (n.cmp) { n.cmp.threshold.setTargetAtTime(-6 - 30 * cmp, t, 0.02); n.cmp.ratio.setTargetAtTime(1.5 + 8.5 * cmp, t, 0.02); }
   }
 
   /** Applica il mixer di un intero pattern. */
@@ -305,6 +328,17 @@ export class Engine {
       this._revSize = f.size;
       this.conv.buffer = impulse(this.ctx, f.size);
     }
+  }
+
+  /** Automazione del filtro master all'istante `time` (null = torna al valore degli effetti). */
+  setFilterAt(v, time) {
+    if (!this.ctx) return;
+    const f = v == null ? this.fx.filter : v, t = Math.max(time, this.ctx.currentTime);
+    const { lp, hp } = filterFreqs(f);
+    this.lp.frequency.setTargetAtTime(lp, t, 0.015);
+    this.hp.frequency.setTargetAtTime(hp, t, 0.015);
+    this.lp.Q.setValueAtTime(f < -0.02 ? this.fx.res : 0.7, t);
+    this.hp.Q.setValueAtTime(f > 0.02 ? this.fx.res : 0.7, t);
   }
 
   // -------------------------------------------------------------------

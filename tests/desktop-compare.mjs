@@ -13,7 +13,7 @@ const { server, url } = await startServer();
 const browser = await chromium.launch();
 const page = await browser.newPage();
 await page.goto(url);
-const { out: web, comp: wComp, rev: wRev } = await page.evaluate(async () => {
+const { out: web, comp: wComp, rev: wRev, eq: wEq } = await page.evaluate(async () => {
   const { KITS } = await import('./js/kits.js');
   const { PRESETS, playVoice } = await import('./js/synth.js');
   const SR = 48000, out = {};
@@ -73,7 +73,21 @@ const { out: web, comp: wComp, rev: wRev } = await page.evaluate(async () => {
     const win = (a, z) => { let s = 0, n = 0; for (let i = Math.floor(a * SR); i < z * SR; i++) { s += L[i] * L[i] + R[i] * R[i]; n += 2; } return Math.sqrt(s / n); };
     rev[String(size)] = [win(0.02, 0.3), win(0.4, 0.8), win(0.8, 1.4), win(1.4, 2.2)];
   }
-  return { out, comp, rev };
+  // EQ per traccia: filtri shelf
+  const eq = {};
+  for (const [type, fc, g] of [['lowshelf', 200, 6], ['highshelf', 5000, -9]]) {
+    for (const f of [60, 200, 1000, 5000, 12000]) {
+      const ctx = new OfflineAudioContext(1, SR, SR);
+      const o = ctx.createOscillator(); o.frequency.value = f;
+      const gg = ctx.createGain(); gg.gain.value = 0.5;
+      const bq = ctx.createBiquadFilter(); bq.type = type; bq.frequency.value = fc; bq.gain.value = g;
+      o.connect(gg).connect(bq).connect(ctx.destination); o.start();
+      const d = (await ctx.startRendering()).getChannelData(0);
+      let pk = 0; for (let i = SR / 2; i < SR; i++) pk = Math.max(pk, Math.abs(d[i]));
+      eq[`${type}|${f}`] = 20 * Math.log10(pk / 0.5);
+    }
+  }
+  return { out, comp, rev, eq };
 });
 await browser.close();
 server.close();
@@ -110,6 +124,11 @@ for (const [size, w] of Object.entries(wRev)) {
   // size 1: la coda della IR originale finisce a 1 s, si confrontano solo le prime finestre
   const n = size === '1' ? 2 : 4;
   for (let i = 0; i < n; i++) near(`riverbero ${size} s, finestra ${i}`, c[i], w[i], 3);
+}
+for (const [k, v] of Object.entries(wEq)) {
+  const d = cs._eq[k] - v, okk = Math.abs(d) <= 0.5;
+  if (!okk) fxBad++;
+  console.log(`${okk ? '✓' : '✗'} EQ ${k}: web ${v.toFixed(2)} dB, C# ${cs._eq[k].toFixed(2)} dB`);
 }
 const ok = rows.length - bad.length;
 console.log(`${ok}/${rows.length} voci entro ±3 dB e correlazione ≥ 0,9 · velocità motore C#: ${cs._speed}× tempo reale`);

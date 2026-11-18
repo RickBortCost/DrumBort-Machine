@@ -12,6 +12,8 @@
 
 import { KITS } from './kits.js';
 import { PRESETS, playVoice } from './synth.js';
+import { VoiceCache } from './voicecache.js';
+import { synthEvent } from './sequencer.js';
 
 const TRACKS = 8;
 const SYNTH_TRACKS = 3;
@@ -67,7 +69,10 @@ export class Engine {
     this.ctx = null;
     this.kit = KITS[0];
     this.samples = new Array(TRACKS).fill(null);   // { buffer, name } per traccia
-    this.chokeGains = [];
+    this.voices = new Array(TRACKS).fill(null);   // ultima voce per strumento { g, src }
+    this.mono = [null, null];                     // ultima nota BASS / LEAD
+    this.padVoices = [];                          // accordi PAD attivi
+    this.cache = null;                            // VoiceCache (solo live)
     this.channels = [];
     this.fx = { ...DEFAULT_FX };
     this.bpm = 120;
@@ -84,6 +89,7 @@ export class Engine {
       // iOS 17+: riproduci anche con l'interruttore silenzioso attivo
       try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) { /* n/a */ }
       ctx = new AC({ latencyHint: 'interactive' });
+      this.cache = new VoiceCache(ctx);
     }
     this.ctx = ctx;
 
@@ -225,6 +231,7 @@ export class Engine {
   /** Applica il mixer di un intero pattern. */
   applyMix(pattern, time) {
     pattern.tracks.forEach((tr, i) => this.setChannel(i, tr, time));
+    this.prewarm(pattern);
     if (pattern.synth) pattern.synth.tracks.forEach((tr, k) => this.setChannel(SYNTH_CH + k, tr, time));
   }
 
@@ -265,26 +272,72 @@ export class Engine {
     if (!ctx) return;
     const t = Math.max(time, ctx.currentTime);
 
-    // Choke: il closed hat ferma l'open hat ancora in coda
-    if (i === CH_IDX) {
-      for (const g of this.chokeGains) {
-        g.gain.setValueAtTime(1, t);
-        g.gain.setTargetAtTime(0, t, 0.008);
+    // Una voce per strumento (come le drum machine hardware): il nuovo colpo sfuma il precedente.
+    // Il closed hat strozza anche l'open hat.
+    if (this.voices[i]) this._kill(this.voices[i], t);
+    if (i === CH_IDX && this.voices[OH_IDX]) { this._kill(this.voices[OH_IDX], t, 0.008); this.voices[OH_IDX] = null; }
+
+    const g = ctx.createGain();
+    g.connect(this.channels[i].gain);
+    const v = { g, src: null };
+    this.voices[i] = v;
+
+    if (this.samples[i]) { v.src = this._playSample(this.samples[i].buffer, g, t, vel, p); return; }
+    const key = this.cache && this._drumKey(this.kit, i, p);
+    const buf = key && this.cache.get(key);
+    if (buf) {
+      // Voce pre-renderizzata: 1 sorgente invece di oscillatori/filtri
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      g.gain.value = vel;
+      src.connect(g);
+      src.start(t);
+      v.src = src;
+    } else {
+      this.kit.tracks[i].play(ctx, g, t, vel, p);
+      if (key) this._prerenderDrum(this.kit, i, p);
+    }
+  }
+
+  /** Sfuma e ferma una voce (voice stealing). */
+  _kill(v, t, tc = 0.004) {
+    v.g.gain.setTargetAtTime(0, t, tc);
+    if (v.src) { try { v.src.stop(t + tc * 10); } catch (_) { /* già fermo */ } }
+    if (v.handle && v.handle.kill) v.handle.kill(t);
+  }
+
+  _drumKey(kit, i, p) { return `d|${kit.id}|${i}|${p.tune || 0}|${p.decay ?? 1}`; }
+
+  _prerenderDrum(kit, i, p) {
+    const tune = p.tune || 0, decay = p.decay ?? 1;
+    this.cache.request(this._drumKey(kit, i, p), Math.min(6, 0.3 + 1.8 * decay),
+      (octx, out) => kit.tracks[i].play(octx, out, 0, 1, { tune, decay }));
+  }
+
+  /** Pre-renderizza in background le voci del pattern: batteria (kit corrente) e note synth. */
+  prewarm(pattern, kit = this.kit) {
+    if (!this.cache) return;
+    pattern.tracks.forEach((tr, i) => { if (!this.samples[i]) this._prerenderDrum(kit, i, tr); });
+    if (!pattern.synth) return;
+    pattern.synth.tracks.forEach((tr, k) => {
+      for (let s = 0; s < tr.len; s++) {
+        const ev = synthEvent(pattern, k, s);
+        if (ev) this._prerenderSynth(tr, ev.notes, ev.dur, ev.vel, ev.glideFrom);
       }
-      this.chokeGains = [];
-    }
+    });
+  }
 
-    let out = this.channels[i].gain;
-    if (i === OH_IDX) {
-      const cg = ctx.createGain();
-      cg.connect(out);
-      out = cg;
-      this.chokeGains.push(cg);
-      if (this.chokeGains.length > 4) this.chokeGains.shift();
-    }
+  _synthKey(tr, notes, dur, vel, glideFrom) {
+    return `s|${tr.preset}|${notes.join(',')}|${Math.round(dur * 1000)}|${vel}|${tr.cut}|${tr.res}|${tr.env}|${tr.dec}|${glideFrom ?? ''}`;
+  }
 
-    if (this.samples[i]) this._playSample(this.samples[i].buffer, out, t, vel, p);
-    else this.kit.tracks[i].play(ctx, out, t, vel, p);
+  _prerenderSynth(tr, notes, dur, vel, glideFrom) {
+    const pr = PRESETS[tr.preset];
+    if (!pr) return;
+    const rel = pr.r * Math.sqrt(tr.dec ?? 1);
+    const params = { cut: tr.cut, res: tr.res, env: tr.env, dec: tr.dec };
+    this.cache.request(this._synthKey(tr, notes, dur, vel, glideFrom), dur + rel * 1.7 + 0.1,
+      (octx, o) => playVoice(octx, o, 0, dur, notes, vel, pr, params, glideFrom));
   }
 
   _playSample(buf, out, t, vel, p) {
@@ -304,6 +357,7 @@ export class Engine {
     src.connect(g).connect(out);
     src.start(t);
     src.stop(t + len + 0.02);
+    return src;
   }
 
   // -------------------------------------------------------------------
@@ -320,7 +374,36 @@ export class Engine {
     const pr = PRESETS[tr.preset];
     if (!pr) return null;
     const t = Math.max(time, ctx.currentTime);
-    return playVoice(ctx, this.channels[SYNTH_CH + k].gain, t, dur, notes, vel, pr, tr, glideFrom);
+    const out = this.channels[SYNTH_CH + k].gain;
+
+    // Polifonia limitata: BASS e LEAD monofonici, al massimo 3 accordi PAD sovrapposti
+    if (k < 2) {
+      if (this.mono[k]) this._kill(this.mono[k], t, 0.006);
+    } else {
+      this.padVoices = this.padVoices.filter((v) => v.end > t);
+      while (this.padVoices.length >= 3) this._kill(this.padVoices.shift(), t, 0.04);
+    }
+
+    const g = ctx.createGain();
+    g.connect(out);
+    const rel = pr.r * Math.sqrt(tr.dec ?? 1);
+    let v;
+    // Note del sequencer (durata nota): cache; note tenute dal vivo: sempre sintetizzate
+    const key = dur != null && this.cache ? this._synthKey(tr, notes, dur, vel, glideFrom) : null;
+    const buf = key && this.cache.get(key);
+    if (buf) {
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(g);
+      src.start(t);
+      v = { g, src, end: t + buf.duration };
+    } else {
+      const handle = playVoice(ctx, g, t, dur, notes, vel, pr, tr, glideFrom);
+      v = { g, handle, end: dur != null ? t + dur + rel * 1.7 : Infinity };
+      if (key) this._prerenderSynth(tr, notes, dur, vel, glideFrom);
+    }
+    if (k < 2) this.mono[k] = v; else this.padVoices.push(v);
+    return v.handle || { release() {}, kill: (at) => this._kill(v, at) };
   }
 
   /** Click del metronomo (fuori dalla catena effetti). */

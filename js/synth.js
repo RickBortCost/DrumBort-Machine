@@ -220,6 +220,13 @@ export function playVoice(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = 
       rel.gain.setTargetAtTime(0, when, Math.max(0.005, r / 4));
       oscs.forEach((o) => { try { o.stop(when + r * 1.6 + 0.05); } catch (_) { /* già fermo */ } });
     },
+    /** Taglio rapido (voice stealing): sfuma in pochi ms e ferma gli oscillatori. */
+    kill(at) {
+      const when = Math.max(at, ctx.currentTime);
+      released = true;
+      rel.gain.setTargetAtTime(0, when, 0.004);
+      oscs.forEach((o) => { try { o.stop(when + 0.04); } catch (_) { /* già fermo */ } });
+    },
   };
   if (dur != null) handle.release(t + Math.max(0.01, dur));
   return handle;

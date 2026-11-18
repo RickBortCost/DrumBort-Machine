@@ -10,10 +10,10 @@ import { scheduleTick, stepDuration, swingOffset, STEPS } from './sequencer.js';
 /**
  * Renderizza una sequenza di battute.
  * @param {object[]} bars     un pattern per battuta (16 step)
- * @param {object}   o        { fx, samples, lockKit, sampleRate, tail }
+ * @param {object}   o        { fx, samples, lockKit, sampleRate, tail, cache }
  * @returns {Promise<AudioBuffer>}
  */
-export async function renderBars(bars, { fx, samples = [], lockKit = null, sampleRate = 44100, tail = 2.5 } = {}) {
+export async function renderBars(bars, { fx, samples = [], lockKit = null, sampleRate = 44100, tail = 2.5, cache = null } = {}) {
   const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   const start = 0.02;
   const dur = bars.reduce((a, p) => a + STEPS * stepDuration(p.bpm), start) + tail;
@@ -21,6 +21,7 @@ export async function renderBars(bars, { fx, samples = [], lockKit = null, sampl
   const eng = new Engine();
   eng.init(off);
   eng.samples = samples.slice();
+  if (cache) eng.cache = cache;     // solo benchmark: voci pre-renderizzate
 
   const kitOf = (p) => kitById(lockKit || p.kit);
   let time = start, tick = 0, prev = null;

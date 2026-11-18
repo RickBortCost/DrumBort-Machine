@@ -71,7 +71,7 @@ const RAW = {
   // ------------------------------------------------------------------ STRINGS
   strings: { name: 'String Ensemble', cat: 'Strings', tags: ['orchestral', 'warm', 'lush'], osc: [O('sawtooth', 0, -10), O('sawtooth'), O('sawtooth', 0, 10)], cut: 3500, res: 0.8, envOct: 0.3, fdec: 1, a: 0.35, d: 1, s: 0.9, r: 0.9, lfo: { to: 'pitch', rate: 5.5, depth: 8, delay: 0.3 } },
   cello: { name: 'Solo Cello', cat: 'Strings', tags: ['orchestral', 'expressive', 'mono'], osc: [O('sawtooth'), O('sawtooth', 0, 5, 0.5)], formants: [[300, 4, 1], [1100, 5, 0.5], [2800, 6, 0.25]], cut: 4000, res: 0.7, envOct: 0, fdec: 1, a: 0.12, d: 0.6, s: 0.9, r: 0.4, glide: 0.08, lfo: { to: 'pitch', rate: 5.2, depth: 18, delay: 0.25 }, gain: 1.5 },
-  pizz: { name: 'Pizzicato', cat: 'Strings', tags: ['orchestral', 'physical', 'short'], osc: [], gen: { type: 'pluck', damp: 0.99, bright: 0.55, len: 0.9 }, cut: 4500, res: 0.7, envOct: 0, fdec: 0.3, a: 0.001, d: 0.8, s: 0.8, r: 0.1, gain: 2 },
+  pizz: { name: 'Pizzicato', cat: 'Strings', tags: ['orchestral', 'physical', 'short'], osc: [], gen: { type: 'pluck', damp: 0.99, bright: 0.55, len: 0.9 }, cut: 4500, res: 0.7, envOct: 0, fdec: 0.3, a: 0.001, d: 0.8, s: 0.8, r: 0.1, gain: 1.5 },
 
   // ------------------------------------------------------------------ BRASS
   obx: { name: 'Brass Stack', cat: 'Brass', tags: ['analog', 'bold', 'classic'], osc: [O('sawtooth', 0, -11), O('sawtooth', 0, 11)], cut: 1100, res: 2, envOct: 2, fdec: 0.55, a: 0.07, d: 0.5, s: 0.7, r: 0.5 },
@@ -80,8 +80,8 @@ const RAW = {
 
   // ------------------------------------------------------------------ PLUCK
   guitar: { name: 'Nylon Guitar', cat: 'Pluck', tags: ['acoustic', 'physical', 'warm'], osc: [], gen: { type: 'pluck', damp: 0.997, bright: 0.4, len: 2.5 }, cut: 6000, res: 0.6, envOct: 0, fdec: 0.3, a: 0.001, d: 2.5, s: 0.9, r: 0.2, gain: 1.6 },
-  harp: { name: 'Harp', cat: 'Pluck', tags: ['acoustic', 'physical', 'bright'], osc: [], gen: { type: 'pluck', damp: 0.998, bright: 0.75, len: 3 }, cut: 9000, res: 0.6, envOct: 0, fdec: 0.3, a: 0.001, d: 3, s: 0.9, r: 0.4, gain: 1.7 },
-  koto: { name: 'Koto', cat: 'Pluck', tags: ['physical', 'eastern', 'bright'], osc: [], gen: { type: 'pluck', damp: 0.995, bright: 0.95, len: 1.8 }, cut: 9000, res: 0.6, envOct: 0, fdec: 0.3, a: 0.001, d: 1.8, s: 0.9, r: 0.2, gain: 1.8 },
+  harp: { name: 'Harp', cat: 'Pluck', tags: ['acoustic', 'physical', 'bright'], osc: [], gen: { type: 'pluck', damp: 0.998, bright: 0.75, len: 3 }, cut: 9000, res: 0.6, envOct: 0, fdec: 0.3, a: 0.001, d: 3, s: 0.9, r: 0.4, gain: 1.5 },
+  koto: { name: 'Koto', cat: 'Pluck', tags: ['physical', 'eastern', 'bright'], osc: [], gen: { type: 'pluck', damp: 0.995, bright: 0.95, len: 1.8 }, cut: 9000, res: 0.6, envOct: 0, fdec: 0.3, a: 0.001, d: 1.8, s: 0.9, r: 0.2, gain: 1.5 },
   synthpluck: { name: 'Synth Pluck', cat: 'Pluck', tags: ['analog', 'short', 'bright'], osc: [O('sawtooth'), O('square', 0, 7, 0.5)], cut: 600, res: 3, envOct: 3.5, fdec: 0.12, a: 0.001, d: 0.3, s: 0, r: 0.15 },
 
   // ------------------------------------------------------------------ MALLET

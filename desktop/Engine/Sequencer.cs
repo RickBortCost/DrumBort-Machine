@@ -31,7 +31,7 @@ public sealed class Project
         if (parts["userKits"] is JsonArray uk) lastUserKits = (JsonArray)uk.DeepClone();
         if (parts["userSounds"] != null || parts["userKits"] != null) Kits.SetUserKits(lastUserKits);
         for (int i = 0; i < 8; i++) if (parts[$"p{i}"] is JsonObject p) Slots[i] = Pattern.Parse(p);
-        if (parts["slot"] is JsonValue sv && sv.TryGetValue(out double sd)) Slot = Math.Clamp((int)sd, 0, 7);
+        if (J.TryD(parts["slot"], out double sd)) Slot = Math.Clamp((int)sd, 0, 7);
         if (parts["fx"] is JsonObject fx) Fx = Fx.Parse(fx);
         if (parts["devs"] is JsonArray devs) for (int i = 0; i < Devs.Length; i++) Devs[i] = DeviceDef.ParseChain(i < devs.Count ? devs[i] : null);
         if (parts["song"] is JsonObject song)

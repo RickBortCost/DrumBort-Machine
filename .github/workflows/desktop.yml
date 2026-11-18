@@ -54,6 +54,8 @@ jobs:
         run: node tools/export-dsp.mjs --check
       - name: Build
         run: dotnet build desktop -c Release
+      - name: Build app Windows (WPF, compilata anche su Linux)
+        run: dotnet build desktop/Win -c Release
       - name: Motore C# vs web app (voci, compressore, riverbero)
         run: |
           ./desktop/bin/Release/net8.0/DrumBortHost --render-voices voices.json
@@ -85,11 +87,29 @@ jobs:
       - name: Publish
         shell: bash
         run: |
+          # Windows: app nativa WPF (DrumBort.exe). macOS/Linux: host con finestra WebView.
           # Eseguibile singolo; su macOS la libreria audio resta accanto (si firma insieme all'eseguibile)
-          dotnet publish desktop -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=${{ matrix.bundle }} -p:DebugType=none -o "out/DrumBortHost-${{ matrix.rid }}"
+          proj=desktop; [ "${{ matrix.rid }}" = "win-x64" ] && proj=desktop/Win
+          dotnet publish $proj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=${{ matrix.bundle }} -p:EnableCompressionInSingleFile=true -p:DebugType=none -o "out/DrumBortHost-${{ matrix.rid }}"
           cp desktop/README.md "out/DrumBortHost-${{ matrix.rid }}/LEGGIMI.md"
           ls -la "out/DrumBortHost-${{ matrix.rid }}"
-          test -f "out/DrumBortHost-${{ matrix.rid }}/DrumBortHost" || test -f "out/DrumBortHost-${{ matrix.rid }}/DrumBortHost.exe"
+          test -f "out/DrumBortHost-${{ matrix.rid }}/DrumBortHost" || test -f "out/DrumBortHost-${{ matrix.rid }}/DrumBort.exe"
+      - name: Prova della finestra (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Apre la finestra con un progetto di prova, la salva in PNG ed esce (errore = codice ≠ 0)
+          $p = Start-Process -FilePath "out/DrumBortHost-win-x64/DrumBort.exe" -ArgumentList "--selftest", "$PWD\selftest.png" -PassThru
+          if (-not $p.WaitForExit(180000)) { $p.Kill(); Write-Error "La finestra non si chiude"; exit 1 }
+          Get-Content "$env:LOCALAPPDATA\DrumBort\drumbort.log" -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) { Write-Error "Codice di uscita $($p.ExitCode)"; exit 1 }
+          if (-not (Test-Path selftest.png)) { Write-Error "Istantanea mancante"; exit 1 }
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: selftest-windows
+          path: selftest.png
+          retention-days: 14
       - name: Zip (Windows)
         if: runner.os == 'Windows'
         shell: pwsh

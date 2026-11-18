@@ -27,6 +27,55 @@ public sealed class Hub
     int nextId;
 
     public Hub(AudioEngine? engine) { this.engine = engine; }
+
+    // -------------------------------------------------------------- interfaccia locale (app Windows)
+    /// <summary>Parti del progetto arrivate da un dispositivo (telefono, browser).</summary>
+    public event Action<JsonObject>? RemoteState;
+    /// <summary>Azioni arrivate da un dispositivo (play, stop, pad…).</summary>
+    public event Action<JsonObject>? RemoteOp;
+
+    /// <summary>Copia del progetto conservato dall'host (formato della web app).</summary>
+    public JsonObject Snapshot() { lock (cacheLock) return (JsonObject)cache.DeepClone(); }
+
+    /// <summary>Parti modificate dall'interfaccia locale: motore e dispositivi collegati.</summary>
+    public void LocalState(JsonObject parts, bool full = false)
+    {
+        MergeParts(parts);
+        var m = new JsonObject { ["t"] = "state", ["parts"] = parts.DeepClone() };
+        if (full) m["full"] = true;
+        _ = Broadcast(m, null);
+    }
+
+    /// <summary>Azione dell'interfaccia locale (op: play, stop, trig, prev…).</summary>
+    public void LocalOp(JsonObject op)
+    {
+        op["t"] = "op";
+        if (engine != null) { var o = (JsonObject)op.DeepClone(); engine.Post(() => Op(o)); }
+        _ = Broadcast((JsonObject)op.DeepClone(), null);
+    }
+
+    void MergeParts(JsonObject parts)
+    {
+        lock (cacheLock)
+            foreach (var (k, v) in parts)
+            {
+                // Librerie dei suoni: unione per id (Sound Lab e PC aggiungono, nessuno cancella quelli dell'altro)
+                if ((k == "userSounds" || k == "userPresets") && v is JsonArray add && cache[k] is JsonArray have)
+                {
+                    var ids = add.Select(x => J.S(x, "id", "")).ToHashSet();
+                    cache[k] = new JsonArray(have.Where(x => !ids.Contains(J.S(x, "id", ""))).Select(x => x!.DeepClone()).Concat(add.Select(x => x!.DeepClone())).ToArray());
+                }
+                else cache[k] = v?.DeepClone();
+            }
+        if (engine != null)
+        {
+            var copy = (JsonObject)parts.DeepClone();
+            lock (cacheLock)
+                foreach (var k in new[] { "userSounds", "userPresets" })
+                    if (copy.ContainsKey(k)) copy[k] = cache[k]?.DeepClone();
+            engine.Post(() => { engine.Seq.P.Apply(copy); engine.Seq.Sync(); });
+        }
+    }
     public bool Native => engine != null;
     public int Count => clients.Count;
 
@@ -99,31 +148,14 @@ public sealed class Hub
             case "state":
             {
                 if (m["parts"] is not JsonObject parts) return;
-                lock (cacheLock)
-                    foreach (var (k, v) in parts)
-                    {
-                        // Librerie dei suoni: unione per id (Sound Lab e PC aggiungono, nessuno cancella quelli dell'altro)
-                        if ((k == "userSounds" || k == "userPresets") && v is JsonArray add && cache[k] is JsonArray have)
-                        {
-                            var ids = add.Select(x => J.S(x, "id", "")).ToHashSet();
-                            var merged = new JsonArray(have.Where(x => !ids.Contains(J.S(x, "id", ""))).Select(x => x!.DeepClone()).Concat(add.Select(x => x!.DeepClone())).ToArray());
-                            cache[k] = merged;
-                        }
-                        else cache[k] = v?.DeepClone();
-                    }
-                if (engine != null)
-                {
-                    var copy = (JsonObject)parts.DeepClone();
-                    lock (cacheLock)
-                        foreach (var k in new[] { "userSounds", "userPresets" })
-                            if (copy.ContainsKey(k)) copy[k] = cache[k]?.DeepClone();
-                    engine.Post(() => { engine.Seq.P.Apply(copy); engine.Seq.Sync(); });
-                }
+                MergeParts(parts);
+                RemoteState?.Invoke((JsonObject)parts.DeepClone());
                 await Broadcast(m, c);
                 break;
             }
             case "op":
                 if (engine != null) { var op = (JsonObject)m.DeepClone(); engine.Post(() => Op(op)); }
+                RemoteOp?.Invoke((JsonObject)m.DeepClone());
                 await Broadcast(m, c);
                 break;
         }

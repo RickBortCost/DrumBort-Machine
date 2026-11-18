@@ -6,17 +6,29 @@ namespace DrumBort.Engine;
 
 static class J
 {
+    /// <summary>Numero da un valore JSON (anche creato in C# da int, long, float o bool).</summary>
+    public static bool TryD(JsonNode? v, out double d)
+    {
+        d = 0;
+        if (v is not JsonValue jv) return false;
+        if (jv.TryGetValue(out double x)) { d = x; return true; }
+        if (jv.TryGetValue(out int i)) { d = i; return true; }
+        if (jv.TryGetValue(out long l)) { d = l; return true; }
+        if (jv.TryGetValue(out float f)) { d = f; return true; }
+        if (jv.TryGetValue(out decimal m)) { d = (double)m; return true; }
+        return false;
+    }
     public static double D(JsonNode? n, string k, double def)
     {
         var v = n?[k];
-        if (v is JsonValue jv && jv.TryGetValue(out double d) && double.IsFinite(d)) return d;
+        if (TryD(v, out double d) && double.IsFinite(d)) return d;
         return def;
     }
     public static int I(JsonNode? n, string k, int def) => (int)Math.Round(D(n, k, def));
-    public static bool B(JsonNode? n, string k) { var v = n?[k]; return v is JsonValue jv && (jv.TryGetValue(out bool b) ? b : jv.TryGetValue(out double d) && d != 0); }
+    public static bool B(JsonNode? n, string k) { var v = n?[k]; return v is JsonValue jv && (jv.TryGetValue(out bool b) ? b : TryD(v, out double d) && d != 0); }
     public static string S(JsonNode? n, string k, string def) { var v = n?[k]; return v is JsonValue jv && jv.TryGetValue(out string? s) && s != null ? s : def; }
-    public static double? Opt(JsonNode? n, string k) { var v = n?[k]; return v is JsonValue jv && jv.TryGetValue(out double d) && double.IsFinite(d) ? d : null; }
-    public static double[] Nums(JsonNode? n) => n is JsonArray a ? a.Select(x => x is JsonValue v && v.TryGetValue(out double d) ? d : 0).ToArray() : Array.Empty<double>();
+    public static double? Opt(JsonNode? n, string k) { var v = n?[k]; return TryD(v, out double d) && double.IsFinite(d) ? d : null; }
+    public static double[] Nums(JsonNode? n) => n is JsonArray a ? a.Select(x => TryD(x, out double d) ? d : 0).ToArray() : Array.Empty<double>();
 }
 
 public sealed class StepOpt
@@ -157,7 +169,7 @@ public sealed class Pattern
             var orow = op != null && t < op.Count ? op[t] as JsonArray : null;
             for (int s = 0; s < N; s++)
             {
-                if (row != null && s < row.Count && row[s] is JsonValue v && v.TryGetValue(out double d)) p.Steps[t][s] = d >= 2 ? 2 : d > 0 ? 1 : 0;
+                if (row != null && s < row.Count && J.TryD(row[s], out double d)) p.Steps[t][s] = d >= 2 ? 2 : d > 0 ? 1 : 0;
                 if (orow != null && s < orow.Count) p.Opts[t][s] = StepOpt.Parse(orow[s]);
             }
             p.Tracks[t] = DrumTrack.Parse(tr != null && t < tr.Count ? tr[t] : null, N);
@@ -168,7 +180,7 @@ public sealed class Pattern
             p.Auto = new();
             foreach (var (k, v) in au)
                 if (v is JsonArray a)
-                    p.Auto[k] = Enumerable.Range(0, N).Select(i => i < a.Count && a[i] is JsonValue jv && jv.TryGetValue(out double d) ? (double?)Math.Clamp(d, 0, 1) : null).ToArray();
+                    p.Auto[k] = Enumerable.Range(0, N).Select(i => i < a.Count && J.TryD(a[i], out double d) ? (double?)Math.Clamp(d, 0, 1) : null).ToArray();
         }
         return p;
     }

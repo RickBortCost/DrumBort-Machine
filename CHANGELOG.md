@@ -2,6 +2,22 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.17.0] - 2026-11-18
+
+### Aggiunto
+- **DrumBort per Windows con interfaccia nativa** (WPF, `DrumBort.exe` nello zip Windows): un solo programma con motore audio C#, interfaccia e server per i telefoni. Prima fase:
+  - trasporto: play/stop, BPM (rotella o trascinamento), swing, pattern P1–P8, battute 1/2/4, kit, metronomo, posizione, misuratore master;
+  - tracce attive con colore, nome, mute, solo, volume, pan e livello; step della batteria (clic, trascinamento per dipingere, Shift o tasto destro = accento) e delle tracce synth;
+  - piano roll delle tracce synth (accordi su PAD e KEYS, durata trascinando, accento con Shift);
+  - Device View come Ableton: strumento, catena di effetti con manopole, attivatore, piega, menu, riordino trascinando, inserimento dalla Libreria, Canc e Ctrl+D, mixer della traccia;
+  - Libreria a sinistra (suoni per categoria e ricerca, kit, effetti), dialogo Nuove tracce come Logic (Ctrl+Alt+N), uscita audio, QR code per il telefono;
+  - annulla/ripeti, apri e salva progetti (stesso formato JSON della web app), salvataggio automatico;
+  - "INTERFACCIA COMPLETA" apre in una finestra a parte le funzioni non ancora native (session, arrangiamento, automazioni, macro, editor wavetable).
+- Su macOS e Linux resta l'host con la finestra WebView.
+
+### Corretto
+- Motore C#: i numeri interi nei progetti (creati da codice C#) vengono letti correttamente.
+
 ## [1.16.0] - 2026-11-18
 
 ### Modificato

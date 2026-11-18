@@ -27,7 +27,7 @@ public sealed class DeviceDef
                 foreach (var (k, v) in p)
                     if (v is JsonValue jv)
                     {
-                        if (jv.TryGetValue(out double num)) d.N[k] = num;
+                        if (J.TryD(jv, out double num)) d.N[k] = num;
                         else if (jv.TryGetValue(out string? s) && s != null) d.S[k] = s;
                     }
             list.Add(d);

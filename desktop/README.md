@@ -1,5 +1,7 @@
 # DrumBort Host (desktop)
 
+> **Windows**: lo zip contiene `DrumBort.exe`, l'app con **interfaccia nativa** (WPF) che include motore audio e server per i telefoni (progetto in [`Win/`](Win)). Le istruzioni qui sotto valgono per l'host di macOS e Linux; su Windows le opzioni utili sono `--no-audio` e `--port`.
+
 Applicazione per PC (Windows, macOS, Linux) che:
 
 - genera l'audio di DrumBort con un **motore nativo C#** (stessi suoni della web app);

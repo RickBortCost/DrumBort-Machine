@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "dgSpecHash": "+H4FQ8a8fjM=",
+  "success": true,
+  "projectFilePath": "/home/user/DrumBort-Machine/desktop/Win/DrumBort.Win.csproj",
+  "expectedPackageFiles": [
+    "/root/.nuget/packages/microsoft.win32.systemevents/6.0.0/microsoft.win32.systemevents.6.0.0.nupkg.sha512",
+    "/root/.nuget/packages/org.k2fsa.portaudio.runtime.linux-aarch64/1.0.6/org.k2fsa.portaudio.runtime.linux-aarch64.1.0.6.nupkg.sha512",
+    "/root/.nuget/packages/org.k2fsa.portaudio.runtime.linux-x64/1.0.6/org.k2fsa.portaudio.runtime.linux-x64.1.0.6.nupkg.sha512",
+    "/root/.nuget/packages/org.k2fsa.portaudio.runtime.osx-arm64/1.0.6/org.k2fsa.portaudio.runtime.osx-arm64.1.0.6.nupkg.sha512",
+    "/root/.nuget/packages/org.k2fsa.portaudio.runtime.osx-x64/1.0.6/org.k2fsa.portaudio.runtime.osx-x64.1.0.6.nupkg.sha512",
+    "/root/.nuget/packages/org.k2fsa.portaudio.runtime.win-x64/1.0.6/org.k2fsa.portaudio.runtime.win-x64.1.0.6.nupkg.sha512",
+    "/root/.nuget/packages/portaudiosharp2/1.0.6/portaudiosharp2.1.0.6.nupkg.sha512",
+    "/root/.nuget/packages/qrcoder/1.8.1/qrcoder.1.8.1.nupkg.sha512",
+    "/root/.nuget/packages/system.drawing.common/6.0.0/system.drawing.common.6.0.0.nupkg.sha512",
+    "/root/.nuget/packages/microsoft.windowsdesktop.app.ref/8.0.34/microsoft.windowsdesktop.app.ref.8.0.34.nupkg.sha512"
+  ],
+  "logs": []
+}

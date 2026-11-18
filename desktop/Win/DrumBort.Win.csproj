@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    DrumBort per Windows: interfaccia nativa WPF + motore audio C# + server per i telefoni,
+    in un solo programma. Condivide motore e server con DrumBortHost (cartella superiore).
+    Si compila anche da Linux/macOS (EnableWindowsTargeting); si esegue solo su Windows.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>DrumBort</AssemblyName>
+    <RootNamespace>DrumBort.Win</RootNamespace>
+    <Version>1.17.0</Version>
+    <Product>DrumBort Machine</Product>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+    <StartupObject>DrumBort.Win.Program</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="PortAudioSharp2" Version="1.0.6" />
+    <PackageReference Include="QRCoder" Version="1.8.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="System.IO" />
+    <Using Include="Microsoft.AspNetCore.Http" />
+    <Using Include="Microsoft.AspNetCore.Builder" />
+  </ItemGroup>
+
+  <!-- Motore audio, sequencer e server condivisi con DrumBortHost -->
+  <ItemGroup>
+    <Compile Include="../Audio/**/*.cs" Link="Shared/Audio/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="../Engine/**/*.cs" Link="Shared/Engine/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="../Host/**/*.cs" Exclude="../Host/AppWindow.cs" Link="Shared/Host/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- Web app per i telefoni e dati del motore -->
+  <ItemGroup>
+    <None Include="../../index.html;../../manifest.webmanifest" Link="wwwroot/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../css/**/*" Link="wwwroot/css/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../js/**/*" Link="wwwroot/js/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../icons/**/*" Link="wwwroot/icons/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Assets/*.json" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

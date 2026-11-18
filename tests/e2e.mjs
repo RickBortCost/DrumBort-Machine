@@ -510,6 +510,78 @@ async function featureTests(browser, url) {
   await context.close();
 }
 
+async function studioTests(browser, url) {
+  const name = browser.browserType().name();
+  console.log(`\n[${name}] Layout Studio (PC 1440×900)`);
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
+  await page.goto(url);
+  await page.waitForFunction(() => window.drumbort);
+  await page.click('#overlay');
+  await page.waitForFunction(() => drumbort.engine.ctx && drumbort.engine.ctx.state === 'running');
+  const L = await page.evaluate(() => ({ layout: document.querySelector('#app').dataset.layout, sw: document.documentElement.scrollWidth, sh: document.documentElement.scrollHeight,
+    vis: ['#browser', '#session', '#mixer', '#grid', '.side'].every((s) => document.querySelector(s).offsetParent !== null) }));
+  check('layout Studio automatico su PC', L.layout === 'studio' && L.vis, L.layout);
+  check('Studio senza scroll', L.sw <= 1440 && L.sh <= 900, `${L.sw}×${L.sh}`);
+
+  // Scena e clip
+  await page.click('.sx-scene[data-scene="2"]');
+  await page.waitForTimeout(300);
+  const sc = await page.evaluate(() => [drumbort.seq.playing, drumbort.state.session.map.join(''), drumbort.state.session.master]);
+  check('lancio scena P3 avvia la riproduzione', sc[0] && sc[1] === '222222222222' && sc[2] === 2, sc.join(' '));
+  await page.click('.sx-cell[data-t="0"][data-s="5"] [data-launch]');
+  const queued = await page.evaluate(() => drumbort.ui.queued[0]);
+  await page.waitForFunction(() => drumbort.state.session.map[0] === 5, null, { timeout: 8000 }).catch(() => {});
+  const launched = await page.evaluate(() => [drumbort.state.session.map[0], drumbort.seq.pattern.steps[0] === drumbort.state.slots[5].steps[0]]);
+  check('clip in coda e lanciata al giro di battuta', queued === 5 && launched[0] === 5 && launched[1], `coda ${queued}, ora ${launched[0]}`);
+  const live = await page.waitForFunction(() => document.querySelector('.sx-cell[data-t="0"][data-s="5"]').classList.contains('live'), null, { timeout: 3000 }).then(() => true).catch(() => false);
+  check('cella in riproduzione evidenziata', live);
+  await page.click('.sx-stop[data-stop="3"]');
+  await page.waitForFunction(() => drumbort.state.session.map[3] === -1, null, { timeout: 8000 }).catch(() => {});
+  check('stop traccia', (await page.evaluate(() => drumbort.state.session.map[3])) === -1);
+
+  // Selezione clip → editor
+  await page.click('.sx-cell[data-t="9"][data-s="4"] [data-pick]');
+  const pk = await page.evaluate(() => [drumbort.state.slot, drumbort.ui.view, drumbort.ui.ssel]);
+  check('selezione clip apre l\'editor giusto', pk[0] === 4 && pk[1] === 'synth' && pk[2] === 1, pk.join(' '));
+
+  // Mixer e livelli
+  await page.evaluate(() => { const f = document.querySelector('.mx-strip[data-i="1"] [data-p="vol"]'); f.value = 0.3; f.dispatchEvent(new Event('input', { bubbles: true })); });
+  const vol = await page.evaluate(() => { const m = drumbort.state.session.map[1], s = m >= 0 ? m : drumbort.state.session.master; return drumbort.state.slots[s].tracks[1].vol; });
+  check('fader del mixer', vol === 0.3, `${vol}`);
+  await page.waitForTimeout(500);
+  check('indicatori di livello attivi', await page.evaluate(() => [...document.querySelectorAll('.mx-meter i')].some((e) => /scaleY\((0\.0[1-9]|0\.[1-9]|1)/.test(e.style.transform))));
+
+  // Browser
+  await page.fill('#bwSearch', 'supersaw');
+  await page.click('.bw-item[data-preset="supersaw"]');
+  check('browser assegna il suono alla traccia', (await page.evaluate(() => drumbort.state.slots[4].synth.tracks[1].preset)) === 'supersaw');
+  await page.fill('#bwSearch', '');
+  await page.evaluate(() => document.activeElement.blur());
+
+  // Scorciatoie e stop (non attive mentre si scrive in un campo)
+  await page.keyboard.press('2');
+  const q2 = await page.evaluate(() => drumbort.ui.queued.every((v) => v === 1) || drumbort.state.session.map.every((v) => v === 1));
+  await page.keyboard.press('.');
+  check('scorciatoie 1-8 e "."', q2 && (await page.evaluate(() => drumbort.ui.queued.every((v) => v === -1) || drumbort.state.session.map.every((v) => v === -1))));
+  await page.click('#play');
+
+  // Menu a sezioni e cambio layout
+  await page.click('#menuBtn');
+  const secs = await page.evaluate(() => [...document.querySelectorAll('#menu .msec h3')].map((h) => h.textContent).join('|'));
+  check('menu a sezioni', secs.split('|').length === 4, secs);
+  await page.click('#menu [data-act="layout"]');
+  check('passaggio al layout compatto', (await page.evaluate(() => document.querySelector('#app').dataset.layout)) === 'compact');
+  await page.click('#layoutBtn');
+  check('ritorno al layout Studio', (await page.evaluate(() => document.querySelector('#app').dataset.layout)) === 'studio');
+
+  check('nessun errore o 404', errors.length === 0, errors.join(' | '));
+  await context.close();
+}
+
 async function audioTests(browser, url) {
   console.log(`\n[${browser.browserType().name()}] Audio (render offline di tutte le voci)`);
   const { context, page } = await openApp(browser, url, VIEWPORTS[3]);
@@ -632,6 +704,7 @@ for (const name of BROWSERS) {
     await functionalTests(browser, url);
     await synthTests(browser, url);
     await featureTests(browser, url);
+    await studioTests(browser, url);
     await audioTests(browser, url);
     await pwaTests(browser, url);
   } catch (err) {

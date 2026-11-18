@@ -370,7 +370,7 @@ export class Sequencer {
       const played = scheduleTick(this.engine, pat, pt, time, { skip: this.skip, muteD: this.muteD, muteS: this.muteS });
       if (this.metronome && this.tick % 4 === 0) this.engine.click(time, this.tick % STEPS === 0);
       if (this.onTick) this.onTick(this.tick, this.nextTime, sd, played);
-      const entry = { tick: pt, time, pattern: this.pattern, meta: this.meta };
+      const entry = { tick: pt, abs: this.tick, time, pattern: this.pattern, meta: this.meta };
       this.queue.push(entry);
       if (this.queue.length > 64) this.queue.shift();
       this.recent.push(entry);

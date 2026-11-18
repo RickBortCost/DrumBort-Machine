@@ -44,6 +44,8 @@ Il nome del suono nella testa dei parametri synth apre la **libreria**: 59 strum
 
 ## Layout Studio (PC)
 
+Aspetto da workstation: pannelli ardesia con accenti arancio e verdi (colori ispirati a FL Studio), rack dei canali con step a gruppi di 4, contatore BAR · BEAT · STEP nella barra di trasporto.
+
 Su computer (finestra di almeno 1000×600) l'app si apre nel layout **Studio**, pensato per mouse e tastiera e organizzato come una *session view*:
 
 - **Browser** (sinistra): suoni per categoria e ricerca; kit. Un clic assegna il suono alla traccia synth selezionata o il kit al pattern.

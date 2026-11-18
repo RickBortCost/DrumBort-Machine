@@ -958,3 +958,139 @@ input[type="range"]::-moz-range-thumb {
   .ld-play { grid-template-columns: 160px 1fr; }
 }
 .lab-mine .lab-row .btn { flex: 1; }
+
+
+/* ==========================================================================
+   Tema DAW (v2.0): ardesia blu-grigio con accenti arancio e verdi, ispirato alle
+   workstation desktop. Sostituisce l'aspetto "hardware vintage".
+   ========================================================================== */
+:root {
+  --bg: #20262b;
+  --panel: #2f373e;
+  --panel-2: #3a434b;
+  --edge: #181d21;
+  --ink: #d5dde3;
+  --ink-dim: #8a99a4;
+  --lcd: #11171b;
+  --lcd-ink: #a6e36c;
+  --red: #ff5b4f;
+  --orange: #ff9b3d;
+  --yellow: #ffc566;
+  --cream: #cbd5dc;
+  --cyan: #67c8ff;
+  --green: #9bd65a;
+  --radius: 3px;
+  --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+html, body { background: var(--bg); }
+body { font-size: 12px; }
+
+/* Pulsanti piatti con leggero rilievo */
+.btn {
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, #4a545d, #3b444c);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 1px 0 rgba(0,0,0,.35);
+  color: var(--ink);
+  letter-spacing: .02em;
+}
+.btn:hover { background: linear-gradient(180deg, #535e68, #424c55); }
+.btn:active { transform: none; box-shadow: inset 0 1px 3px rgba(0,0,0,.5); }
+.btn.on {
+  background: linear-gradient(180deg, #5b4a35, #48392a);
+  border-color: var(--orange);
+  color: #ffd29e;
+  box-shadow: inset 0 0 0 1px rgba(255,155,61,.35), 0 0 6px rgba(255,155,61,.25);
+}
+.play { color: var(--green); }
+.play.on { background: linear-gradient(180deg, #3e5a2c, #2e4421); border-color: var(--green); color: #d9ffb3; }
+.rec { color: #9a5a55; }
+.rec.on { background: linear-gradient(180deg, #6a2a24, #4d1d19); border-color: var(--red); color: #ffd0cb; }
+
+/* Display: verde su nero */
+.lcd { border-radius: 2px; background: var(--lcd); border: 1px solid #0a0d10; box-shadow: inset 0 1px 4px rgba(0,0,0,.8); color: var(--lcd-ink); text-shadow: 0 0 5px rgba(166,227,108,.45); font-family: ui-monospace, "SF Mono", Consolas, monospace; }
+.lcd small { color: #5f8a3e; }
+.lcd.pos { min-width: 92px; display: none; }
+.lcd.pos output { font-size: 16px; letter-spacing: .04em; }
+
+.sel { border-radius: var(--radius); border-color: var(--edge); background-color: var(--panel-2); }
+.panel { border-radius: 4px; background: var(--panel); border-color: var(--edge); box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+.bar { background: linear-gradient(180deg, #3a434b, #2c343a); border-bottom: 1px solid var(--edge); }
+
+/* Etichette tracce */
+.lbl, .slbl { background: #3a434b; border-color: var(--edge); }
+.lbl.sel, .slbl.sel { background: #4a4234; border-left-color: var(--orange); }
+.lbl em { color: var(--cyan); }
+
+/* Step (rack dei canali): gruppi di 4 alternati grigio / rosso spento, step attivi chiari */
+.step { --c: transparent; border-radius: 2px; border: 1px solid #171c20; box-shadow: inset 0 1px 0 rgba(255,255,255,.07); background: linear-gradient(180deg, #56606a, #48515a); }
+.step.g1, .step.g3 { background: linear-gradient(180deg, #6a4f52, #5a4245); }
+.step::after { display: none; }
+.step.on { background: linear-gradient(180deg, #e9eef1, #c6d0d7); box-shadow: inset 0 1px 0 #fff, 0 0 4px rgba(233,238,241,.25); }
+.step.acc { background: linear-gradient(180deg, #ffc27a, var(--orange)); box-shadow: inset 0 1px 0 #ffe2bd, 0 0 6px rgba(255,155,61,.45); }
+.step.ph { outline: 2px solid var(--green); outline-offset: -2px; }
+.step.opt::before { border-right-color: var(--cyan); border-bottom-color: var(--cyan); }
+
+/* Pad */
+.pad { border-radius: 4px; }
+
+/* Layout Studio: finestre con barra del titolo come in una DAW */
+@media (min-width: 1000px) and (min-height: 600px) {
+  #app[data-layout="studio"] .lcd.pos { display: flex; }
+  #app[data-layout="studio"] { background: #1b2025; }
+  #app[data-layout="studio"] .browser::before,
+  #app[data-layout="studio"] .session::before,
+  #app[data-layout="studio"] .grid::before {
+    display: block; flex: 0 0 auto; margin: -6px -6px 4px; padding: 4px 8px;
+    background: linear-gradient(180deg, #4a545d, #3c454d); border-bottom: 1px solid var(--edge);
+    border-radius: 4px 4px 0 0; color: #c4ced5; font-size: 10px; font-weight: 600; letter-spacing: .14em;
+  }
+  #app[data-layout="studio"] .browser::before { content: "BROWSER"; }
+  #app[data-layout="studio"] .session::before { content: "SESSION · ARRANGEMENT"; }
+  #app[data-layout="studio"] .grid { padding-top: 0; }
+  #app[data-layout="studio"] .grid::before { content: "CHANNEL RACK"; grid-column: 1 / -1; margin: 0 0 4px; border-radius: 4px 4px 0 0; }
+  .bw-item { border-radius: 2px; background: #333b42; }
+  .bw-item:hover { background: #3f4952; border-color: transparent; }
+  .bw-item b::before { content: "▸ "; color: var(--ink-dim); }
+  .sx-cell { border-radius: 2px; background: #2a3137; border-color: #171c20; }
+  .sx-th { border-radius: 2px; background: #3a434b; border-color: var(--edge); }
+  .sx-scene, .sx-stop, .sx-stopall { border-radius: 2px; background: #3a434b; border-color: var(--edge); }
+  .sx-scene.master { color: var(--orange); border-color: var(--orange); }
+  .ar-ruler { background: #3a434b; }
+  .ar-cell { border-radius: 2px; background: #2a3137; }
+  .ar-head { border-left-color: var(--green); background: rgba(155,214,90,.12); }
+
+  /* Mixer: strisce scure, misuratori verdi, selezione arancio */
+  .mixer { background: #262d33; }
+  .mx-strip { border-radius: 3px; background: linear-gradient(180deg, #353e45, #2a3137); border: 1px solid #171c20; border-top: 3px solid var(--tc, var(--edge)); }
+  .mx-strip.picked { background: linear-gradient(180deg, #4a4234, #36302a); box-shadow: inset 0 0 0 1px var(--orange); }
+  .mx-meter { width: 7px; background: #0e1215; }
+  .mx-meter i { background: linear-gradient(0deg, #5fbf3a 0%, #b8e04e 70%, #ffb13d 88%, #ff5b4f 100%); }
+}
+
+/* Fogli e menu */
+.sheet-box { border-radius: 6px; background: var(--panel); border-color: var(--edge); }
+.sheet-title { color: var(--orange); }
+.toast { background: #11171b; border-color: var(--edge); color: var(--lcd-ink); }
+
+/* Sound Lab */
+.lab { background: var(--bg); }
+.lab-title span { color: var(--orange); }
+.ld-wave { background: #11171b; border-color: var(--edge); }
+.ld-pad { background: linear-gradient(180deg, #ffbf73, var(--orange) 60%, #c86b1c); border-radius: 6px; }
+
+/* Cursori: binario scuro, manopola grigia con tacca arancio */
+input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: #12171b; box-shadow: inset 0 1px 1px #000; }
+input[type="range"]::-webkit-slider-thumb {
+  width: 22px; height: 24px; margin-top: -10px; border-radius: 3px; border: 1px solid #12171b;
+  background: linear-gradient(90deg, transparent 45%, var(--orange) 45% 55%, transparent 55%), linear-gradient(180deg, #8e9aa4, #5d6870);
+  box-shadow: 0 1px 2px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.25);
+}
+input[type="range"]::-moz-range-track { height: 4px; border-radius: 2px; background: #12171b; }
+input[type="range"]::-moz-range-thumb {
+  width: 22px; height: 24px; border-radius: 3px; border: 1px solid #12171b;
+  background: linear-gradient(90deg, transparent 45%, var(--orange) 45% 55%, transparent 55%), linear-gradient(180deg, #8e9aa4, #5d6870);
+}
+/* Bersagli touch ≥ 44 px anche con il carattere di sistema (più stretto del monospazio) */
+.keyrow .btn, #sparams .btn, .keyrow .sel { min-width: 44px; }
+.keyrow .sel.key { min-width: 56px; }

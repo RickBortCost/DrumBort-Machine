@@ -452,7 +452,17 @@ function clearPlayhead() {
 const pagerBtns = $$('.pager .page');
 let litPage = -1;
 
+const posVal = document.getElementById('posVal');
+let lastPos = '';
+/** Contatore di posizione stile DAW (battuta · quarto · sedicesimo). */
+function showPos(tick) {
+  const t = Math.max(0, tick);
+  const s = `${Math.floor(t / 16) + 1}.${Math.floor((t % 16) / 4) + 1}.${(t % 4) + 1}`;
+  if (s !== lastPos) { lastPos = s; posVal.textContent = s; }
+}
+
 function showTick(e) {
+  showPos(e.abs ?? e.tick);
   // Song mode: la vista segue il pattern in riproduzione
   if (state.song.on && e.pattern !== pat()) {
     const i = state.slots.indexOf(e.pattern);
@@ -739,6 +749,7 @@ function startPlayback(fromRemote = false) {
 }
 
 function stopPlayback(fromRemote = false) {
+  showPos(0);
   if (!fromRemote && seq.playing) remoteOp('stop');
   seq.stop();
   ui.queued.fill(null);

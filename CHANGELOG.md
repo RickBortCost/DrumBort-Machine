@@ -2,6 +2,14 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.10.0] - 2026-11-18
+
+### Modificato
+- **Nuovo aspetto da workstation (DAW)**, colori ispirati a FL Studio: pannelli ardesia blu-grigio, accenti arancio e verdi, pulsanti piatti, display verdi, carattere di sistema.
+- **Rack dei canali**: step a gruppi di 4 alternati grigio / rosso spento, step attivi chiari, accenti arancio, playhead verde.
+- Layout Studio: barre del titolo sui pannelli (Browser, Session · Arrangement, Channel Rack), mixer con misuratori verdi e selezione arancio, **contatore di posizione** BAR · BEAT · STEP nella barra di trasporto.
+- Stesso tema nel Sound Lab del telefono.
+
 ## [1.9.1] - 2026-11-18
 
 ### Modificato

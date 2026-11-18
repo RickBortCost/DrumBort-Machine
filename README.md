@@ -42,6 +42,15 @@ Drum machine e groovebox per il web: step sequencer 16 × 8, pad live, una libre
 
 Il nome del suono nella testa dei parametri synth apre la **libreria**: 59 strumenti in 13 categorie (Bass, Lead, Pad, Keys, Piano, Organ, Strings, Brass, Pluck, Mallet, Bell, Choir, FX), ricerca per nome o tag (es. *warm*, *fm*, *vintage*), preferiti ★ e ascolto al tocco. I suoni sono tutti sintetizzati: piano additivo, corde pizzicate (Karplus-Strong), organo a drawbar, cori a formanti, FM, sottrattiva con LFO e rumore. La libreria si ispira al flusso di lavoro dei *rompler* (sfoglia, ascolta, assegna) senza riprodurne nomi, grafica o suoni.
 
+## Synth wavetable
+
+Il motore wavetable (categoria **Wavetable** della libreria, editor ✎ nei parametri synth) segue l'approccio dei grandi synth wavetable software con un'implementazione e un'interfaccia originali:
+
+- **3 oscillatori** con morph continuo tra i frame di 7 tabelle generate (Analog, Sync, Vocal, Digital, Additive, Growl, FM), semitoni, fine, livello; **unisono** fino a 3 voci sull'oscillatore 1; **rumore**.
+- **2 filtri** LP/BP/HP/Notch in serie o in parallelo, con **drive**.
+- **Modulazione**: inviluppo dedicato, 2 LFO (liberi o a tempo), **step sequencer** a 16 passi; matrice a 6 slot verso posizione wavetable, cutoff, pitch, volume, risonanza.
+- Le modifiche restano nel pattern; **Salva come preset** le aggiunge alla libreria (categoria Utente).
+
 ## Performance
 
 La vista **PRF** (pulsante vista: DRM▸ → SYN▸ → PRF▸) trasforma l'app in uno strumento dal vivo:
@@ -129,6 +138,8 @@ js/generate.js          euclideo, variazioni, fill
 js/recorder.js          registrazione uscita e microfono
 js/midifile.js          export MIDI
 js/projects.js          progetti e link di condivisione
+js/wavetable.js         motore wavetable, tabelle e preset
+js/waveeditor.js        editor wavetable
 js/ui.js                interfaccia, salvataggio, undo, song, PWA
 js/export.js            render offline e codifica WAV
 js/midi.js              Web MIDI (note e clock)

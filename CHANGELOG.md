@@ -2,7 +2,16 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
-## [1.3.0] - 2026-11-18
+## [1.4.0] - 2026-11-18
+
+### Aggiunto
+- **Synth wavetable** (nuovo motore): 3 oscillatori con morph continuo della posizione in 7 tabelle generate (Analog, Sync, Vocal, Digital, Additive, Growl, FM), unisono fino a 3 voci, rumore, 2 filtri LP/BP/HP/Notch in serie o parallelo con drive, inviluppo di modulazione, 2 LFO liberi o a tempo, step sequencer di modulazione a 16 passi e matrice a 6 slot (posizione wavetable, cutoff, pitch, volume, risonanza).
+- **16 preset wavetable** nella nuova categoria Wavetable: Growl Bass, Talking Bass, Neuro Bass, Sub Wobble, Step Filter Bass, Hoover Lead, Sync Sweep Lead, Formant Lead, Digital Pluck, Glass Keys, Morph Bell, Evolving Pad, Shimmer Pad, Trance Gate Pad, Vocal Morph Choir, Wavetable Riser.
+- **Editor wavetable** (✎ nei parametri synth): schede OSC, FILTRI, ENV, LFO, STEP, MOD con display della forma d'onda; le modifiche restano nel pattern (nome con *) e si possono salvare come preset nella categoria Utente della libreria.
+- Macro **WAVE** nella pagina MOD: sposta la posizione wavetable della traccia.
+- I preset utente viaggiano nei progetti, nell'export JSON e nei link di condivisione.
+
+
 
 ### Aggiunto
 - **Libreria suoni**: 59 strumenti in 13 categorie (Bass, Lead, Pad, Keys, Piano, Organ, Strings, Brass, Pluck, Mallet, Bell, Choir, FX) con ricerca per nome/tag, preferiti e ascolto immediato. Nuovi motori: piano additivo, corde pizzicate (Karplus-Strong), organo a drawbar, formanti per cori e voci, LFO, strati di rumore, inviluppi di pitch.
@@ -109,6 +118,7 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); vers
 - Layout touch per iPhone e iPad (portrait/landscape), PWA offline.
 - Deploy automatico su GitHub Pages.
 
+[1.4.0]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.1.2...v1.2.0

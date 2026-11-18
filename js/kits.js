@@ -463,4 +463,38 @@ export const KITS = [
   },
 ];
 
-export const kitById = (id) => KITS.find((k) => k.id === id) || KITS[0];
+export const kitById = (id) => findKit(id) || KITS[0];
+
+// =====================================================================
+// Kit utente (composti da voci di kit diversi)
+// =====================================================================
+// def = { id: 'u:…', name, crush: 0|bit, map: [{ kit, track }] × 8 }
+
+export const USER_KITS = [];
+
+/** Costruisce un kit utilizzabile dal motore a partire dalla sua definizione. */
+export function buildUserKit(def) {
+  const base = KITS.find((k) => k.id === (def.map[0] && def.map[0].kit)) || KITS[0];
+  return {
+    id: def.id, name: def.name, user: true, def,
+    bpm: base.bpm, swing: base.swing,
+    crush: def.crush || undefined, lp: def.crush ? 12000 : undefined,
+    demo: base.demo,
+    tracks: def.map.map((m, i) => {
+      const src = (KITS.find((k) => k.id === m.kit) || base).tracks[m.track] || base.tracks[i];
+      return { ...src };
+    }),
+  };
+}
+
+/** Sostituisce l'elenco dei kit utente. */
+export function setUserKits(defs) {
+  USER_KITS.length = 0;
+  for (const d of defs || []) {
+    if (!d || typeof d.id !== 'string' || !Array.isArray(d.map) || d.map.length !== 8) continue;
+    USER_KITS.push(buildUserKit(d));
+  }
+}
+
+export const findKit = (id) => KITS.find((k) => k.id === id) || USER_KITS.find((k) => k.id === id) || null;
+export const allKits = () => KITS.concat(USER_KITS);

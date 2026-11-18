@@ -619,6 +619,8 @@ export function initSynthUI(app) {
     openLibrary(cat) { library.open(ui.ssel || 0, cat); },
     showTick,
     clearPlayhead,
+    noteOn: (id, k, n, ch, vel) => noteOn(id, k, n, ch, vel),
+    noteOff: (id) => noteOff(id),
     onMidiRaw,
     clear() { syn().tracks.forEach((t) => { t.steps = t.steps.map(() => null); }); },
     demo() {

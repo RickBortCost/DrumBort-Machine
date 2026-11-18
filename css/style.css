@@ -1094,3 +1094,21 @@ input[type="range"]::-moz-range-thumb {
 /* Bersagli touch ≥ 44 px anche con il carattere di sistema (più stretto del monospazio) */
 .keyrow .btn, #sparams .btn, .keyrow .sel { min-width: 44px; }
 .keyrow .sel.key { min-width: 56px; }
+
+
+/* ----- Piano roll ----- */
+.piano-sheet { align-items: center; }
+.piano-box { width: min(1200px, 100% - 16px); height: min(860px, 100dvh - 24px); max-height: none; gap: 6px; }
+.piano-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.piano-head .sheet-title { margin-right: auto; }
+.pr-tracks .btn { border-top: 3px solid var(--tc); min-width: 64px; }
+.pr-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--edge); border-radius: 3px; background: #1b2025; touch-action: pan-y; }
+.pr-wrap canvas, .pr-lane { display: block; touch-action: none; cursor: crosshair; }
+.pr-lane-wrap { flex: 0 0 auto; overflow: hidden; border: 1px solid var(--edge); border-radius: 3px; background: #1b2025; }
+.pr-lane { height: 28px; }
+.kb-btn { display: none; }
+@media (min-width: 1000px) and (min-height: 600px) { #app[data-layout="studio"] .kb-btn { display: inline-flex; align-items: center; justify-content: center; } }
+/* Testa dei parametri synth: nome del suono su una riga, pulsanti sotto (spazio per ROLL) */
+.sparams .params-head { flex-wrap: wrap; }
+.sparams .params-head .preset { flex: 1 1 100%; }
+.sparams .params-head .btn.sm { flex: 1 1 0; min-width: 44px; padding: 0 4px; }

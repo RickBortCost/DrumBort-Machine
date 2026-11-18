@@ -54,6 +54,7 @@ Su computer (finestra di almeno 1000×600) l'app si apre nel layout **Studio**, 
 - **Arrangement** (pulsante ARRANGE o **Tab**): timeline tracce × battute. **● REC ARR** registra i lanci della session battuta per battuta; **▶ ARR** riproduce l'arrangiamento (un lancio manuale torna alla session, come in Live). Le celle si dipingono con il pattern selezionato (trascinando), la riga TEMPO sceglie il pattern che dà tempo e swing, il righello fissa il punto di partenza; + BAR, − BAR, ×2, DA SONG (converte la catena del song mode), SVUOTA.
 - **Editor** (sotto le clip): la griglia step della batteria o le corsie note del synth per la clip selezionata.
 - **Parametri e pad** (destra), **mixer** (in basso) con fader, pan, mandate, mute/solo e indicatori di livello.
+- **Piano roll** delle tracce synth (ROLL o **P**) e **tastiera del computer come tastiera musicale** (⌨: A–L note, W E T Y U O P diesis, Z/X ottava).
 - Tastiera: **1-8** lanciano le scene, **.** ferma tutto, **Tab** session/arrangement, **W** synth wavetable, **Spazio** play/stop, **Ctrl/Cmd+Z** annulla.
 
 Il pulsante **▦** nella barra (o Menu → Layout) passa tra Studio e layout compatto.

@@ -612,6 +612,30 @@ async function studioTests(browser, url) {
   await page.click('#play');
   await page.keyboard.press('Tab');
 
+  // Piano roll: P apre, clic+trascina crea una nota lunga, clic la elimina
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await page.keyboard.press('p');
+  const prOpen = await page.waitForFunction(() => !document.querySelector('#pianoSheet').hidden, null, { timeout: 2000 }).then(() => true).catch(() => false);
+  await page.click('#prTracks [data-prk="1"]');
+  await page.click('[data-pr="clear"]');
+  const prb = await page.locator('#prWrap').boundingBox();
+  const prCol = await page.evaluate(() => Math.max(28, Math.floor((document.querySelector('#prWrap').clientWidth - 56) / 16)));
+  const pry = prb.y + 100;
+  await page.mouse.move(prb.x + 54 + prCol * 2 + 5, pry); await page.mouse.down();
+  await page.mouse.move(prb.x + 54 + prCol * 5 + 5, pry, { steps: 4 }); await page.mouse.up();
+  const prNote = await page.evaluate(() => { const st = drumbort.state.slots[drumbort.state.slot].synth.tracks[1].steps[2]; return st && [st.g, st.n]; });
+  check('piano roll: nota creata con durata trascinata', prOpen && prNote && prNote[0] === 4, JSON.stringify(prNote));
+  await page.mouse.click(prb.x + 54 + prCol * 2 + 8, pry);
+  check('piano roll: clic sulla nota la elimina', await page.evaluate(() => drumbort.state.slots[drumbort.state.slot].synth.tracks[1].steps[2] === null));
+  // Tastiera del computer come tastiera musicale
+  await page.click('[data-pr="kb"]');
+  const prPlays = await page.evaluate(() => { window.__n = 0; const o = drumbort.engine.playSynth.bind(drumbort.engine); drumbort.engine.playSynth = (...a) => { window.__n++; return o(...a); }; return 0; });
+  await page.keyboard.down('a'); await page.keyboard.up('a'); await page.keyboard.down('d'); await page.keyboard.up('d');
+  check('tastiera del computer suona il synth', (await page.evaluate(() => window.__n)) >= 2 + prPlays, `${await page.evaluate(() => window.__n)}`);
+  await page.click('[data-pr="kb"]');
+  await page.keyboard.press('Escape');
+
   // Editor wavetable raggiungibile da ovunque: pulsante WT, tasto W, scelta traccia
   await page.keyboard.press('w');
   const wk = await page.evaluate(() => !document.querySelector('#waveSheet').hidden);

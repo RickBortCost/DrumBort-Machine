@@ -46,6 +46,7 @@
         </div>
         <button id="layoutBtn" class="btn sm" aria-label="Layout Studio (PC)" aria-pressed="false" title="Layout Studio">▦</button>
         <span id="remoteBadge" class="remote-badge" hidden></span>
+        <button id="kbBtn" class="btn sm kb-btn" aria-label="Tastiera del computer come tastiera musicale" aria-pressed="false" title="Tastiera musicale (A–L)">⌨</button>
         <button id="wtBtn" class="btn sm wt" aria-label="Synth wavetable (editor stile Massive)" aria-haspopup="dialog" title="Synth wavetable (W)">WT</button>
         <button id="menuBtn" class="btn sm" aria-label="Menu" aria-haspopup="dialog">☰</button>
         <button id="drawerBtn" class="btn sm" aria-label="Pannello pad e strumenti" aria-expanded="false">◧</button>
@@ -122,6 +123,7 @@
           <button id="smuteBtn" class="btn sm ms" aria-label="Mute" aria-pressed="false">M</button>
           <button id="ssoloBtn" class="btn sm ms" aria-label="Solo" aria-pressed="false">S</button>
           <button id="sedBtn" class="btn sm wt" aria-label="Editor wavetable" aria-haspopup="dialog">WT</button>
+          <button id="srollBtn" class="btn sm" aria-label="Piano roll" aria-haspopup="dialog" title="Piano roll (P)">ROLL</button>
           <button id="sarpBtn" class="btn sm" aria-label="Arpeggiatore" aria-haspopup="dialog" aria-pressed="false">ARP</button>
           <button id="spgBtn" class="btn sm" aria-label="Pagina parametri">MOD</button>
         </div>
@@ -356,6 +358,21 @@
         </div>
       </div>
       <button class="btn close" data-close>Chiudi</button>
+    </div>
+  </div>
+
+  <div id="pianoSheet" class="sheet piano-sheet" role="dialog" aria-modal="true" aria-labelledby="pianoTitle" hidden>
+    <div class="sheet-box piano-box">
+      <div class="piano-head">
+        <div class="sheet-title" id="pianoTitle">PIANO ROLL</div>
+        <div id="prTracks" class="seg pr-tracks" role="group" aria-label="Traccia"></div>
+        <button class="btn sm" data-pr="kb" aria-pressed="false" title="Tastiera del computer come tastiera musicale">⌨ TASTIERA</button>
+        <button class="btn sm" data-pr="clear">SVUOTA</button>
+        <button class="btn sm" data-close>CHIUDI</button>
+      </div>
+      <div id="prWrap" class="pr-wrap"><canvas id="prCanvas" aria-label="Griglia note"></canvas></div>
+      <div class="pr-lane-wrap"><canvas id="prLane" class="pr-lane" aria-label="Accento e slide"></canvas></div>
+      <small class="hint">Clic: nota (trascina a destra per la durata) · clic su una nota: elimina · trascina in verticale: sposta · bordo destro: durata · Shift+clic: accento · tasti a sinistra: ascolto</small>
     </div>
   </div>
 

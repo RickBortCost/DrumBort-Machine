@@ -2,6 +2,15 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.11.0] - 2026-11-18
+
+### Aggiunto
+- **Piano roll** per le tracce synth (pulsante ROLL o tasto **P**): tastiera verticale con ascolto, scala e tonica evidenziate, note colorate per traccia con nome, playhead. Clic per creare (trascinando a destra si allunga), clic su una nota per eliminarla, trascinamento verticale per spostarla, bordo destro per la durata, Shift+clic per l'accento, corsia di accento e slide (BASS/LEAD). Su PAD/KEYS le note sullo stesso step formano un accordo.
+- **Tastiera del computer come tastiera musicale** (pulsante ⌨ nel layout Studio o nel piano roll): A–L suonano la scala cromatica, W E T Y U O P i diesis, Z/X cambiano ottava; con REC le note vengono registrate.
+
+### Modificato
+- Testa dei parametri synth su due righe (nome del suono, poi M S WT ROLL ARP MOD).
+
 ## [1.10.0] - 2026-11-18
 
 ### Modificato

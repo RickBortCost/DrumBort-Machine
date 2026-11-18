@@ -20,6 +20,7 @@ import { composePattern, SESSION_TRACKS, normalizeSession, normalizeArr, followT
 import { initStudio } from './studio.js';
 import { initRemote, hostInfo } from './remote.js';
 import { initLab, isSoundPack } from './lab.js';
+import { initPianoRoll } from './pianoroll.js';
 import { decodeShare } from './projects.js';
 import { fillPattern } from './generate.js';
 
@@ -34,6 +35,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const QS = new URLSearchParams(location.search);
 const LAB = QS.has('lab') || (!QS.has('full') && matchMedia('(pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px)').matches);
 let lab = null;
+let piano = null;       // piano roll (pianoroll.js)
 
 const engine = new Engine();
 const seq = new Sequencer(engine);
@@ -484,6 +486,7 @@ function showTick(e) {
     pagerBtns.forEach((b) => b.classList.toggle('lit', +b.dataset.page === page));
   }
   if (synthUI) synthUI.showTick(e);
+  if (piano) piano.tick(e.tick);
 }
 
 function frame() {
@@ -764,13 +767,19 @@ function stopPlayback(fromRemote = false) {
 const togglePlay = () => (seq.playing ? stopPlayback() : startPlayback());
 $('#play').addEventListener('click', togglePlay);
 
+document.addEventListener('keyup', (e) => { if (piano) piano.key(e, false); });
 document.addEventListener('keydown', (e) => {
+  if (piano && piano.key(e, true)) { e.preventDefault(); return; }
   if (e.key === 'Escape') { $$('.sheet').forEach((s) => { s.hidden = true; }); return; }
   if (e.code === 'Space' && !e.target.closest('input, select, button, .step, .lbl, [role="button"]')) {
     e.preventDefault();
     togglePlay();
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  if (e.key.toLowerCase() === 'p' && !LAB && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.closest('input, select, textarea') && $('#pianoSheet').hidden) {
+    e.preventDefault();
+    piano.open();
+  }
   if (e.key.toLowerCase() === 'w' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.closest('input, select, textarea') && $('#waveSheet').hidden) {
     e.preventDefault();
     synthUI.openEditor();
@@ -1795,6 +1804,9 @@ if (state.layout === null) state.layout = matchMedia('(pointer: fine) and (min-w
 if (state.layout === 'studio' && state.session.map.every((v) => v < 0)) { state.session.map.fill(state.slot); state.session.master = state.slot; }
 $('#layoutBtn').addEventListener('click', toggleLayout);
 $('#wtBtn').addEventListener('click', () => synthUI.openEditor());
+piano = initPianoRoll({ ...app, synthUI });
+$('#srollBtn').addEventListener('click', () => piano.open());
+$('#kbBtn').addEventListener('click', () => piano.toggleKb());
 studioMQ.addEventListener('change', applyLayout);
 applyLayout();
 app.recordOutput = () => panels.recordOutput();

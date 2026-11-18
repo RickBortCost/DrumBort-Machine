@@ -2,7 +2,21 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
-## [1.1.2] - 2026-11-17
+## [1.2.0] - 2026-11-18
+
+### Aggiunto
+- Sezione **SYNTH** (pulsante SYN/DRM): tre tracce melodiche BASS, LEAD e PAD sincronizzate con la batteria.
+- 15 preset sintetizzati ispirati a TB-303, SH-101, Minimoog, MS-20, DX7, Juno-106, Prophet-5, OB-X, CS-80 e altri (sottrattivi e FM).
+- Corsie note in stile piano roll: tap per inserire la nota del pennello, tap per cancellare, trascinamento.
+- Pad a note nella tonalità e scala scelte (9 scale), ottava −/+; sulla traccia PAD suonano accordi diatonici.
+- Editor step synth (EDIT): nota ±1/±8va, gate 1–16 step, accento, slide (glide), accordo triade/settima/sus4.
+- Parametri per traccia: cutoff, risonanza, inviluppo filtro, decay, lunghezza, volume, pan, mandate riverbero e delay.
+- Registrazione dal vivo dai pad a note con gate pari alla durata della pressione.
+- Cambio tonalità con trasposizione automatica delle note.
+- MIDI: note in alla traccia synth selezionata, note out sui canali 1–3.
+- Groove synth demo al primo avvio e da menu; export WAV, song, copia/incolla e undo includono il synth.
+
+
 
 ### Corretto
 - I messaggi a comparsa non intercettano più i tocchi sui pulsanti sottostanti (es. "Chiudi" nei fogli).
@@ -55,6 +69,7 @@ Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); vers
 - Layout touch per iPhone e iPad (portrait/landscape), PWA offline.
 - Deploy automatico su GitHub Pages.
 
+[1.2.0]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/RickBortCost/DrumBort-Machine/compare/v1.0.1...v1.1.0

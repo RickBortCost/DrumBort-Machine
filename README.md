@@ -4,7 +4,7 @@
 [![CI](https://github.com/RickBortCost/DrumBort-Machine/actions/workflows/ci.yml/badge.svg)](https://github.com/RickBortCost/DrumBort-Machine/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/RickBortCost/DrumBort-Machine)](https://github.com/RickBortCost/DrumBort-Machine/releases)
 
-Drum machine virtuale per il web: step sequencer 16 × 8, pad live e una libreria di kit ispirati alle drum machine storiche. Tutti i suoni sono sintetizzati in tempo reale con la Web Audio API, senza campioni esterni. Ottimizzata per il touch su iPhone e iPad, installabile come PWA e utilizzabile offline.
+Drum machine e groovebox per il web: step sequencer 16 × 8, pad live, una libreria di kit ispirati alle drum machine storiche e una sezione synth con basso, lead e pad di accordi. Tutti i suoni sono sintetizzati in tempo reale con la Web Audio API, senza campioni esterni. Ottimizzata per il touch su iPhone e iPad, installabile come PWA e utilizzabile offline.
 
 **Demo:** https://rickbortcost.github.io/DrumBort-Machine/
 
@@ -37,6 +37,23 @@ Drum machine virtuale per il web: step sequencer 16 × 8, pad live e una libreri
 **App**
 - PWA installabile, funziona offline, avviso "Nuova versione disponibile".
 - Accessibilità: step leggibili da VoiceOver, navigazione con frecce e Invio.
+
+## Synth e pad a note
+
+Il pulsante **SYN** apre la sezione melodica (**DRM** torna alla batteria). Tre tracce suonano a tempo con la batteria:
+
+| Traccia | Preset |
+| --- | --- |
+| BASS | TB-303 Acid, SH-101 Bass, Minimoog Bass, DX7 FM Bass, Reese Bass |
+| LEAD | SH-101 Lead, Minimoog Lead, MS-20 Lead, Chip Square, DX7 FM Bell |
+| PAD | Juno-106 Strings, Prophet-5 Pad, OB-X Brass, CS-80 Pad, DX7 Glass Pad |
+
+- **Pad a note**: 8 pad sui gradi della scala scelta (tonalità, 9 scale, ottava −/+); sulla traccia PAD suonano accordi diatonici. Tieni premuto per sostenere la nota.
+- **Corsie**: tocca uno step vuoto per inserire l'ultima nota suonata sui pad, tocca una nota per cancellarla, trascina per più step.
+- **EDIT** su uno step synth: nota ±1 semitono / ±1 ottava, gate 1–16 step, accento, slide, tipo di accordo.
+- Parametri: CUT, RESO, ENV, DECAY, LEN (pagina SND) e VOL, PAN, REV, DLY (pagina MIX).
+- Con **●** attivo i pad registrano note e durata. Cambiare tonalità traspone le note esistenti.
+- MIDI: nella vista synth le note in arrivo suonano sulla traccia selezionata; in uscita BASS/LEAD/PAD usano i canali 1/2/3.
 
 ## Kit
 
@@ -72,6 +89,9 @@ css/style.css           layout responsive e stile
 js/kits.js              sintesi dei suoni per kit
 js/engine.js            AudioContext, mixer, catena master
 js/sequencer.js         pattern, step, swing, tempo
+js/synth.js             voci synth, preset, scale e accordi
+js/synthpattern.js      dati e demo della sezione synth
+js/synthui.js           interfaccia della sezione synth
 js/ui.js                interfaccia, salvataggio, undo, song, PWA
 js/export.js            render offline e codifica WAV
 js/midi.js              Web MIDI (note e clock)
@@ -101,7 +121,7 @@ npm run test:all     # Chromium + WebKit
 npm run test:live    # contro il sito pubblicato
 ```
 
-Controllano layout (440×956, 956×440, 820×1180, 1180×820: niente scroll, target ≥ 44 px), funzioni, segnale di tutte le 80 voci, service worker e uso offline.
+Controllano layout di batteria e synth (440×956, 956×440, 820×1180, 1180×820: niente scroll, target ≥ 44 px), funzioni, segnale delle 80 voci di batteria e dei 15 preset synth, export, service worker e uso offline.
 
 ## Deploy
 

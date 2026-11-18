@@ -1,8 +1,9 @@
 /**
  * synth.js — Sintetizzatori sottrattivi/FM, preset e teoria musicale (scale, accordi).
  *
- * Tre tracce melodiche: 0 BASS (mono), 1 LEAD (mono), 2 PAD (accordi).
- * Ogni voce: oscillatori (+ FM opzionale) → drive → low-pass con inviluppo → VCA ADSR → release.
+ * Quattro tracce melodiche: 0 BASS, 1 LEAD (mono), 2 PAD, 3 KEYS (accordi).
+ * Ogni voce: oscillatori/sorgenti generate (+ FM, rumore) → drive → formanti → low-pass con
+ * inviluppo → VCA ADSR → tremolo → release. Preset in presets.js.
  * playVoice(...) restituisce un handle { release(time) } per note tenute dal vivo.
  */
 
@@ -72,41 +73,127 @@ export function chordName(root, ch) {
 }
 
 // =====================================================================
-// Preset (ispirati a synth storici; tutto sintetizzato)
+// Preset e tracce
 // =====================================================================
-// osc: [{ type, oct, det (cent), g }], cut (Hz), res (Q), envOct (ottave di modulazione),
-// fdec (s), a/d/s/r (ADSR), glide (s), drive (0-1), fm: { ratio, index, decay }
 
-const O = (type, oct = 0, det = 0, g = 1) => ({ type, oct, det, g });
+import { PRESETS } from './presets.js';
+import { getNoise } from './kits.js';
 
-export const PRESETS = {
-  // ---- BASS ----
-  acid303: { name: 'TB-303 Acid', kind: 0, osc: [O('sawtooth')], cut: 260, res: 13, envOct: 4.2, fdec: 0.22, a: 0.003, d: 0.25, s: 0.15, r: 0.06, glide: 0.07, drive: 0.35 },
-  sh101bass: { name: 'SH-101 Bass', kind: 0, osc: [O('square'), O('square', -1, 0, 0.7)], cut: 420, res: 4, envOct: 3, fdec: 0.18, a: 0.002, d: 0.2, s: 0.35, r: 0.07, glide: 0.05 },
-  moogbass: { name: 'Minimoog Bass', kind: 0, osc: [O('sawtooth'), O('sawtooth', 0, 7), O('sawtooth', -1, -5, 0.7)], cut: 380, res: 3.5, envOct: 3, fdec: 0.28, a: 0.003, d: 0.35, s: 0.5, r: 0.1, glide: 0.06, drive: 0.45 },
-  fmbass: { name: 'DX7 FM Bass', kind: 0, osc: [O('sine')], fm: { ratio: 1, index: 4.5, decay: 0.22 }, cut: 5000, res: 0.7, envOct: 0, fdec: 0.2, a: 0.002, d: 0.45, s: 0.25, r: 0.08, glide: 0.04 },
-  reese: { name: 'Reese Bass', kind: 0, osc: [O('sawtooth', 0, -14), O('sawtooth', 0, 14), O('sine', -1, 0, 0.6)], cut: 700, res: 1.5, envOct: 1, fdec: 0.4, a: 0.01, d: 0.4, s: 0.8, r: 0.15, glide: 0.08, drive: 0.25 },
-  // ---- LEAD ----
-  sh101lead: { name: 'SH-101 Lead', kind: 1, osc: [O('square'), O('sawtooth', 0, 6, 0.6)], cut: 1500, res: 5, envOct: 2.2, fdec: 0.3, a: 0.004, d: 0.3, s: 0.6, r: 0.15, glide: 0.05 },
-  mooglead: { name: 'Minimoog Lead', kind: 1, osc: [O('sawtooth'), O('sawtooth', 0, -8), O('sawtooth', 1, 4, 0.5)], cut: 1900, res: 5.5, envOct: 2, fdec: 0.35, a: 0.006, d: 0.3, s: 0.8, r: 0.2, glide: 0.09, drive: 0.3 },
-  ms20: { name: 'MS-20 Lead', kind: 1, osc: [O('sawtooth'), O('sawtooth', 0, 12, 0.5)], cut: 1100, res: 15, envOct: 3, fdec: 0.25, a: 0.003, d: 0.25, s: 0.55, r: 0.12, glide: 0.04, drive: 0.6 },
-  chip: { name: 'Chip Square', kind: 1, osc: [O('square')], cut: 9000, res: 0.6, envOct: 0, fdec: 0.1, a: 0.001, d: 0.1, s: 0.7, r: 0.04, glide: 0 },
-  fmbell: { name: 'DX7 FM Bell', kind: 1, osc: [O('sine')], fm: { ratio: 3.5, index: 6, decay: 1.1 }, cut: 9000, res: 0.6, envOct: 0, fdec: 0.5, a: 0.001, d: 1.4, s: 0, r: 0.9, glide: 0 },
-  // ---- PAD ----
-  juno: { name: 'Juno-106 Strings', kind: 2, osc: [O('sawtooth', 0, -9), O('sawtooth', 0, 9), O('square', -1, 0, 0.3)], cut: 2400, res: 1, envOct: 0.6, fdec: 1.2, a: 0.45, d: 1.2, s: 0.8, r: 1.2 },
-  prophet: { name: 'Prophet-5 Pad', kind: 2, osc: [O('sawtooth', 0, -6), O('square', 0, 7, 0.6)], cut: 1700, res: 2, envOct: 1, fdec: 1.5, a: 0.6, d: 1.5, s: 0.7, r: 1.6 },
-  obx: { name: 'OB-X Brass', kind: 2, osc: [O('sawtooth', 0, -11), O('sawtooth', 0, 11)], cut: 1100, res: 2, envOct: 2, fdec: 0.55, a: 0.07, d: 0.5, s: 0.7, r: 0.5 },
-  cs80: { name: 'CS-80 Pad', kind: 2, osc: [O('sawtooth', 0, -5), O('sine', 1, 3, 0.4), O('sawtooth', 0, 5)], cut: 2000, res: 1.5, envOct: 0.8, fdec: 2, a: 1.0, d: 2, s: 0.85, r: 2.2 },
-  glass: { name: 'DX7 Glass Pad', kind: 2, osc: [O('sine')], fm: { ratio: 2, index: 1.6, decay: 2.5 }, cut: 6000, res: 0.7, envOct: 0, fdec: 1, a: 0.3, d: 2, s: 0.6, r: 1.6 },
-};
+export { PRESETS };
 
+/** Tracce synth: BASS e LEAD monofoniche, PAD e KEYS polifoniche (accordi). */
 export const SYNTH_TRACKS = [
-  { name: 'Bass', short: 'BS', oct: 2, preset: 'acid303' },
-  { name: 'Lead', short: 'LD', oct: 4, preset: 'sh101lead' },
-  { name: 'Pad', short: 'PD', oct: 3, preset: 'juno' },
+  { name: 'Bass', short: 'BS', oct: 2, preset: 'acid303', mono: true },
+  { name: 'Lead', short: 'LD', oct: 4, preset: 'sh101lead', mono: true },
+  { name: 'Pad', short: 'PD', oct: 3, preset: 'juno', mono: false },
+  { name: 'Keys', short: 'KY', oct: 4, preset: 'epiano', mono: false },
 ];
+export const isChordTrack = (k) => !SYNTH_TRACKS[k].mono;
 
-export const presetsFor = (kind) => Object.entries(PRESETS).filter(([, p]) => p.kind === kind);
+/** Macro utente di una traccia (con default). */
+export const voiceParams = (tr) => ({
+  cut: tr.cut || 0, res: tr.res || 0, env: tr.env ?? 1, dec: tr.dec ?? 1,
+  atk: tr.atk ?? 1, rel: tr.rel ?? 1, lfo: tr.lfo ?? 1, rate: tr.rate ?? 1,
+});
+
+/** Coda di rilascio (s) di un preset con i parametri utente. */
+export const releaseTime = (pr, p) => pr.r * Math.sqrt(p.dec ?? 1) * (p.rel ?? 1);
+
+// =====================================================================
+// Sorgenti generate in JS (cache per preset/nota/sample rate)
+// =====================================================================
+
+const genCache = new Map();
+
+/** Corda pizzicata (Karplus-Strong). */
+function genPluck(sr, freq, g) {
+  const N = Math.max(2, Math.round(sr / freq));
+  const total = Math.floor(sr * g.len);
+  const out = new Float32Array(total);
+  const buf = new Float32Array(N);
+  let prev = 0;
+  const k = 0.15 + 0.85 * g.bright;
+  for (let i = 0; i < N; i++) { prev += ((Math.random() * 2 - 1) - prev) * k; buf[i] = prev; }
+  let idx = 0;
+  for (let i = 0; i < total; i++) {
+    const a = buf[idx], b = buf[idx + 1 === N ? 0 : idx + 1];
+    out[i] = a;
+    buf[idx] = g.damp * 0.5 * (a + b);
+    idx = idx + 1 === N ? 0 : idx + 1;
+  }
+  return out;
+}
+
+/** Piano additivo: parziali inarmoniche, corde doppie leggermente scordate, colpo del martelletto. */
+function genPiano(sr, freq, g) {
+  const total = Math.floor(sr * g.len);
+  const out = new Float32Array(total);
+  const K = Math.max(3, Math.min(14, Math.floor(sr / 2.2 / freq)));
+  const baseTau = g.len * 0.45 * Math.pow(261.6 / freq, 0.45);
+  for (let k = 1; k <= K; k++) {
+    const fk = k * freq * Math.sqrt(1 + g.B * k * k);
+    if (fk > sr / 2.2) break;
+    const amp = Math.pow(k, -(1.05 + (1 - g.bright) * 0.9)) * (0.6 + 0.4 * Math.abs(Math.sin(k * 0.95)));
+    const tau = baseTau / (1 + 0.3 * (k - 1));
+    for (const det of [1, 1 + g.beat]) {
+      // Oscillatore ricorsivo (niente Math.sin per campione)
+      const w = (2 * Math.PI * fk * det) / sr;
+      const c = 2 * Math.cos(w);
+      let y1 = Math.sin(-w), y2 = Math.sin(-2 * w);
+      const dec = Math.exp(-1 / (tau * sr));
+      let e = amp * 0.5;
+      for (let i = 0; i < total; i++) {
+        const y = c * y1 - y2;
+        y2 = y1; y1 = y;
+        out[i] += y * e;
+        e *= dec;
+      }
+    }
+  }
+  // Colpo del martelletto (rumore breve filtrato)
+  const thump = Math.floor(sr * 0.012);
+  let lp = 0;
+  for (let i = 0; i < thump; i++) {
+    lp += ((Math.random() * 2 - 1) - lp) * 0.3;
+    out[i] += lp * 0.25 * (1 - i / thump);
+  }
+  return out;
+}
+
+function genBuffer(ctx, pr, note) {
+  const key = `${pr.id}|${note}|${ctx.sampleRate}`;
+  let b = genCache.get(key);
+  if (!b) {
+    const freq = mtof(note);
+    const data = pr.gen.type === 'piano' ? genPiano(ctx.sampleRate, freq, pr.gen) : genPluck(ctx.sampleRate, freq, pr.gen);
+    let pk = 0;
+    for (let i = 0; i < data.length; i++) pk = Math.max(pk, Math.abs(data[i]));
+    const norm = pk > 0 ? 0.9 / pk : 1;
+    for (let i = 0; i < data.length; i++) data[i] *= norm;
+    b = ctx.createBuffer(1, data.length, ctx.sampleRate);
+    b.getChannelData(0).set(data);
+    if (genCache.size > 400) genCache.delete(genCache.keys().next().value);
+    genCache.set(key, b);
+  }
+  return b;
+}
+
+// =====================================================================
+// Organo a drawbar (PeriodicWave)
+// =====================================================================
+// 9 drawbar 16' 5⅓' 8' 4' 2⅔' 2' 1⅗' 1⅓' 1': armoniche relative alla fondamentale del 16'
+const DRAWBAR_HARM = [1, 3, 2, 4, 6, 8, 10, 12, 16];
+const waveCache = new WeakMap();
+function organWave(ctx, reg) {
+  let m = waveCache.get(ctx);
+  if (!m) { m = new Map(); waveCache.set(ctx, m); }
+  if (!m.has(reg)) {
+    const real = new Float32Array(17), imag = new Float32Array(17);
+    [...reg].forEach((ch, i) => { imag[DRAWBAR_HARM[i]] += (+ch || 0) / 8; });
+    m.set(reg, ctx.createPeriodicWave(real, imag));
+  }
+  return m.get(reg);
+}
 
 // =====================================================================
 // Voce
@@ -134,25 +221,54 @@ const EPS = 0.0001;
  * @param {number[]} notes    note MIDI
  * @param {number} vel        0..1 (≥ 0.95 = accento)
  * @param {object} pr         preset
- * @param {object} p          parametri utente { cut (-1..1), res (-1..1), env (0..2), dec (0.25..3) }
+ * @param {object} p          macro utente { cut, res, env, dec, atk, rel, lfo, rate }
  * @param {number|null} glideFrom  nota da cui scivolare (slide)
  */
 export function playVoice(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = null) {
   const accent = vel >= 0.95;
   const decMul = p.dec ?? 1;
-  const a = pr.a, d = pr.d * decMul, s = pr.s, r = pr.r * Math.sqrt(decMul);
-  const peak = (0.38 + vel * 0.3) / Math.sqrt(notes.length);
+  const a = pr.a * (p.atk ?? 1), d = pr.d * decMul, s = pr.s, r = releaseTime(pr, p);
+  const peak = ((0.38 + vel * 0.3) / Math.sqrt(notes.length)) * (pr.gain || 1);
+  const sources = [];
 
   // --- Release (nodo separato: nessuna cancellazione di automazioni) ---
   const rel = ctx.createGain();
   rel.connect(out);
+  let post = rel;
+
+  // --- Tremolo (LFO sul volume) ---
+  const lfoCfg = pr.lfo && (p.lfo ?? 1) > 0 ? pr.lfo : null;
+  let lfoGain = null;
+  if (lfoCfg) {
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = lfoCfg.rate * (p.rate ?? 1);
+    lfoGain = ctx.createGain();
+    const depth = lfoCfg.depth * (p.lfo ?? 1);
+    if (lfoCfg.delay) {
+      lfoGain.gain.setValueAtTime(0, t);
+      lfoGain.gain.linearRampToValueAtTime(lfoCfg.to === 'amp' ? depth / 2 : depth, t + lfoCfg.delay);
+    } else {
+      lfoGain.gain.value = lfoCfg.to === 'amp' ? depth / 2 : depth;
+    }
+    lfo.connect(lfoGain);
+    sources.push(lfo);
+    if (lfoCfg.to === 'amp') {
+      const trem = ctx.createGain();
+      trem.gain.value = 1 - Math.min(0.95, depth) / 2;
+      lfoGain.connect(trem.gain);
+      trem.connect(rel);
+      post = trem;
+    }
+  }
 
   // --- VCA ADS ---
   const amp = ctx.createGain();
   amp.gain.setValueAtTime(EPS, t);
-  amp.gain.exponentialRampToValueAtTime(peak, t + Math.max(0.002, a));
+  // Attacchi lunghi lineari: quelli esponenziali restano quasi muti per gran parte della salita
+  if (a >= 0.05) amp.gain.linearRampToValueAtTime(peak, t + a);
+  else amp.gain.exponentialRampToValueAtTime(peak, t + Math.max(0.002, a));
   amp.gain.setTargetAtTime(Math.max(EPS, peak * s), t + a, Math.max(0.01, d / 3));
-  amp.connect(rel);
+  amp.connect(post);
 
   // --- Filtro con inviluppo ---
   const f = ctx.createBiquadFilter();
@@ -165,6 +281,11 @@ export function playVoice(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = 
   f.frequency.setTargetAtTime(base, t + a, Math.max(0.01, pr.fdec * decMul * (accent ? 0.7 : 1) / 3));
   f.Q.value = Math.min(25, pr.res * Math.pow(2, (p.res || 0) * 1.5) * (accent ? 1.2 : 1));
   f.connect(amp);
+  if (lfoGain && lfoCfg.to === 'cut') {
+    const lg = ctx.createGain();
+    lg.gain.value = base;          // profondità in multipli del cutoff
+    lfoGain.connect(lg).connect(f.frequency);
+  }
 
   let dest = f;
   if (pr.drive) {
@@ -174,24 +295,71 @@ export function playVoice(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = 
     dest = ws;
   }
 
-  // --- Oscillatori ---
-  const oscs = [];
+  // --- Formanti (voci/cori): banco di passa-banda in parallelo ---
+  if (pr.formants) {
+    const sum = ctx.createGain();
+    sum.connect(dest);
+    const fin = ctx.createGain();
+    for (const [fq, q, g] of pr.formants) {
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = fq;
+      bp.Q.value = q;
+      const bg = ctx.createGain();
+      bg.gain.value = g;
+      fin.connect(bp).connect(bg).connect(sum);
+    }
+    dest = fin;
+  }
+
+  // --- Strato di rumore ---
+  if (pr.noise) {
+    const n = ctx.createBufferSource();
+    n.buffer = getNoise(ctx);
+    n.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = pr.noise.hp || 20;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(pr.noise.g, t);
+    if (pr.noise.d) ng.gain.setTargetAtTime(0, t, pr.noise.d / 3);
+    n.connect(hp).connect(ng).connect(dest);
+    sources.push(n);
+  }
+
+  // --- Oscillatori / sorgenti generate ---
   const mix = ctx.createGain();
-  mix.gain.value = 1 / Math.max(1, pr.osc.reduce((x, o) => x + o.g, 0));
+  const totG = pr.osc.reduce((x, o) => x + o.g, 0);
+  mix.gain.value = 1 / Math.max(1, totG);
   mix.connect(dest);
   const glide = glideFrom != null && pr.glide ? pr.glide : 0;
   for (const n of notes) {
+    if (pr.gen) {
+      const src = ctx.createBufferSource();
+      src.buffer = genBuffer(ctx, pr, n);
+      src.connect(mix);
+      sources.push(src);
+    }
     for (const o of pr.osc) {
       const osc = ctx.createOscillator();
-      osc.type = o.type;
-      const target = mtof(n + o.oct * 12);
+      const organ = o.type.startsWith('organ:');
+      if (organ) osc.setPeriodicWave(organWave(ctx, o.type.slice(6)));
+      else osc.type = o.type;
+      // L'organo usa come fondamentale il registro da 16' (un'ottava sotto)
+      const target = mtof(n + o.oct * 12) / (organ ? 2 : 1);
       if (glide) {
-        osc.frequency.setValueAtTime(mtof(glideFrom + (n - notes[0]) + o.oct * 12), t);
+        osc.frequency.setValueAtTime(mtof(glideFrom + (n - notes[0]) + o.oct * 12) / (organ ? 2 : 1), t);
         osc.frequency.exponentialRampToValueAtTime(target, t + glide);
       } else {
         osc.frequency.setValueAtTime(target, t);
       }
-      osc.detune.value = o.det;
+      if (pr.pitch) {
+        osc.detune.setValueAtTime(o.det + pr.pitch.from * 100, t);
+        osc.detune.linearRampToValueAtTime(o.det + pr.pitch.to * 100, t + pr.pitch.time);
+      } else {
+        osc.detune.value = o.det;
+      }
+      if (lfoGain && lfoCfg.to === 'pitch') lfoGain.connect(osc.detune);
       const g = ctx.createGain();
       g.gain.value = o.g;
       osc.connect(g).connect(mix);
@@ -203,12 +371,12 @@ export function playVoice(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = 
         mg.gain.setValueAtTime(depth, t);
         mg.gain.setTargetAtTime(depth * 0.08, t, Math.max(0.01, pr.fm.decay * decMul / 3));
         mod.connect(mg).connect(osc.frequency);
-        oscs.push(mod);
+        sources.push(mod);
       }
-      oscs.push(osc);
+      sources.push(osc);
     }
   }
-  oscs.forEach((o) => o.start(t));
+  sources.forEach((o) => o.start(t));
 
   let released = false;
   const handle = {
@@ -218,14 +386,14 @@ export function playVoice(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = 
       const when = Math.max(at, ctx.currentTime);
       rel.gain.setValueAtTime(1, when);
       rel.gain.setTargetAtTime(0, when, Math.max(0.005, r / 4));
-      oscs.forEach((o) => { try { o.stop(when + r * 1.6 + 0.05); } catch (_) { /* già fermo */ } });
+      sources.forEach((o) => { try { o.stop(when + r * 1.6 + 0.05); } catch (_) { /* già fermo */ } });
     },
-    /** Taglio rapido (voice stealing): sfuma in pochi ms e ferma gli oscillatori. */
+    /** Taglio rapido (voice stealing): sfuma in pochi ms e ferma le sorgenti. */
     kill(at) {
       const when = Math.max(at, ctx.currentTime);
       released = true;
       rel.gain.setTargetAtTime(0, when, 0.004);
-      oscs.forEach((o) => { try { o.stop(when + 0.04); } catch (_) { /* già fermo */ } });
+      sources.forEach((o) => { try { o.stop(when + 0.04); } catch (_) { /* già fermo */ } });
     },
   };
   if (dur != null) handle.release(t + Math.max(0.01, dur));

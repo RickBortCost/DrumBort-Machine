@@ -296,6 +296,7 @@ async function synthTests(browser, url) {
 
   // Registrazione dal vivo con gate dalla pressione
   await page.evaluate(() => { const t = drumbort.state.slots[drumbort.state.slot].synth.tracks[0]; t.steps = t.steps.map(() => null); });
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
   await page.tap('.slbl[data-k="0"]');
   await page.tap('#rec');
   await page.tap('#play');
@@ -424,7 +425,7 @@ for (const name of BROWSERS) {
     await audioTests(browser, url);
     await pwaTests(browser, url);
   } catch (err) {
-    check(`[${name}] esecuzione`, false, err.message.split('\n').slice(0, 4).join(' | '));
+    check(`[${name}] esecuzione`, false, err.message.split('\n').slice(0, 14).join(' | '));
   } finally {
     await browser.close();
   }

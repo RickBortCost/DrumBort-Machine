@@ -4,14 +4,16 @@
  * Pattern = {
  *   kit, bpm, swing,
  *   steps[8][16]  0 off, 1 normale, 2 accento
- *   opts[8][16]   null | { p: probabilità 0-100, r: ratchet 1-4, f: flam 0/1, n: nudge -50..50 (% step) }
- *   tracks[8]     { vol, tune, decay, pan, mute, solo, len (1-16), rev, dly (mandate 0-1) }
+ *   opts[8][16]   null | { p: probabilità 0-100, r: ratchet 1-4, f: flam 0/1, n: nudge -50..50 (% step),
+ *                          pl: { tune, decay, vel } parametri bloccati sullo step }
+ *   tracks[8]     { vol, tune, decay, pan, mute, solo, len (1-16), rev, dly (mandate 0-1), drv, crush }
+ *   human         0-1, variazioni casuali di tempo e intensità
  *   synth         sezione melodica (vedi synthpattern.js)
  * }
  */
 
-import { KITS, kitById } from './kits.js';
-import { demoSynth, emptySynth, normalizeSynth } from './synthpattern.js';
+import { KITS, kitById, findKit } from './kits.js';
+import { demoSynth, emptySynth, normalizeSynth, trackBase, clampBits } from './synthpattern.js';
 
 export const STEPS = 16;
 export const TRACKS = 8;
@@ -41,7 +43,7 @@ export function parseRows(rows) {
 }
 
 export function defaultTrack(kit, t) {
-  return { vol: 0.8, tune: 0, decay: 1, pan: kit.tracks[t].pan || 0, mute: false, solo: false, len: STEPS, rev: 0, dly: 0 };
+  return { vol: 0.8, tune: 0, decay: 1, pan: kit.tracks[t].pan || 0, mute: false, solo: false, len: STEPS, rev: 0, dly: 0, drv: 0, crush: 0 };
 }
 export const defaultTracks = (kit) => kit.tracks.map((_, t) => defaultTrack(kit, t));
 
@@ -59,6 +61,7 @@ export function createPattern(kitId, withDemo = true, synthDemo = null) {
     opts: emptyOpts(),
     tracks: defaultTracks(kit),
     synth: synthDemo === null ? emptySynth() : demoSynth(synthDemo),
+    human: 0,
   };
 }
 
@@ -71,13 +74,20 @@ export function normalizeOpt(o) {
     f: o.f ? 1 : 0,
     n: Math.round(clamp(o.n, -50, 50, 0)),
   };
-  return r.p === 100 && r.r === 1 && !r.f && !r.n ? null : r;
+  if (o.pl && typeof o.pl === 'object') {
+    const pl = {};
+    if (num(o.pl.tune)) pl.tune = clamp(o.pl.tune, -12, 12, 0);
+    if (num(o.pl.decay)) pl.decay = clamp(o.pl.decay, 0.2, 2.5, 1);
+    if (num(o.pl.vel)) pl.vel = clamp(o.pl.vel, 0.1, 1, 0.62);
+    if (Object.keys(pl).length) r.pl = pl;
+  }
+  return r.p === 100 && r.r === 1 && !r.f && !r.n && !r.pl ? null : r;
 }
 
 /** Valida e normalizza un pattern (localStorage, JSON importato, versioni precedenti). */
 export function normalizePattern(o) {
   if (!o || typeof o !== 'object') throw new Error('Pattern non valido');
-  const kit = KITS.find((k) => k.id === o.kit) || KITS[0];
+  const kit = findKit(o.kit) || KITS[0];
   const steps = emptySteps();
   const opts = emptyOpts();
   for (let t = 0; t < TRACKS; t++) {
@@ -99,6 +109,8 @@ export function normalizePattern(o) {
       len: Math.round(clamp(src.len, 1, STEPS, STEPS)),
       rev: clamp(src.rev, 0, 1, 0),
       dly: clamp(src.dly, 0, 1, 0),
+      drv: clamp(src.drv, 0, 1, 0),
+      crush: clampBits(src.crush),
     };
   });
   return {
@@ -109,6 +121,7 @@ export function normalizePattern(o) {
     opts,
     tracks,
     synth: normalizeSynth(o.synth),
+    human: clamp(o.human, 0, 1, 0),
   };
 }
 
@@ -127,8 +140,9 @@ export const swingOffset = (tick, swing, stepDur) => (tick % 2 ? (swing / 100 - 
  * @returns {Array<{t:number, time:number, vel:number}>} note effettivamente suonate
  */
 export function scheduleTick(engine, pat, tick, time, opt = {}) {
-  const { random = Math.random, skip = null } = opt;
+  const { random = Math.random, skip = null, muteD = null, muteS = null } = opt;
   const sd = stepDuration(pat.bpm);
+  const human = pat.human || 0;
   const anySolo = pat.tracks.some((t) => t.solo);
   const played = [];
   for (let t = 0; t < TRACKS; t++) {
@@ -138,19 +152,25 @@ export function scheduleTick(engine, pat, tick, time, opt = {}) {
     if (!v) continue;
     if (skip && skip.delete(`${t}:${s}`)) continue;     // già suonato dal vivo in registrazione
     if (anySolo ? !tr.solo : tr.mute) continue;
+    if (muteD && muteD.has(t)) continue;                 // mute di performance
     const o = pat.opts && pat.opts[t][s];
     if (o && o.p < 100 && random() * 100 >= o.p) continue;
     let tt = time + (o ? (o.n / 100) * sd : 0);
-    const vel = VELOCITY[v];
+    let vel = o && o.pl && o.pl.vel != null ? o.pl.vel : VELOCITY[v];
+    if (human) {
+      tt += (random() - 0.5) * 0.02 * human;
+      vel *= 1 - random() * 0.3 * human;
+    }
+    const pp = o && o.pl ? { ...tr, ...o.pl } : tr;      // parameter lock
     if (o && o.f) {
-      engine.trigger(t, tt, vel * 0.45, tr);
+      engine.trigger(t, tt, vel * 0.45, pp);
       played.push({ t, time: tt, vel: vel * 0.45 });
       tt += FLAM_GAP;
     }
     const r = o ? o.r : 1;
     for (let k = 0; k < r; k++) {
       const kv = k ? vel * 0.8 : vel;
-      engine.trigger(t, tt + (k * sd) / r, kv, tr);
+      engine.trigger(t, tt + (k * sd) / r, kv, pp);
       played.push({ t, time: tt + (k * sd) / r, vel: kv });
     }
   }
@@ -161,15 +181,75 @@ export function scheduleTick(engine, pat, tick, time, opt = {}) {
     const anySynthSolo = syn.tracks.some((t) => t.solo);
     syn.tracks.forEach((tr, k) => {
       if (anySynthSolo ? !tr.solo : tr.mute) return;
+      if (muteS && muteS.has(k)) return;
+      const tj = human ? time + (random() - 0.5) * 0.01 * human : time;
+      // Arpeggiatore: suona gli accordi della traccia sorgente, ignora gli step propri
+      if (tr.arp && tr.arp.on) {
+        for (const e of arpEvents(pat, k, tick)) {
+          engine.playSynth(k, tj + e.offset, e.dur, e.notes, e.vel, tr, null);
+          played.push({ synth: k, notes: e.notes, time: tj + e.offset, dur: e.dur, vel: e.vel });
+        }
+        return;
+      }
       const s = tick % (tr.len || STEPS);
       if (!tr.steps[s]) return;
       if (skip && skip.delete(`s${k}:${s}`)) return;
       const ev = synthEvent(pat, k, s);
-      engine.playSynth(k, time, ev.dur, ev.notes, ev.vel, tr, ev.glideFrom);
-      played.push({ synth: k, notes: ev.notes, time, dur: ev.dur, vel: ev.vel });
+      engine.playSynth(k, tj, ev.dur, ev.notes, ev.vel, ev.params, ev.glideFrom);
+      played.push({ synth: k, notes: ev.notes, time: tj, dur: ev.dur, vel: ev.vel });
     });
   }
   return played;
+}
+
+// ---------------------------------------------------------------------
+// Arpeggiatore
+// ---------------------------------------------------------------------
+
+/** Note dell'accordo che suona sulla traccia sorgente al tick dato, nel registro della traccia k. */
+export function arpChord(pat, k, tick) {
+  const syn = pat.synth, tr = syn.tracks[k], arp = tr.arp;
+  const src = syn.tracks[arp.src];
+  if (!src || arp.src === k) return null;
+  const len = src.len || STEPS, s = tick % len;
+  let chord = null;
+  for (let d = 0; d < len; d++) {
+    const st = src.steps[(s - d + len) % len];
+    if (st) { if (st.g > d) chord = st; break; }
+  }
+  if (!chord) return null;
+  const notes = (chord.ch || [0]).map((x) => chord.n + x).sort((a, b) => a - b);
+  const shift = 12 * Math.round((trackBase(syn, k) - notes[0]) / 12);
+  const out = [];
+  for (let o = 0; o < arp.oct; o++) for (const n of notes) out.push(n + shift + 12 * o);
+  return out;
+}
+
+function arpPick(seq, i, mode) {
+  const L = seq.length;
+  if (L === 1) return seq[0];
+  switch (mode) {
+    case 'down': return seq[L - 1 - (i % L)];
+    case 'updown': { const p = 2 * L - 2, j = i % p; return seq[j < L ? j : p - j]; }
+    case 'random': { const h = Math.imul(i + 1, 2654435761) >>> 0; return seq[h % L]; }
+    default: return seq[i % L];
+  }
+}
+
+/** Eventi dell'arpeggiatore nel tick (offset in secondi dal tick). */
+export function arpEvents(pat, k, tick) {
+  const tr = pat.synth.tracks[k], arp = tr.arp;
+  const seq = arpChord(pat, k, tick);
+  if (!seq) return [];
+  const sd = stepDuration(pat.bpm), rate = arp.rate;
+  if (rate >= 1 && tick % rate !== 0) return [];
+  const per = rate < 1 ? Math.round(1 / rate) : 1;
+  const out = [];
+  for (let j = 0; j < per; j++) {
+    const idx = rate < 1 ? tick * per + j : Math.floor(tick / rate);
+    out.push({ offset: j * sd * rate, notes: [arpPick(seq, idx, arp.mode)], dur: sd * rate * arp.gate, vel: idx % seq.length === 0 ? 0.85 : 0.7 });
+  }
+  return out;
 }
 
 /**
@@ -186,7 +266,8 @@ export function synthEvent(pat, k, s) {
   const notes = st.ch ? st.ch.map((x) => st.n + x) : [st.n];
   // Gate: le note con slide si sovrappongono alla successiva (legato)
   const dur = st.g * stepDuration(pat.bpm) * (st.sl ? 1.15 : 0.92);
-  return { notes, dur, vel: st.a ? 1 : 0.7, glideFrom };
+  const vel = st.pl && st.pl.vel != null ? st.pl.vel : st.a ? 1 : 0.7;
+  return { notes, dur, vel, glideFrom, params: st.pl ? { ...tr, ...st.pl } : tr };
 }
 
 // =====================================================================
@@ -226,6 +307,10 @@ export class Sequencer {
     this.recent = [];         // ultimi tick pianificati (registrazione)
     this.skip = new Set();    // step registrati dal vivo da non ripetere
     this.metronome = false;
+    this.stutter = null;      // { from, len } beat repeat (modalità performance)
+    this.fillPattern = null;  // pattern di fill suonato mentre è premuto FILL
+    this.muteD = new Set();   // mute di performance (batteria)
+    this.muteS = new Set();   // mute di performance (synth)
     this.meta = null;         // dato opaco copiato nelle voci di coda (es. posizione song)
     // Hook
     this.onBar = null;        // (tick, time) → pattern successivo | null  (song mode)
@@ -273,10 +358,14 @@ export class Sequencer {
       }
       const sd = this.stepDur;
       const time = this.nextTime + swingOffset(this.tick, this.pattern.swing, sd);
-      const played = scheduleTick(this.engine, this.pattern, this.tick, time, { skip: this.skip });
+      // Beat repeat: ripete gli ultimi `len` tick a partire da `from`; il tempo reale continua
+      const st = this.stutter;
+      const pt = st ? st.from + ((this.tick - st.from) % st.len) : this.tick;
+      const pat = this.fillPattern || this.pattern;
+      const played = scheduleTick(this.engine, pat, pt, time, { skip: this.skip, muteD: this.muteD, muteS: this.muteS });
       if (this.metronome && this.tick % 4 === 0) this.engine.click(time, this.tick % STEPS === 0);
       if (this.onTick) this.onTick(this.tick, this.nextTime, sd, played);
-      const entry = { tick: this.tick, time, pattern: this.pattern, meta: this.meta };
+      const entry = { tick: pt, time, pattern: this.pattern, meta: this.meta };
       this.queue.push(entry);
       if (this.queue.length > 64) this.queue.shift();
       this.recent.push(entry);
@@ -285,6 +374,10 @@ export class Sequencer {
       this.tick++;
     }
   }
+
+  /** Beat repeat: ripete i prossimi `len` tick finché non si chiama stopStutter(). */
+  startStutter(len) { this.stutter = { from: this.tick, len }; }
+  stopStutter() { this.stutter = null; }
 
   /**
    * Quantizza un colpo dal vivo allo step più vicino.

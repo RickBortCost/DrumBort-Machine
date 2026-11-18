@@ -376,6 +376,32 @@ async function featureTests(browser, url) {
   await page.tap('#sstepSheet [data-close]');
   await page.tap('[data-cmd="edit"]');
 
+  // --- Editor wavetable: modifica, salvataggio come preset, ripristino ---
+  while ((await page.evaluate(() => drumbort.ui.view)) !== 'synth') await page.tap('[data-cmd="view"]');
+  await page.tap('.slbl[data-k="0"]');
+  await page.tap('#presetBtn');
+  await page.tap('.chip-cat[data-cat="Wavetable"]');
+  await page.tap('.lib-row[data-id="wtGrowl"]');
+  await page.tap('#libSheet [data-close]');
+  await page.tap('#sedBtn');
+  check('editor wavetable aperto', await page.isVisible('#waveCanvas'));
+  await page.evaluate(() => { const i = document.querySelector('#waveBody input[data-path="wt.osc.0.pos"]'); i.value = 0.8; i.dispatchEvent(new Event('input', { bubbles: true })); });
+  const pt = await page.evaluate(`${P()}.synth.tracks[0].patch`);
+  check('patch creata dalla modifica', pt && pt.wt.osc[0].pos === 0.8 && pt.rev > 1, pt && `pos ${pt.wt.osc[0].pos} rev ${pt.rev}`);
+  await page.tap('#waveTabs [data-tab="mod"]');
+  await page.selectOption('.mod-slot[data-i="2"] [data-mod="src"]', 'lfo2');
+  await page.selectOption('.mod-slot[data-i="2"] [data-mod="dst"]', 'pitch');
+  const mods = await page.evaluate(`${P()}.synth.tracks[0].patch.wt.mod.map((m) => m.src + '>' + m.dst).join()`);
+  check('slot di modulazione aggiunto', mods.includes('lfo2>pitch'), mods);
+  await page.fill('#waveName', 'Mio Growl');
+  await page.tap('[data-act="wave-save"]');
+  const saved = await page.evaluate(() => { const t = drumbort.state.slots[drumbort.state.slot].synth.tracks[0]; return [t.preset, !!t.patch, drumbort.state.userPresets.length]; });
+  check('salvato come preset utente', saved[0].startsWith('up:') && !saved[1] && saved[2] === 1, saved.join());
+  await page.tap('#waveSheet [data-close]');
+  await page.tap('#presetBtn');
+  check('categoria Utente in libreria', await page.isVisible('.chip-cat[data-cat="Utente"]'));
+  await page.tap('#libSheet [data-close]');
+
   // --- Batteria: parameter lock, insert FX, euclideo ---
   await page.tap('[data-cmd="view"]');   // → perf
   await page.tap('[data-cmd="view"]');   // → drum

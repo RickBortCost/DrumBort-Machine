@@ -5,16 +5,17 @@
  * Riceve dall'app principale (ui.js) stato e funzioni condivise tramite `app`.
  */
 
-import { PRESETS, SYNTH_TRACKS, SCALES, CHORD_TYPES, NOTE_NAMES, presetsFor, degreeNote, diatonicChord,
+import { PRESETS, SYNTH_TRACKS, SCALES, CHORD_TYPES, NOTE_NAMES, isChordTrack, degreeNote, diatonicChord,
   chordName, noteName, pitchClass } from './synth.js';
-import { trackBase, demoSynth, SYNTH_STEPS } from './synthpattern.js';
+import { trackBase, demoSynth, SYNTH_STEPS, SYNTH_COUNT, defaultSynthTrack, ARP_MODES, ARP_RATES } from './synthpattern.js';
+import { initLibrary } from './library.js';
 import { SYNTH_CH } from './engine.js';
 import { stepDuration } from './sequencer.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-const K = 3;   // tracce synth
+const K = SYNTH_COUNT;   // tracce synth
 
 const pct = (v) => `${Math.round(v * 100)}`;
 const signed = (v) => (v > 0 ? '+' : '') + v.toFixed(2);
@@ -24,12 +25,19 @@ const SPARAMS = [
   { k: 'env', label: 'ENV', min: 0, max: 2, step: 0.01, fmt: (v) => v.toFixed(2), pg: 'snd' },
   { k: 'dec', label: 'DECAY', min: 0.25, max: 3, step: 0.01, fmt: (v) => v.toFixed(2), pg: 'snd' },
   { k: 'len', label: 'LEN', min: 1, max: 16, step: 1, fmt: (v) => `${v}`, pg: 'snd' },
+  { k: 'atk', label: 'ATTACK', min: 0.1, max: 4, step: 0.01, fmt: (v) => v.toFixed(2), pg: 'mod' },
+  { k: 'rel', label: 'RELEASE', min: 0.1, max: 4, step: 0.01, fmt: (v) => v.toFixed(2), pg: 'mod' },
+  { k: 'lfo', label: 'LFO', min: 0, max: 2, step: 0.01, fmt: (v) => v.toFixed(2), pg: 'mod' },
+  { k: 'rate', label: 'RATE', min: 0.25, max: 4, step: 0.01, fmt: (v) => v.toFixed(2), pg: 'mod' },
   { k: 'vol', label: 'VOL', min: 0, max: 1, step: 0.01, fmt: pct, pg: 'mix' },
   { k: 'pan', label: 'PAN', min: -1, max: 1, step: 0.05, fmt: (v) => (Math.abs(v) < 0.03 ? 'C' : (v < 0 ? 'L' : 'R') + Math.round(Math.abs(v) * 100)), pg: 'mix' },
   { k: 'rev', label: 'REV', min: 0, max: 1, step: 0.01, fmt: pct, pg: 'mix' },
   { k: 'dly', label: 'DLY', min: 0, max: 1, step: 0.01, fmt: pct, pg: 'mix' },
+  { k: 'drv', label: 'DRIVE', min: 0, max: 1, step: 0.05, fmt: pct, pg: 'fx' },
+  { k: 'crush', label: 'CRUSH', min: 0, max: 12, step: 1, fmt: (v) => (v < 4 ? 'OFF' : `${v}bit`), pg: 'fx' },
 ];
-const SDEFAULT = { cut: 0, res: 0, env: 1, dec: 1, len: 16 };
+const PAGES = ['snd', 'mod', 'mix', 'fx'];
+const MIX_KEYS = ['vol', 'pan', 'rev', 'dly', 'drv', 'crush'];
 
 /** Tipo di accordo dedotto dagli intervalli salvati. */
 function chordTypeOf(ch) {
@@ -115,7 +123,7 @@ export function initSynthUI(app) {
   /** Note suonate dal pad di grado d sulla traccia k. */
   function padNotes(k, d) {
     const s = syn(), n = degreeNote(trackBase(s, k), s.scale, d);
-    const ch = k === 2 ? diatonicChord(n, s.key, s.scale, 'triad') : null;
+    const ch = isChordTrack(k) ? diatonicChord(n, s.key, s.scale, 'triad') : null;
     return { n, ch };
   }
 
@@ -129,6 +137,7 @@ export function initSynthUI(app) {
   // ===================================================================
   function renderRow(k) {
     const t = tr(k), cells = scells[k];
+    cells[0].parentElement.classList.toggle('arp', !!t.arp.on);
     const notes = t.steps.filter(Boolean).map((st) => st.n);
     let lo = notes.length ? Math.min(...notes) : trackBase(syn(), k);
     let hi = notes.length ? Math.max(...notes) : lo + 12;
@@ -147,9 +156,10 @@ export function initSynthUI(app) {
       c.classList.toggle('tie', !st && !!tt);
       c.classList.toggle('more', !!(st && st.g > 1));
       c.classList.toggle('out', s >= t.len);
+      c.classList.toggle('lock', !!(st && st.pl));
       const ref = st || tt;
       if (ref) c.style.setProperty('--y', `${y(ref.n)}%`);
-      const label = st ? (k === 2 ? chordName(st.n, st.ch) : noteName(st.n)) : '';
+      const label = st ? (isChordTrack(k) ? chordName(st.n, st.ch) : noteName(st.n)) : '';
       c.querySelector('.nn').textContent = label;
       c.setAttribute('aria-pressed', st ? 'true' : 'false');
       c.setAttribute('aria-label', `${SYNTH_TRACKS[k].name}, step ${s + 1}${st ? `, ${label}${st.g > 1 ? `, ${st.g} step` : ''}${st.a ? ', accento' : ''}${st.sl ? ', slide' : ''}` : ''}`);
@@ -161,7 +171,7 @@ export function initSynthUI(app) {
     for (let k = 0; k < K; k++) {
       const t = s.tracks[k];
       slabels[k].querySelector('b').textContent = SYNTH_TRACKS[k].short;
-      slabels[k].querySelector('i').textContent = PRESETS[t.preset].name + (t.len < SYNTH_STEPS ? ` /${t.len}` : '');
+      slabels[k].querySelector('i').textContent = t.arp.on ? `ARP ← ${SYNTH_TRACKS[t.arp.src].short}` : PRESETS[t.preset].name + (t.len < SYNTH_STEPS ? ` /${t.len}` : '');
       slabels[k].classList.toggle('sel', k === ui.ssel);
       slabels[k].classList.toggle('muted', anySolo ? !t.solo : t.mute);
       slabels[k].classList.toggle('solo', t.solo);
@@ -171,10 +181,10 @@ export function initSynthUI(app) {
 
   function renderParams() {
     const k = ui.ssel, t = tr(k);
-    const sel = $('#presetSel');
-    sel.innerHTML = presetsFor(k).map(([id, p]) => `<option value="${id}">${p.name}</option>`).join('');
-    sel.value = t.preset;
-    sel.setAttribute('aria-label', `Preset ${SYNTH_TRACKS[k].name}`);
+    const pb = $('#presetBtn');
+    pb.textContent = PRESETS[t.preset].name;
+    pb.setAttribute('aria-label', `Suono ${SYNTH_TRACKS[k].name}: ${PRESETS[t.preset].name}. Apri libreria`);
+    app.setToggle($('#sarpBtn'), t.arp.on);
     app.setToggle($('#smuteBtn'), t.mute);
     app.setToggle($('#ssoloBtn'), t.solo);
     $$('#ssliders input').forEach((inp) => {
@@ -191,9 +201,9 @@ export function initSynthUI(app) {
     $('#octVal').textContent = noteName(trackBase(s, k));
     spads.forEach((p, d) => {
       const { n, ch } = padNotes(k, d);
-      p.querySelector('b').textContent = k === 2 ? chordName(n, ch) : pitchClass(n);
-      p.querySelector('i').textContent = k === 2 ? noteName(n) : `${d + 1}`;
-      p.setAttribute('aria-label', `Pad ${k === 2 ? chordName(n, ch) : noteName(n)}`);
+      p.querySelector('b').textContent = isChordTrack(k) ? chordName(n, ch) : pitchClass(n);
+      p.querySelector('i').textContent = isChordTrack(k) ? noteName(n) : `${d + 1}`;
+      p.setAttribute('aria-label', `Pad ${isChordTrack(k) ? chordName(n, ch) : noteName(n)}`);
       p.classList.toggle('root', d % (SCALES[s.scale].iv.length) === 0);
     });
     $('#spads').dataset.k = k;
@@ -377,7 +387,7 @@ export function initSynthUI(app) {
     if (ui.view !== 'synth') return false;
     if (on) {
       const k = ui.ssel, s = syn();
-      const ch = k === 2 ? diatonicChord(note, s.key, s.scale, 'triad') : null;
+      const ch = isChordTrack(k) ? diatonicChord(note, s.key, s.scale, 'triad') : null;
       noteOn(`m${note}`, k, note, ch, vel);
     } else {
       noteOff(`m${note}`);
@@ -399,10 +409,13 @@ export function initSynthUI(app) {
     if (!key) return;
     begin();
     const t = tr();
-    t[key] = key === 'len' ? parseInt(inp.value, 10) : parseFloat(inp.value);
+    let v = parseFloat(inp.value);
+    if (key === 'len') v = Math.round(v);
+    if (key === 'crush') v = v < 4 ? 0 : Math.round(v);
+    t[key] = v;
     inp.nextElementSibling.textContent = SPARAMS.find((d) => d.k === key).fmt(t[key]);
     if (key === 'len') { renderRow(ui.ssel); renderLabels(); }
-    else if (app.isPlayingPattern(app.pat())) engine.setChannel(SYNTH_CH + ui.ssel, t);
+    else if (MIX_KEYS.includes(key) && app.isPlayingPattern(app.pat())) engine.setChannel(SYNTH_CH + ui.ssel, t);
     app.save();
   });
   // Doppio tap → valore di default
@@ -413,25 +426,22 @@ export function initSynthUI(app) {
     const now = Date.now();
     if (last.el === inp && now - last.t < 300) {
       const k = inp.dataset.sparam;
-      const def = k in SDEFAULT ? SDEFAULT[k] : { vol: [0.75, 0.75, 0.6], pan: [0, 0.15, -0.1], rev: [0, 0.2, 0.35], dly: [0, 0.25, 0.1] }[k][ui.ssel];
+      const def = defaultSynthTrack(ui.ssel)[k];
       inp.value = def;
       inp.dispatchEvent(new Event('input', { bubbles: true }));
     }
     last = { el: inp, t: now };
   });
 
-  $('#presetSel').addEventListener('change', (e) => {
-    app.snapshot();
-    tr().preset = e.target.value;
-    renderLabels(); app.save();
-    preview(ui.ssel, { ...brushOf(ui.ssel) });
-    e.target.blur();
-  });
+  const library = initLibrary({ ...app, onPresetChange: () => { renderLabels(); renderParams(); } });
+  $('#presetBtn').addEventListener('click', () => library.open(ui.ssel));
 
   $('#spgBtn').addEventListener('click', () => {
     const box = $('#sparams');
-    box.dataset.pg = box.dataset.pg === 'snd' ? 'mix' : 'snd';
-    $('#spgBtn').textContent = box.dataset.pg === 'snd' ? 'MIX' : 'SND';
+    const i = (PAGES.indexOf(box.dataset.pg) + 1) % PAGES.length;
+    box.dataset.pg = PAGES[i];
+    $('#spgBtn').textContent = PAGES[(i + 1) % PAGES.length].toUpperCase();
+    $('#spgBtn').setAttribute('aria-label', `Pagina ${PAGES[i].toUpperCase()}, tocca per ${PAGES[(i + 1) % PAGES.length].toUpperCase()}`);
   });
   $('#smuteBtn').addEventListener('click', () => { app.snapshot(); tr().mute = !tr().mute; renderLabels(); renderParams(); app.save(); });
   $('#ssoloBtn').addEventListener('click', () => { app.snapshot(); tr().solo = !tr().solo; renderLabels(); renderParams(); app.save(); });
@@ -488,13 +498,20 @@ export function initSynthUI(app) {
     if (!st) return;
     const sheet = $('#sstepSheet');
     $('#sstepTitle').textContent = `${SYNTH_TRACKS[k].name} · step ${s + 1}`;
-    $('#sNote').textContent = k === 2 ? `${chordName(st.n, st.ch)} (${noteName(st.n)})` : noteName(st.n);
+    $('#sNote').textContent = isChordTrack(k) ? `${chordName(st.n, st.ch)} (${noteName(st.n)})` : noteName(st.n);
     $('#sGate').value = st.g;
     $('#sGate').nextElementSibling.textContent = st.g;
     const vals = { a: st.a, sl: st.sl, ch: chordTypeOf(st.ch) };
     $$('.seg', sheet).forEach((g) => $$('.btn', g).forEach((b) => app.setToggle(b, b.dataset.v === String(vals[g.dataset.k]))));
-    $('#sSlideRow').hidden = k === 2;
-    $('#sChordRow').hidden = k !== 2;
+    $('#sSlideRow').hidden = isChordTrack(k);
+    $('#sChordRow').hidden = !isChordTrack(k);
+    const t = tr(k), pl = st.pl || {};
+    [['cut', t.cut, (v) => (v > 0 ? '+' : '') + v.toFixed(2)], ['dec', t.dec, (v) => v.toFixed(2)], ['vel', st.a ? 1 : 0.7, (v) => `${Math.round(v * 100)}`]]
+      .forEach(([key, def, fmt]) => {
+        const inp = $(`#sstepSheet input[data-lock="${key}"]`);
+        inp.value = pl[key] ?? def;
+        inp.nextElementSibling.textContent = pl[key] != null ? fmt(pl[key]) : '—';
+      });
   }
 
   function editStep(fn) {
@@ -510,7 +527,7 @@ export function initSynthUI(app) {
     if (tb) {
       editStep((st, k) => {
         st.n = clamp(st.n + +tb.dataset.tr, 12, 108);
-        if (k === 2) { const s = syn(); st.ch = diatonicChord(st.n, s.key, s.scale, chordTypeOf(st.ch)); }
+        if (isChordTrack(k)) { const s = syn(); st.ch = diatonicChord(st.n, s.key, s.scale, chordTypeOf(st.ch)); }
         preview(k, st);
       });
     }
@@ -522,6 +539,7 @@ export function initSynthUI(app) {
         else st[key] = +v;
       });
     }
+    if (e.target.closest('[data-act="sstep-unlock"]')) editStep((st) => { delete st.pl; });
     if (e.target.closest('[data-act="sstep-del"]')) {
       const { k, s } = editing;
       tr(k).steps[s] = null;
@@ -530,6 +548,52 @@ export function initSynthUI(app) {
     }
   });
   $('#sGate').addEventListener('input', (e) => editStep((st) => { st.g = +e.target.value; }));
+  // Parameter lock: valori del suono validi solo su questo step
+  $('#sstepSheet').addEventListener('input', (e) => {
+    const key = e.target.dataset.lock;
+    if (!key) return;
+    editStep((st) => { st.pl = { ...(st.pl || {}), [key]: parseFloat(e.target.value) }; });
+  });
+
+  // ===================================================================
+  // Arpeggiatore
+  // ===================================================================
+  const RATE_LABEL = { 0.5: '1/32', 1: '1/16', 2: '1/8', 4: '1/4' };
+  const MODE_LABEL = { up: 'SU', down: 'GIÙ', updown: 'SU/GIÙ', random: 'RANDOM' };
+  $('#arpMode').innerHTML = ARP_MODES.map((m) => `<button class="btn sm" data-v="${m}">${MODE_LABEL[m]}</button>`).join('');
+  $('#arpRate').innerHTML = ARP_RATES.map((r) => `<button class="btn sm" data-v="${r}">${RATE_LABEL[r]}</button>`).join('');
+
+  function renderArp() {
+    const k = ui.ssel, a = tr(k).arp;
+    $('#arpTitle').textContent = `ARPEGGIATORE · ${SYNTH_TRACKS[k].name.toUpperCase()}`;
+    $('#arpSrc').innerHTML = SYNTH_TRACKS.map((d, i) => (i !== k && isChordTrack(i)
+      ? `<button class="btn sm" data-v="${i}">${d.name.toUpperCase()}</button>` : '')).join('');
+    const vals = { on: a.on ? 1 : 0, mode: a.mode, rate: a.rate, oct: a.oct, src: a.src };
+    $$('#arpSheet .seg').forEach((g) => $$('.btn', g).forEach((b) => app.setToggle(b, b.dataset.v === String(vals[g.dataset.k]))));
+    $('#arpGate').value = a.gate;
+    $('#arpGate').nextElementSibling.textContent = `${Math.round(a.gate * 100)}%`;
+  }
+  $('#sarpBtn').addEventListener('click', () => {
+    const a = tr().arp;
+    if (a.src === ui.ssel || !isChordTrack(a.src)) a.src = SYNTH_TRACKS.findIndex((d, i) => i !== ui.ssel && isChordTrack(i));
+    renderArp();
+    app.openSheet('arpSheet');
+  });
+  $('#arpSheet').addEventListener('click', (e) => {
+    const b = e.target.closest('.seg .btn');
+    if (!b) return;
+    app.snapshot();
+    const a = tr().arp, key = b.parentElement.dataset.k, v = b.dataset.v;
+    if (key === 'on') a.on = v === '1';
+    else if (key === 'mode') a.mode = v;
+    else a[key] = +v;
+    renderArp(); renderRow(ui.ssel); renderLabels(); renderParams(); app.save();
+  });
+  $('#arpGate').addEventListener('input', (e) => {
+    tr().arp.gate = +e.target.value;
+    e.target.nextElementSibling.textContent = `${Math.round(tr().arp.gate * 100)}%`;
+    app.save();
+  });
 
   // ===================================================================
   // API per ui.js
@@ -541,7 +605,7 @@ export function initSynthUI(app) {
     onMidiRaw,
     clear() { syn().tracks.forEach((t) => { t.steps = t.steps.map(() => null); }); },
     demo() {
-      ui.synthDemo = ((ui.synthDemo ?? -1) + 1) % 3;
+      ui.synthDemo = ((ui.synthDemo ?? -1) + 1) % 3;   // 3 groove demo
       app.pat().synth = demoSynth(ui.synthDemo);
       ui.brush = [null, null, null];
     },

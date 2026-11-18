@@ -3,7 +3,7 @@
  * preferiti, ascolto immediato e assegnazione alla traccia synth selezionata.
  */
 
-import { CATEGORIES, PRESETS, findPresets } from './presets.js';
+import { categories, PRESETS, findPresets } from './presets.js';
 import { SYNTH_TRACKS, isChordTrack, diatonicChord } from './synth.js';
 import { trackBase } from './synthpattern.js';
 
@@ -22,8 +22,10 @@ export function initLibrary(app) {
   let cat = null;          // categoria attiva (null = tutte, '★' = preferiti)
   let k = 0;               // traccia di destinazione
 
-  cats.innerHTML = ['Tutti', '★', ...CATEGORIES]
-    .map((c) => `<button class="btn sm chip-cat" data-cat="${esc(c)}" aria-pressed="false">${esc(c)}</button>`).join('');
+  const renderCats = () => {
+    cats.innerHTML = ['Tutti', '★', ...categories()]
+      .map((c) => `<button class="btn sm chip-cat" data-cat="${esc(c)}" aria-pressed="false">${esc(c)}</button>`).join('');
+  };
 
   const favs = () => state.favs || (state.favs = []);
 
@@ -52,6 +54,7 @@ export function initLibrary(app) {
     const syn = app.pat().synth;
     const base = trackBase(syn, k);
     const tr = { ...syn.tracks[k], preset: id };
+    delete tr.patch;
     const now = engine.ctx.currentTime + 0.02;
     if (isChordTrack(k) || ['Pad', 'Strings', 'Choir', 'Organ', 'Piano', 'Keys'].includes(pr.cat)) {
       const ch = diatonicChord(base, syn.key, syn.scale, 'triad');
@@ -66,6 +69,7 @@ export function initLibrary(app) {
     if (tr.preset !== id) {
       app.snapshot();
       tr.preset = id;
+      delete tr.patch;           // un nuovo suono sostituisce le modifiche dell'editor
       app.save();
       app.onPresetChange();
     }
@@ -98,10 +102,11 @@ export function initLibrary(app) {
   search.addEventListener('input', render);
 
   return {
-    open(track) {
+    open(track, category = null) {
       k = track;
+      renderCats();
       const cur = PRESETS[app.pat().synth.tracks[k].preset];
-      cat = cur ? cur.cat : null;
+      cat = category || (cur ? cur.cat : null);
       search.value = '';
       render();
       app.openSheet('libSheet');

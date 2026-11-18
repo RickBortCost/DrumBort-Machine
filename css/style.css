@@ -583,6 +583,24 @@ input[type="range"]::-moz-range-thumb {
 .perf-mutes .btn.on { background: #3a1b17; border-color: var(--red); color: #ff9c8c; text-decoration: line-through; }
 #recOutBtn.on { color: #ff5a45; border-color: var(--red); }
 
+/* ----- Editor wavetable ----- */
+.wave-box { max-height: calc(100dvh - env(safe-area-inset-top) - 16px); }
+.wave-canvas { width: 100%; height: 110px; border-radius: 8px; background: #0d1114; border: 1px solid var(--edge); }
+.wave-tabs { flex-wrap: wrap; }
+.wave-tabs .btn { flex: 1 1 60px; }
+.wave-body { display: flex; flex-direction: column; gap: 2px; }
+.wave-body .row-ctl .sel { font-size: 15px; }
+.step-edit { display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; height: 130px; padding: 4px; border-radius: 8px; background: #0d1114; touch-action: none; }
+.sbar { position: relative; border-radius: 3px; background: #1d2228; overflow: hidden; }
+.sbar.beat { background: #252b33; }
+.sbar i { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(180deg, var(--cyan), #2b7f8c); }
+.mod-slot { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 40px; gap: 4px; align-items: center; padding: 4px 0; border-bottom: 1px solid #2a2d33; }
+.mod-slot [data-mod="dst"] { grid-column: 2 / 4; }
+.row-ctl .text { grid-column: 2 / 4; }
+.mod-slot .sel { font-size: 14px; }
+.mod-slot input[type="range"] { grid-column: 1 / 3; }
+.mod-slot output { font-size: 11px; color: var(--lcd-ink); text-align: right; }
+
 /* ==========================================================================
    iPhone portrait: 8 step per pagina
    ========================================================================== */

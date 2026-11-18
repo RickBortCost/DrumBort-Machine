@@ -107,6 +107,7 @@
           <button id="presetBtn" class="btn preset" aria-haspopup="dialog">Suono</button>
           <button id="smuteBtn" class="btn sm ms" aria-label="Mute" aria-pressed="false">M</button>
           <button id="ssoloBtn" class="btn sm ms" aria-label="Solo" aria-pressed="false">S</button>
+          <button id="sedBtn" class="btn sm" aria-label="Editor wavetable" aria-haspopup="dialog">✎</button>
           <button id="sarpBtn" class="btn sm" aria-label="Arpeggiatore" aria-haspopup="dialog" aria-pressed="false">ARP</button>
           <button id="spgBtn" class="btn sm" aria-label="Pagina parametri">MOD</button>
         </div>
@@ -226,6 +227,39 @@
       <div id="libCats" class="lib-cats" role="group" aria-label="Categorie"></div>
       <small id="libCount" class="hint"></small>
       <div id="libList" class="lib-list"></div>
+      <button class="btn close" data-close>Chiudi</button>
+    </div>
+  </div>
+
+  <div id="waveSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="waveTitle" hidden>
+    <div class="sheet-box wave-box">
+      <div class="sheet-title" id="waveTitle">EDITOR WAVETABLE</div>
+      <div id="waveNotWT" hidden>
+        <p class="hint">L'editor modifica i suoni del motore wavetable. Scegli un suono della categoria Wavetable oppure parti da una patch vuota.</p>
+        <div class="sheet-actions">
+          <button class="btn" data-act="wave-lib">Suoni Wavetable…</button>
+          <button class="btn" data-act="wave-init">Patch vuota (init)</button>
+        </div>
+      </div>
+      <div id="waveMain">
+        <canvas id="waveCanvas" class="wave-canvas" aria-label="Forma d'onda dell'oscillatore (tocca per cambiare oscillatore)"></canvas>
+        <small id="waveState" class="hint"></small>
+        <div id="waveTabs" class="seg wave-tabs" role="tablist">
+          <button class="btn sm" data-tab="osc">OSC</button><button class="btn sm" data-tab="flt">FILTRI</button>
+          <button class="btn sm" data-tab="env">ENV</button><button class="btn sm" data-tab="lfo">LFO</button>
+          <button class="btn sm" data-tab="step">STEP</button><button class="btn sm" data-tab="mod">MOD</button>
+        </div>
+        <div id="waveBody" class="wave-body"></div>
+        <label class="row-ctl"><small>NOME</small><input id="waveName" class="text" type="text" maxlength="32" aria-label="Nome del suono"></label>
+        <div class="sheet-actions">
+          <button class="btn" data-act="wave-play">▶ Ascolta</button>
+          <button class="btn" data-act="wave-save">Salva come preset</button>
+        </div>
+        <div class="sheet-actions">
+          <button class="btn" data-act="wave-revert">Annulla modifiche</button>
+          <button class="btn" data-act="wave-delete" hidden>Elimina preset</button>
+        </div>
+      </div>
       <button class="btn close" data-close>Chiudi</button>
     </div>
   </div>

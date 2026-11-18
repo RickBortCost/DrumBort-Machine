@@ -9,6 +9,7 @@ import { PRESETS, SYNTH_TRACKS, SCALES, CHORD_TYPES, NOTE_NAMES, isChordTrack, d
   chordName, noteName, pitchClass } from './synth.js';
 import { trackBase, demoSynth, SYNTH_STEPS, SYNTH_COUNT, defaultSynthTrack, ARP_MODES, ARP_RATES } from './synthpattern.js';
 import { initLibrary } from './library.js';
+import { initWaveEditor } from './waveeditor.js';
 import { SYNTH_CH } from './engine.js';
 import { stepDuration } from './sequencer.js';
 
@@ -29,6 +30,7 @@ const SPARAMS = [
   { k: 'rel', label: 'RELEASE', min: 0.1, max: 4, step: 0.01, fmt: (v) => v.toFixed(2), pg: 'mod' },
   { k: 'lfo', label: 'LFO', min: 0, max: 2, step: 0.01, fmt: (v) => v.toFixed(2), pg: 'mod' },
   { k: 'rate', label: 'RATE', min: 0.25, max: 4, step: 0.01, fmt: (v) => v.toFixed(2), pg: 'mod' },
+  { k: 'pos', label: 'WAVE', min: -1, max: 1, step: 0.01, fmt: signed, pg: 'mod' },
   { k: 'vol', label: 'VOL', min: 0, max: 1, step: 0.01, fmt: pct, pg: 'mix' },
   { k: 'pan', label: 'PAN', min: -1, max: 1, step: 0.05, fmt: (v) => (Math.abs(v) < 0.03 ? 'C' : (v < 0 ? 'L' : 'R') + Math.round(Math.abs(v) * 100)), pg: 'mix' },
   { k: 'rev', label: 'REV', min: 0, max: 1, step: 0.01, fmt: pct, pg: 'mix' },
@@ -37,6 +39,8 @@ const SPARAMS = [
   { k: 'crush', label: 'CRUSH', min: 0, max: 12, step: 1, fmt: (v) => (v < 4 ? 'OFF' : `${v}bit`), pg: 'fx' },
 ];
 const PAGES = ['snd', 'mod', 'mix', 'fx'];
+/** Nome del suono di una traccia (* = patch modificata nell'editor). */
+const soundName = (t) => (t.patch && t.patch.wt ? `${t.patch.name} *` : (PRESETS[t.preset] || {}).name || '—');
 const MIX_KEYS = ['vol', 'pan', 'rev', 'dly', 'drv', 'crush'];
 
 /** Tipo di accordo dedotto dagli intervalli salvati. */
@@ -171,19 +175,19 @@ export function initSynthUI(app) {
     for (let k = 0; k < K; k++) {
       const t = s.tracks[k];
       slabels[k].querySelector('b').textContent = SYNTH_TRACKS[k].short;
-      slabels[k].querySelector('i').textContent = t.arp.on ? `ARP ← ${SYNTH_TRACKS[t.arp.src].short}` : PRESETS[t.preset].name + (t.len < SYNTH_STEPS ? ` /${t.len}` : '');
+      slabels[k].querySelector('i').textContent = t.arp.on ? `ARP ← ${SYNTH_TRACKS[t.arp.src].short}` : soundName(t) + (t.len < SYNTH_STEPS ? ` /${t.len}` : '');
       slabels[k].classList.toggle('sel', k === ui.ssel);
       slabels[k].classList.toggle('muted', anySolo ? !t.solo : t.mute);
       slabels[k].classList.toggle('solo', t.solo);
-      slabels[k].setAttribute('aria-label', `Seleziona ${SYNTH_TRACKS[k].name}, ${PRESETS[t.preset].name}`);
+      slabels[k].setAttribute('aria-label', `Seleziona ${SYNTH_TRACKS[k].name}, ${soundName(t)}`);
     }
   }
 
   function renderParams() {
     const k = ui.ssel, t = tr(k);
     const pb = $('#presetBtn');
-    pb.textContent = PRESETS[t.preset].name;
-    pb.setAttribute('aria-label', `Suono ${SYNTH_TRACKS[k].name}: ${PRESETS[t.preset].name}. Apri libreria`);
+    pb.textContent = soundName(t);
+    pb.setAttribute('aria-label', `Suono ${SYNTH_TRACKS[k].name}: ${soundName(t)}. Apri libreria`);
     app.setToggle($('#sarpBtn'), t.arp.on);
     app.setToggle($('#smuteBtn'), t.mute);
     app.setToggle($('#ssoloBtn'), t.solo);
@@ -435,6 +439,12 @@ export function initSynthUI(app) {
 
   const library = initLibrary({ ...app, onPresetChange: () => { renderLabels(); renderParams(); } });
   $('#presetBtn').addEventListener('click', () => library.open(ui.ssel));
+  const editor = initWaveEditor({
+    ...app,
+    onChange: () => { renderLabels(); renderParams(); },
+    openLibrary: (k, cat) => library.open(k, cat),
+  });
+  $('#sedBtn').addEventListener('click', () => editor.open(ui.ssel));
 
   $('#spgBtn').addEventListener('click', () => {
     const box = $('#sparams');

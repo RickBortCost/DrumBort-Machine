@@ -424,7 +424,9 @@ public sealed class MainWindow : Window
         {
             if (e.OriginalSource is HSlider) return;
             if (e.ClickCount == 2) { OpenLibraryFor(ch); return; }
-            Select(ch, true, true);
+            // Clic sulla traccia: in basso le sue note (piano roll o step), solo di questa traccia
+            bottom = "roll";
+            Select(ch, false, true);
         };
         b.AllowDrop = true;
         b.DragOver += (_, e) => { e.Effects = DeviceView.IsNewDevice(e.Data, out string _t) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; };
@@ -437,7 +439,7 @@ public sealed class MainWindow : Window
     {
         sel = ch; busSel = -1;
         if (showDevices) bottom = "dev";
-        else if (Doc.IsSynth(ch)) bottom = "roll";
+        else if (bottom is "dev" or "roll") bottom = "roll";
         if (preview) { if (Doc.IsSynth(ch)) doc.PreviewSynth(ch - 8, doc.Base(ch - 8)); else doc.PreviewDrum(ch); }
         foreach (var (c, h) in headerOf) h.Background = c == sel ? Theme.Panel3 : Theme.Panel2;
         library.Render();
@@ -787,7 +789,7 @@ public sealed class MainWindow : Window
             SetBottom("dev");
             library.ShowEffects();
             Shot(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-step.png"));
-            // Editor della traccia synth: piano roll con scala e note fantasma, graph editor
+            // Editor della traccia synth: piano roll con scala (solo la traccia), graph editor
             Select(8, false, false); SetBottom("roll");
             Shot(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-editor.png"));
             // Track Stack con batteria, effetto sul ritorno A, mixer

@@ -2,6 +2,11 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.21.1] - 2026-11-19
+
+### Modificato
+- Windows: clic su una traccia → in basso l'EDITOR con le note di quella traccia (piano roll per i synth, step per la batteria). Il piano roll mostra solo le note della traccia selezionata (tolte le note fantasma delle altre tracce). Gli effetti restano nella scheda DEVICE.
+
 ## [1.21.0] - 2026-11-19
 
 ### Aggiunto

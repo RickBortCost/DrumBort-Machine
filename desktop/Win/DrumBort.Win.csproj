@@ -15,7 +15,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>DrumBort</AssemblyName>
     <RootNamespace>DrumBort.Win</RootNamespace>
-    <Version>1.21.0</Version>
+    <Version>1.21.1</Version>
     <Product>DrumBort Machine</Product>
     <InvariantGlobalization>true</InvariantGlobalization>
     <ServerGarbageCollection>false</ServerGarbageCollection>

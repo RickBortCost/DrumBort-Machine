@@ -77,6 +77,9 @@ public sealed class MainWindow : Window
         library = new Library(doc) { Selected = () => sel };
         devices = new DeviceView(doc) { OpenLibrary = OpenLibraryFor, ShowNotes = () => SetBottom("roll") };
         library.AddDevice = t => { if (sel >= 0) { devices.Add(t, null); SetBottom("dev"); } };
+        // Plugin VST 3: chiusura sul thread dell'interfaccia, stato nel progetto prima di salvare
+        Vst3.Reaper = p => Dispatcher.BeginInvoke(() => { Vst3Editor.CloseFor(p); p.Dispose(); });
+        Doc.CaptureStates = CaptureVst3;
         autoView = new AutomationView(doc);
         mixerView = new MixerView(doc);
         mixerView.Pick += id =>
@@ -536,6 +539,31 @@ public sealed class MainWindow : Window
         else doc.Op("play", doc.ArrView ? new JsonObject { ["from"] = timeline.Start } : null);
     }
 
+    /// <summary>Stato dei plugin aperti → p.state di ogni device vst3 (tracce, ritorni, master, stack).</summary>
+    void CaptureVst3(JsonObject root)
+    {
+        var chains = new List<JsonArray>();
+        if (root["devs"] is JsonArray devs) chains.AddRange(devs.OfType<JsonArray>());
+        if (root["buses"] is JsonObject b)
+        {
+            if (b["ret"] is JsonArray r) chains.AddRange(r.Select(x => x?["devs"]).OfType<JsonArray>());
+            if (b["master"]?["devs"] is JsonArray m) chains.Add(m);
+            if (b["stacks"] is JsonArray st) chains.AddRange(st.Select(x => x?["devs"]).OfType<JsonArray>());
+        }
+        foreach (var d in chains.SelectMany(c => c.OfType<JsonObject>()).Where(d => Doc.Str(d, "type", "") == "vst3"))
+        {
+            Vst3.Plugin? p;
+            lock (Vst3.Live) Vst3.Live.TryGetValue(Doc.Str(d, "id", ""), out p);
+            if (p == null) continue;
+            try
+            {
+                string st = p.GetState();
+                if (st != "" && d["p"] is JsonObject pp) { pp["state"] = st; p.AppliedState = st; }
+            }
+            catch (Exception e) { Console.Error.WriteLine($"[vst3] stato: {e.Message}"); }
+        }
+    }
+
     void OpenPlayers() => new PlayersDialog(this, doc, sel).ShowDialog();
     void ExportAudio() => new ExportDialog(this, doc).ShowDialog();
     void Tick()
@@ -801,6 +829,24 @@ public sealed class MainWindow : Window
             pdlg.Show(); pdlg.UpdateLayout();
             ShotOf(pdlg, Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-drummer.png"));
             pdlg.Close();
+            // Plugin VST 3 (sul CI: ADelay compilato dall'SDK, cartella in DRUMBORT_VST3_PATH)
+            Console.WriteLine($"vst3: libreria {(Vst3.Available ? "presente" : "assente")}");
+            if (Environment.GetEnvironmentVariable("DRUMBORT_VST3_PATH") is string vdir && vdir != "")
+            {
+                int code = Tools.Vst3Test(vdir);
+                if (code != 0) throw new Exception($"vst3: prova non riuscita ({code})");
+                var found = Vst3.Scan().FirstOrDefault(p => p.Name == "ADelay") ?? throw new Exception("vst3: ADelay non trovato");
+                busSel = -1; Select(0, true, false);
+                devices.Add(DeviceView.Vst3Type(found), null);
+                Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
+                System.Threading.Thread.Sleep(300);
+                Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
+                devices.Render();
+                Shot(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-vst3.png"));
+                var exp = doc.Export();
+                var (vl, _) = Exporter.Render(doc.Parts(null), new Exporter.Options("pattern", 1), 0, null, CancellationToken.None);
+                Console.WriteLine($"vst3: export con ADelay, picco {vl.Max(Math.Abs):0.000}, stato salvato {(exp.ToJsonString().Contains("\"state\"") ? "sì" : "no")}");
+            }
             // Audio e MIDI: driver ASIO e ingressi MIDI (sul runner nessuno), finestra di dialogo
             Console.WriteLine($"asio: {Asio.Drivers().Length} driver");
             MidiInput.Start(Dispatcher);

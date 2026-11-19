@@ -55,6 +55,7 @@ public static class Exporter
         long steps = Steps(parts, o);
         if (steps <= 0) throw new InvalidOperationException("Niente da esportare");
         var eng = new AudioEngine(o.Rate, 1024);
+        eng.Ctx.Offline = true;
         eng.Seq.P.Apply(Prepare(parts, o, only));
         eng.Seq.ArrStart = 0;
         eng.Seq.StopAt = steps;
@@ -63,9 +64,13 @@ public static class Exporter
         // Durata stimata per la barra di avanzamento (tempo del primo pattern)
         double bpm = Math.Max(40, eng.Seq.Pattern.Bpm);
         double est = steps * 15.0 / bpm + o.Tail;
-        var (l, r) = eng.RenderSong(o.Tail, 3600, t => progress?.Invoke(Math.Min(1, t / est)), ct);
-        progress?.Invoke(1);
-        return (l, r);
+        try
+        {
+            var (l, r) = eng.RenderSong(o.Tail, 3600, t => progress?.Invoke(Math.Min(1, t / est)), ct);
+            progress?.Invoke(1);
+            return (l, r);
+        }
+        finally { eng.Mx.DisposeDevices(); }
     }
 
     /// <summary>Canali con contenuto (attivi, non in mute) per gli stem.</summary>

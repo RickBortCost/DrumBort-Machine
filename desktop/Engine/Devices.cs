@@ -44,8 +44,10 @@ public sealed class DeviceInst
     public required Action<DeviceDef, double, double> Set;   // (parametri, tempo, bpm)
     public List<AudioNode> Nodes = new();
     public List<SourceNode> Sources = new();
+    public Action? OnStop;
     public void Stop()
     {
+        OnStop?.Invoke();
         foreach (var s in Sources) s.Stop(0);
         Input.Disconnect(); Output.Disconnect();
         foreach (var n in Nodes) n.Disconnect();
@@ -147,6 +149,7 @@ public static class Devices
         void Mix(double m, double t) { dry?.GainParam.SetTargetAtTime((float)(1 - m), t, 0.02); wet?.GainParam.SetTargetAtTime((float)m, t, 0.02); }
         const double tc = 0.02;
         Action<DeviceDef, double, double> set;
+        Action? onStop = null;
 
         switch (dev.Type)
         {
@@ -276,12 +279,42 @@ public static class Devices
                 set = (d, t, _) => { u.Gain = Db2A(d.P("gain", 0)) * (d.E("phase", "0") == "1" ? -1 : 1); u.Width = (float)d.P("width", 1); };
                 break;
             }
+            case "vst3":
+            {
+                // Plugin VST 3: se non si carica (file mancante, libreria assente) l'audio passa invariato
+                DrumBort.Host.Vst3.Plugin? plug = null;
+                try
+                {
+                    plug = DrumBort.Host.Vst3.Plugin.Open(dev.E("path", ""), dev.E("cid", ""), ctx.SampleRate, AudioContext.Block);
+                    if (dev.E("state", "") is var st0 && st0 != "") { plug.SetState(st0); plug.AppliedState = st0; }
+                }
+                catch (Exception e) { Console.Error.WriteLine($"[vst3] {dev.E("name", dev.E("path", ""))}: {e.Message}"); }
+                var node = Mk(new DrumBort.Host.Vst3Node(ctx, plug));
+                input.Connect(node).Connect(output);
+                string id = dev.Id;
+                if (plug != null && !ctx.Offline) lock (DrumBort.Host.Vst3.Live) DrumBort.Host.Vst3.Live[id] = plug;
+                onStop = () =>
+                {
+                    if (plug == null) return;
+                    lock (DrumBort.Host.Vst3.Live) if (DrumBort.Host.Vst3.Live.TryGetValue(id, out var cur) && cur == plug) DrumBort.Host.Vst3.Live.Remove(id);
+                    if (ctx.Offline) plug.Dispose(); else DrumBort.Host.Vst3.Retire(plug);
+                };
+                set = (d, t, bpm) =>
+                {
+                    if (plug == null) return;
+                    plug.SetTempo(bpm);
+                    // Stato cambiato dal progetto (annulla, file aperto): si ricarica nel plugin
+                    string st = d.E("state", "");
+                    if (st != "" && st != plug.AppliedState) { plug.SetState(st); plug.AppliedState = st; }
+                };
+                break;
+            }
             default:
                 input.Connect(output);
                 set = (_, _, _) => { };
                 break;
         }
-        return new DeviceInst { Type = dev.Type, Input = input, Output = output, Set = set, Nodes = nodes, Sources = srcs };
+        return new DeviceInst { Type = dev.Type, Input = input, Output = output, Set = set, Nodes = nodes, Sources = srcs, OnStop = onStop };
     }
 }
 

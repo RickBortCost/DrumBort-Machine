@@ -155,6 +155,33 @@ public static class Tools
         };
     }
 
+    /// <summary>Prova dell'host VST 3: classi, parametri, valore leggibile, stato salvato e ricaricato.</summary>
+    public static int Vst3Test(string path)
+    {
+        if (!Vst3.Available) { Console.WriteLine("vst3: libreria non disponibile"); return 2; }
+        var dir = Directory.Exists(path) && !path.EndsWith(".vst3") ? path : Path.GetDirectoryName(Path.GetFullPath(path))!;
+        var found = Vst3.Scan(new[] { dir }).Where(p => path == dir || Path.GetFullPath(p.Path) == Path.GetFullPath(path)).ToList();
+        foreach (var f in found) Console.WriteLine($"vst3: {f.Name} · {f.Vendor} · {f.Sub} · {Path.GetFileName(f.Path)}");
+        if (found.Count == 0) { Console.WriteLine("vst3: nessun effetto trovato"); return 3; }
+        using var pl = Vst3.Plugin.Open(found[0].Path, found[0].Cid, 48000, 128);
+        var ps = pl.Params();
+        foreach (var p in ps.Take(8)) Console.WriteLine($"  {p.Id} {p.Name} = {pl.Text(p.Id, pl.Get(p.Id))} {p.Units}");
+        if (ps.FirstOrDefault(p => p.Steps == 0) is Vst3.Param p0)
+        {
+            pl.Set(p0.Id, 0.25);
+            var buf = new float[128];
+            pl.Process(buf, buf, new float[128], new float[128], 128);
+            string st = pl.GetState();
+            pl.Set(p0.Id, 0.9);
+            pl.SetState(st);
+            double back = pl.Get(p0.Id);
+            Console.WriteLine($"vst3: stato {st.Length} caratteri, {p0.Name} dopo il ripristino = {back:0.000}");
+            if (Math.Abs(back - 0.25) > 0.01) { Console.WriteLine("vst3: lo stato non è stato ripristinato"); return 4; }
+        }
+        Console.WriteLine("vst3 ok");
+        return 0;
+    }
+
     /// <summary>Export da riga di comando (come FILE ▸ Esporta audio): mix o stem.</summary>
     public static void ExportProject(string projectPath, string wavPath, Exporter.Options o, bool stems)
     {

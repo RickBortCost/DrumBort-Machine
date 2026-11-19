@@ -112,6 +112,16 @@ public sealed class Mixer
         return b;
     }
 
+    /// <summary>Chiude tutti i device (fine di un rendering offline: libera i plugin).</summary>
+    public void DisposeDevices()
+    {
+        foreach (var b in ch.Cast<Bus>().Concat(ret).Concat(stack).Append(mbus))
+        {
+            foreach (var d in b.Built.Values) d.Stop();
+            b.Built.Clear();
+        }
+    }
+
     /// <summary>Solo test: esclude il compressore master.</summary>
     public void BypassCompressor() { master.Disconnect(); master.Connect(Ctx.Destination); }
 

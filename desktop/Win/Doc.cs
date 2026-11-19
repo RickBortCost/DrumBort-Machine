@@ -147,8 +147,11 @@ public sealed class Doc
         catch (Exception e) { Console.Error.WriteLine($"[salvataggio] {e.Message}"); }
     }
     /// <summary>Progetto nel formato dell'export JSON della web app.</summary>
+    /// <summary>Prima di salvare: lo stato dei plugin VST 3 aperti va nel progetto.</summary>
+    public static Action<JsonObject>? CaptureStates;
     public JsonObject Export()
     {
+        CaptureStates?.Invoke(Root);
         var o = (JsonObject)Root.DeepClone();
         o["app"] = "drumbort"; o["version"] = 3;
         o["appVersion"] = typeof(Doc).Assembly.GetName().Version?.ToString(3);

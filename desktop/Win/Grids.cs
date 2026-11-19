@@ -145,6 +145,13 @@ public sealed class PianoRoll : FrameworkElement
     public PianoRoll(Doc doc, int ch) { this.doc = doc; Ch = ch; Height = Span * RowH; Cursor = Cursors.Cross; }
 
     int K => Ch - 8;
+    /// <summary>Y del centro delle note (o della tonica) per centrare lo scorrimento.</summary>
+    public double FocusY()
+    {
+        var ps = Steps.OfType<JsonObject>().SelectMany(Pitches).ToList();
+        double p = ps.Count > 0 ? ps.Average() : doc.Base(K);
+        return (Low + Span - 1 - p) * RowH;
+    }
     int Low => doc.Base(K) - 12;
     int N => doc.StepCount;
     double CellW => (ActualWidth - Key) / N;

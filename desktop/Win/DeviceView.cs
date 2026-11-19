@@ -10,6 +10,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using DrumBort.Host;
 
 namespace DrumBort.Win;
 
@@ -336,7 +337,7 @@ public sealed class DeviceView : DockPanel
         mb.Click += () => Menu.Show(mb, new (string, Action?)[]
         {
             ("Duplica  (Ctrl+D)", () => Duplicate(id)),
-            ("Ripristina valori", () => Edit(() => d["p"] = DeviceSpecs.New(spec.Type)["p"]!.DeepClone())),
+            ("Ripristina valori", () => { if (Doc.Str(d, "type", "") != "vst3") Edit(() => d["p"] = DeviceSpecs.New(spec.Type)["p"]!.DeepClone()); }),
             (fold ? "Espandi" : "Piega", () => Edit(() => d["fold"] = !fold)),
             (on ? "Disattiva" : "Attiva", () => Edit(() => d["on"] = !on)),
             ("Elimina  (Canc)", () => Remove(id)),
@@ -346,7 +347,8 @@ public sealed class DeviceView : DockPanel
         DockPanel.SetDock(pw, Dock.Left); head.Children.Add(pw);
         DockPanel.SetDock(mb, Dock.Right); head.Children.Add(mb);
         DockPanel.SetDock(fb, Dock.Right); head.Children.Add(fb);
-        var name = Txt.Make((Doc.Str(d, "name", "") is var n && n != "" ? n : spec.Name).ToUpperInvariant(), 10.5, on ? Theme.Ink : Theme.Dim, true);
+        bool isVst = Doc.Str(d, "type", "") == "vst3";
+        var name = Txt.Make((Doc.Str(d, "name", "") is var n && n != "" ? n : isVst ? Doc.Str(d["p"], "name", "VST3") : spec.Name).ToUpperInvariant(), 10.5, on ? Theme.Ink : Theme.Dim, true);
         name.Margin = new Thickness(6, 0, 4, 0);
         head.Children.Add(name);
         Point down = default;
@@ -392,7 +394,8 @@ public sealed class DeviceView : DockPanel
 
         var g = KnobGrid();
         var pp = (JsonObject)d["p"]!;
-        foreach (var p in spec.Params)
+        if (isVst) VstBody(d, g, col);
+        else foreach (var p in spec.Params)
         {
             if (p.Kind == "enum")
             {
@@ -423,13 +426,52 @@ public sealed class DeviceView : DockPanel
         return b;
     }
 
+    // ------------------------------------------------------------------ plugin VST 3
+    void VstBody(JsonObject d, WrapPanel g, Brush col)
+    {
+        string id = Doc.Str(d, "id", "");
+        Vst3.Plugin? plug;
+        lock (Vst3.Live) Vst3.Live.TryGetValue(id, out plug);
+        if (plug == null)
+        {
+            var t = Txt.Make($"Plugin non caricato\n{Path.GetFileName(Doc.Str(d["p"], "path", ""))}", 11, Theme.Dim);
+            t.Width = 150; t.TextWrapping = TextWrapping.Wrap; t.Margin = new Thickness(4);
+            g.Children.Add(t);
+            return;
+        }
+        var ed = new Btn("EDITOR", 84, "Apre la finestra del plugin") { Margin = new Thickness(4, 4, 4, 6) };
+        ed.Click += () => Vst3Editor.Open(Window.GetWindow(this), plug, d, () => Capture(d, plug, true));
+        g.Children.Add(ed);
+        var ps = plug.Params().Where(p => p.Steps == 0 && !p.Name.Contains("Bypass", StringComparison.OrdinalIgnoreCase)).ToList();
+        foreach (var p in ps.Take(8))
+        {
+            var pid = p.Id;
+            var kb = new Knob(p.Name.Length > 11 ? p.Name[..11] : p.Name, 0, 1, p.Def, plug.Get(pid), v => plug.Text(pid, v)) { Color = col, LearnId = $"vst:{id}:{pid}", ToolTip = p.Name };
+            kb.Begin += () => { Capture(d, plug, false); doc.Snapshot(); };
+            kb.Changed += v => plug.Set(pid, v);
+            kb.End += () => Capture(d, plug, true);
+            g.Children.Add(kb);
+        }
+        if (ps.Count > 8) g.Children.Add(Txt.Make($"+{ps.Count - 8} parametri\nnell'editor", 10, Theme.Dim));
+    }
+
+    /// <summary>Stato del plugin nel progetto (salvataggio, annulla); commit = invia anche al motore e ai dispositivi.</summary>
+    void Capture(JsonObject d, Vst3.Plugin plug, bool commit)
+    {
+        string st = plug.GetState();
+        if (st == "") return;
+        ((JsonObject)d["p"]!)["state"] = st;
+        plug.AppliedState = st;
+        if (commit) doc.CommitQuiet(doc.ChainKey(Ch));
+    }
+
     // ------------------------------------------------------------------ modifiche
     void Edit(Action a) { doc.Snapshot(); a(); doc.Commit(doc.ChainKey(Ch)); }
     public void Add(string type, int? at)
     {
         if (Ch < 0) return;
         doc.Snapshot();
-        var d = DeviceSpecs.New(type);
+        var d = type.StartsWith("vst3\u001f") ? Vst3Device(type) : DeviceSpecs.New(type);
         var c = doc.Chain(Ch);
         c.Insert(Math.Clamp(at ?? c.Count, 0, c.Count), d);
         sel = Doc.Str(d, "id", "");
@@ -494,6 +536,17 @@ public sealed class DeviceView : DockPanel
         doc.Commit(doc.ChainKey(Ch));
         e.Handled = true;
     }
+    /// <summary>Device VST 3 da "vst3␟percorso␟cid␟nome" (dati del trascinamento dalla Libreria).</summary>
+    static JsonObject Vst3Device(string type)
+    {
+        var f = type.Split('\u001f');
+        var d = DeviceSpecs.New("eq");
+        d["type"] = "vst3";
+        d["p"] = new JsonObject { ["path"] = f[1], ["cid"] = f[2], ["name"] = f[3] };
+        return d;
+    }
+    public static string Vst3Type(Vst3.PluginInfo p) => $"vst3\u001f{p.Path}\u001f{p.Cid}\u001f{p.Name}";
+
     /// <summary>Dati per trascinare un nuovo effetto dal browser.</summary>
     public static DataObject NewDeviceData(string type) => new(NewFmt, type);
     public static bool IsNewDevice(IDataObject d, out string type) { type = d.GetData(NewFmt) as string ?? ""; return type != ""; }

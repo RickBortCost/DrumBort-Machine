@@ -43,6 +43,7 @@ if (Flag("--render"))
     return;
 }
 
+if (Flag("--vst3-test")) { Environment.Exit(Tools.Vst3Test(Arg("--vst3-test", "."))); }
 if (Flag("--export"))
 {
     // --export progetto.json uscita.wav [--source pattern|arr|song] [--reps 4] [--bits 24] [--stems]

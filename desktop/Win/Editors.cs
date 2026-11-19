@@ -267,7 +267,7 @@ public sealed class EditorPanel : DockPanel
         {
             Roll = new PianoRoll(doc, ch);
             var sv = new ScrollViewer { Content = Roll, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Background = Theme.Bg };
-            Roll.Loaded += (_, _) => sv.ScrollToVerticalOffset(Roll.Height / 2 - 90);
+            sv.Loaded += (_, _) => sv.Dispatcher.BeginInvoke(() => sv.ScrollToVerticalOffset(Math.Max(0, Roll.FocusY() - sv.ViewportHeight / 2)), System.Windows.Threading.DispatcherPriority.Loaded);
             Children.Add(sv);
         }
         else

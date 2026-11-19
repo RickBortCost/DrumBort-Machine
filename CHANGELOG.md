@@ -2,6 +2,19 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.21.0] - 2026-11-19
+
+### Aggiunto
+- **Plugin VST 3** (effetti) nella catena dei device, su Windows (e nell'host Linux):
+  - Libreria → **PLUGIN**: effetti trovati nelle cartelle VST3 di sistema, per produttore, con ricerca; si trascinano nella catena o si aggiungono con doppio clic, anche su ritorni, master e Track Stack;
+  - nel device: pulsante **EDITOR** (la finestra del plugin) e fino a 8 manopole dei parametri, con MIDI Learn;
+  - lo **stato del plugin si salva nel progetto** (anche annulla/ripeti) e vale anche nell'export audio e negli stem;
+  - un plugin che non si carica lascia passare l'audio invariato.
+- Host nativo `drumbort_vst3` (C++, `desktop/Native/vst3host`) basato sull'SDK VST 3 di Steinberg, con licenza MIT dalla versione 3.8; `--vst3-test` per provarlo da riga di comando.
+
+### Corretto
+- Piano roll: all'apertura si centra sulle note della traccia.
+
 ## [1.20.0] - 2026-11-18
 
 ### Aggiunto

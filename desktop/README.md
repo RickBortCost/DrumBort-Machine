@@ -43,6 +43,10 @@ Il primo dispositivo con la drum machine che si collega porta il proprio progett
 
 Se la scheda audio non è disponibile l'host passa da solo alla modalità browser.
 
+## Plugin VST 3
+
+Gli zip di Windows e Linux includono `drumbort_vst3` (host nativo in `Native/vst3host`, basato sull'SDK VST 3 con licenza MIT). Gli effetti si cercano nelle cartelle standard (Windows: `C:\Program Files\Common Files\VST3`; Linux: `~/.vst3`, `/usr/lib/vst3`) e in `DRUMBORT_VST3_PATH`. Sono supportati gli effetti stereo; gli strumenti VST 3 non ancora. Su macOS il supporto non è incluso.
+
 ## Come funziona
 
 - **Motore**: grafo audio a blocchi di 128 campioni con la stessa semantica delle API Web Audio usate dalla web app (oscillatori band-limited, filtri biquad della specifica, automazioni dei parametri, waveshaper, delay), porting 1:1 di kit, synth sottrattivo/FM, piano, corde, organo e synth wavetable. Il riverbero è algoritmico (al posto della convoluzione) e tarato sul livello e sulla durata originali; il compressore master riproduce la curva di Chrome.

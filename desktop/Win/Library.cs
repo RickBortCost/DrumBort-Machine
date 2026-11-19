@@ -31,7 +31,7 @@ public sealed class Library : DockPanel
         presets ??= LoadPresets();
         var title = Txt.Make("LIBRERIA", 11, Theme.Dim, true); title.Margin = new Thickness(8, 6, 8, 2);
         DockPanel.SetDock(title, Dock.Top); Children.Add(title);
-        foreach (var (k, l) in new[] { ("sounds", "SUONI"), ("kits", "KIT"), ("fx", "EFFETTI") })
+        foreach (var (k, l) in new[] { ("sounds", "SUONI"), ("kits", "KIT"), ("fx", "EFFETTI"), ("plugins", "PLUGIN") })
         {
             var b = new Btn(l, 64) { Tag = k };
             b.Click += () => { tab = k; cat = ""; Render(); };
@@ -117,6 +117,7 @@ public sealed class Library : DockPanel
                 list.Children.Add(it);
             }
         }
+        else if (tab == "plugins") RenderPlugins(q, ch);
         else
         {
             head.Text = ch >= 0 ? $"Trascina un effetto nella catena in basso; doppio clic: aggiungi a {doc.TrackShort(ch)}." : "Seleziona una traccia, poi trascina o fai doppio clic su un effetto.";
@@ -147,6 +148,51 @@ public sealed class Library : DockPanel
                     };
                     list.Children.Add(it);
                 }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ plugin VST 3
+    static List<DrumBort.Host.Vst3.PluginInfo>? plugins;
+    void RenderPlugins(string q, int ch)
+    {
+        if (!DrumBort.Host.Vst3.Available) { head.Text = "Supporto VST 3 non disponibile in questa installazione."; return; }
+        var rescan = new Btn("RILEGGI", 0, "Cerca di nuovo i plugin nelle cartelle VST3") { MinHeight = 22, Padding = new Thickness(6, 0, 6, 0) };
+        rescan.Click += () => { plugins = null; Render(); };
+        cats.Children.Add(rescan);
+        if (plugins == null)
+        {
+            head.Text = "Ricerca dei plugin…";
+            Dispatcher.BeginInvoke(() => { plugins = DrumBort.Host.Vst3.Scan(); Render(); }, System.Windows.Threading.DispatcherPriority.Background);
+            return;
+        }
+        head.Text = plugins.Count == 0
+            ? "Nessun effetto VST 3 trovato in " + string.Join(", ", DrumBort.Host.Vst3.Folders().Take(2)) + "."
+            : ch >= 0 ? $"Effetti VST 3: trascina nella catena o doppio clic per aggiungerlo a {doc.TrackShort(ch)}." : "Seleziona una traccia, poi trascina o fai doppio clic su un plugin.";
+        foreach (var grp in plugins.Where(p => q == "" || (p.Name + " " + p.Vendor + " " + p.Sub).ToLowerInvariant().Contains(q)).GroupBy(p => p.Vendor == "" ? "Altri" : p.Vendor).OrderBy(g => g.Key))
+        {
+            list.Children.Add(Sep(grp.Key.ToUpperInvariant()));
+            foreach (var p in grp.OrderBy(p => p.Name))
+            {
+                var it = Item(p.Name, p.Sub.Replace("|", " · "), false);
+                it.ToolTip = p.Path;
+                string type = DeviceView.Vst3Type(p);
+                Point down = default; bool pressed = false;
+                it.MouseLeftButtonDown += (_, e) =>
+                {
+                    if (e.ClickCount == 2) { AddDevice?.Invoke(type); pressed = false; return; }
+                    down = e.GetPosition(this); pressed = true;
+                };
+                it.MouseLeftButtonUp += (_, _) => pressed = false;
+                it.MouseMove += (_, e) =>
+                {
+                    if (!pressed || e.LeftButton != MouseButtonState.Pressed) return;
+                    var pt = e.GetPosition(this);
+                    if (Math.Abs(pt.X - down.X) + Math.Abs(pt.Y - down.Y) < 8) return;
+                    pressed = false;
+                    DragDrop.DoDragDrop(it, DeviceView.NewDeviceData(type), DragDropEffects.Copy);
+                };
+                list.Children.Add(it);
             }
         }
     }

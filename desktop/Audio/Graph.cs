@@ -8,6 +8,8 @@ public sealed class AudioContext
 {
     public const int Block = 128;
     public readonly int SampleRate;
+    /// <summary>Rendering offline (export): i plugin non si registrano per l'interfaccia.</summary>
+    public bool Offline;
     public readonly float Nyquist;
     public long Frame { get; private set; }
     internal long Quantum;

@@ -40,6 +40,8 @@ public sealed class NewTrackDialog : DarkDialog
 {
     public List<int> Result = new();
     public bool OpenLibrary = true;
+    /// <summary>Strumento: synth wavetable (si apre il suo editor in una finestra a parte).</summary>
+    public bool Wavetable;
     readonly Doc doc;
     string type;
     readonly StackPanel cards = new() { Orientation = Orientation.Horizontal };
@@ -112,6 +114,12 @@ public sealed class NewTrackDialog : DarkDialog
         count = new TextBox { Text = "1", Width = 60, Padding = new Thickness(4), Background = Theme.Dark, Foreground = Theme.Ink, BorderBrush = Theme.Edge, CaretBrush = Theme.Ink };
         details.Children.Add(Row(type == "inst" ? "Strumento" : "Voce", which));
         details.Children.Add(Row($"Numero di tracce (max {free.Count})", count));
+        if (type == "inst")
+        {
+            var wt = new CheckBox { Content = "Synth wavetable (3 oscillatori, filtri, LFO, stepper: editor in una finestra a parte)", IsChecked = Wavetable, Foreground = Theme.Ink, Margin = new Thickness(0, 6, 0, 0) };
+            wt.Checked += (_, _) => Wavetable = true; wt.Unchecked += (_, _) => Wavetable = false;
+            details.Children.Add(wt);
+        }
     }
     static UIElement Row(string label, UIElement c)
     {

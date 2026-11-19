@@ -75,7 +75,7 @@ public sealed class MainWindow : Window
         DeviceSpecs.Load(Path.Combine(AppContext.BaseDirectory, "Assets", "devices.json"));
         doc = new Doc(Program.Hub, Program.DataDir);
         library = new Library(doc) { Selected = () => sel };
-        devices = new DeviceView(doc) { OpenLibrary = OpenLibraryFor, ShowNotes = () => SetBottom("roll") };
+        devices = new DeviceView(doc) { OpenLibrary = OpenLibraryFor, ShowNotes = () => SetBottom("roll"), OpenWavetable = c => WavetableWindow.Open(this, doc, c) };
         library.AddDevice = t => { if (sel >= 0) { devices.Add(t, null); SetBottom("dev"); } };
         // Plugin VST 3: chiusura sul thread dell'interfaccia, stato nel progetto prima di salvare
         Vst3.Reaper = p => Dispatcher.BeginInvoke(() => { Vst3Editor.CloseFor(p); p.Dispose(); });
@@ -195,6 +195,9 @@ public sealed class MainWindow : Window
         var drummer = new Btn("🥁 DRUMMER", 0, "Drummer e Session Player: batteria, basso e accordi generati da stile e pad XY (D)");
         drummer.Click += OpenPlayers;
         tb.Children.Add(drummer);
+        var wtB = new Btn("〰 WAVETABLE", 0, "Synth wavetable in una finestra a parte: si applica come strumento a una traccia synth, anche vuota (W)");
+        wtB.Click += OpenWavetable;
+        tb.Children.Add(wtB);
         libB.Click += ToggleLibrary;
         tb.Children.Add(libB);
         tb.Children.Add(new Border { Width = 16 });
@@ -507,7 +510,15 @@ public sealed class MainWindow : Window
         foreach (int ch in d.Result) doc.SetAll(ch, "mute", false);
         sel = d.Result[0];
         doc.Commit(new[] { "tracks" }.Concat(doc.AllPatKeys).ToArray());
-        if (d.OpenLibrary) OpenLibraryFor(sel);
+        if (d.Wavetable && sel >= 8) WavetableWindow.Open(this, doc, sel, applyNow: true);
+        else if (d.OpenLibrary) OpenLibraryFor(sel);
+    }
+
+    /// <summary>Editor wavetable sulla traccia synth selezionata, altrimenti sulla prima traccia synth vuota.</summary>
+    void OpenWavetable()
+    {
+        int target = sel >= 8 ? sel : Enumerable.Range(8, 4).FirstOrDefault(c => !doc.Tracks.Contains(c), 8);
+        WavetableWindow.Open(this, doc, target);
     }
     void RemoveTrack(int ch)
     {
@@ -717,6 +728,7 @@ public sealed class MainWindow : Window
         else if (e.Key == Key.E && mod == ModifierKeys.Control) { ExportAudio(); e.Handled = true; }
         else if (e.Key == Key.R && mod == ModifierKeys.None) { ToggleRec(); e.Handled = true; }
         else if (e.Key == Key.D && mod == ModifierKeys.None && !(Keyboard.FocusedElement is Timeline)) { OpenPlayers(); e.Handled = true; }
+        else if (e.Key == Key.W && mod == ModifierKeys.None) { OpenWavetable(); e.Handled = true; }
         else if (e.Key == Key.X && mod == ModifierKeys.None) { SetBottom(bottom == "mix" ? "dev" : "mix"); e.Handled = true; }
         else if (e.Key == Key.F5 && mod == ModifierKeys.None) { SetView(true); e.Handled = true; }
         else if (e.Key == Key.F6 && mod == ModifierKeys.None) { SetView(false); e.Handled = true; }
@@ -849,6 +861,14 @@ public sealed class MainWindow : Window
                 var (vl, _) = Exporter.Render(doc.Parts(null), new Exporter.Options("pattern", 1), 0, null, CancellationToken.None);
                 Console.WriteLine($"vst3: export con ADelay, picco {vl.Max(Math.Abs):0.000}, stato salvato {(exp.ToJsonString().Contains("\"state\"") ? "sì" : "no")}");
             }
+            // Editor wavetable (finestra non modale) applicato alla traccia KEYS, che era vuota
+            WavetableWindow.Open(this, doc, 11, applyNow: true);
+            var wtw = WavetableWindow.Current!;
+            wtw.UpdateLayout();
+            ShotOf(wtw, Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-wavetable.png"));
+            if (!doc.Tracks.Contains(11) || Doc.TrackOf(doc.Pat, 11)["patch"]?["wt"] == null) throw new Exception("wavetable: patch non applicata alla traccia vuota");
+            Console.WriteLine("wavetable: patch applicata a KY");
+            wtw.Close();
             // Audio e MIDI: driver ASIO e ingressi MIDI (sul runner nessuno), finestra di dialogo
             Console.WriteLine($"asio: {Asio.Drivers().Length} driver");
             MidiInput.Start(Dispatcher);

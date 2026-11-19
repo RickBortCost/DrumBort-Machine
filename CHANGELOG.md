@@ -2,6 +2,17 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.22.0] - 2026-11-19
+
+### Aggiunto
+- **Windows – Wavetable Synth in una finestra a parte** (〰 WAVETABLE, tasto W, o WAVETABLE nel DEVICE di una traccia synth). La finestra non è modale: si continua a lavorare nella finestra principale. Struttura ispirata ai synth wavetable come Massive:
+  - 3 oscillatori wavetable (Analog, Sync, Vocal, Digital, Additive, Growl, FM) con disegno della forma d'onda, posizione nella tabella (WT-POS), pitch, fine e volume;
+  - rumore e unisono (voci, detune); 2 filtri in serie o in parallelo con mix; drive;
+  - inviluppo d'ampiezza, glide e gain; inviluppo di modulazione, 2 LFO (liberi o a tempo), stepper a 16 passi;
+  - matrice di modulazione a 6 slot (es. LFO → WT-POS per il "wobble");
+  - preset wavetable, nome della patch, ▶ ASCOLTA (Spazio).
+- **Come strumento sulle tracce vuote:** si sceglie la traccia (BS, LD, PD, KY, anche "vuota") e APPLICA ALLA TRACCIA la attiva con la patch; da lì ogni modifica si sente subito. In Nuove tracce, per lo strumento software, c'è l'opzione "Synth wavetable".
+
 ## [1.21.1] - 2026-11-19
 
 ### Modificato

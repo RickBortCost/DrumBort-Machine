@@ -75,6 +75,7 @@ public sealed class DeviceView : DockPanel
     public int Ch = -1;
     string? sel;
     public Action<int>? OpenLibrary;
+    public Action<int>? OpenWavetable;
     public Action? ShowNotes;
 
     public DeviceView(Doc doc)
@@ -255,6 +256,9 @@ public sealed class DeviceView : DockPanel
             var lib = new Btn("LIBRERIA", 0, "Scegli il suono nella Libreria");
             lib.Click += () => OpenLibrary?.Invoke(Ch);
             info.Children.Add(lib);
+            var wtb = new Btn("WAVETABLE", 0, "Apre l'editor del synth wavetable in una finestra a parte");
+            wtb.Click += () => OpenWavetable?.Invoke(Ch);
+            info.Children.Add(wtb);
             row.Children.Add(info);
             var g = KnobGrid();
             string Sig(double v) => (v > 0 ? "+" : "") + v.ToString("0.00", CultureInfo.InvariantCulture);

@@ -124,6 +124,30 @@ public static class Wavetable
         }
     }
 
+    static readonly Dictionary<string, (float[] re, float[] im)> coefs = new();
+    /// <summary>Forma d'onda (un periodo, N punti) alla posizione `pos` della tabella: per il disegno nell'editor.</summary>
+    public static float[] Shape(string table, double pos, int N = 200)
+    {
+        double x = Math.Clamp(pos, 0, 1) * (F - 1);
+        var outp = new float[N];
+        for (int k = 0; k < F; k++)
+        {
+            double w = Math.Max(0, 1 - Math.Abs(x - k));
+            if (w == 0) continue;
+            (float[] re, float[] im) c;
+            lock (coefs) { if (!coefs.TryGetValue($"{table}|{k}", out c)) coefs[$"{table}|{k}"] = c = Gen(Tables.Contains(table) ? table : "analog", k); }
+            var fr = new double[N]; double pk = 0;
+            for (int i = 0; i < N; i++)
+            {
+                double v = 0;
+                for (int n = 1; n < 64; n++) { double ph = 2 * Math.PI * n * i / N; v += c.re[n] * Math.Cos(ph) + c.im[n] * Math.Sin(ph); }
+                fr[i] = v; pk = Math.Max(pk, Math.Abs(v));
+            }
+            for (int i = 0; i < N; i++) outp[i] += (float)(w * fr[i] / (pk > 0 ? pk : 1));
+        }
+        return outp;
+    }
+
     public static void Warm(float nyquist) { foreach (var t in Tables) foreach (var w in Frames(t)) w.Warm(nyquist); }
 
     static readonly Dictionary<int, float[]> drives = new();

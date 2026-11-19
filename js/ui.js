@@ -625,7 +625,8 @@ function frame() {
 // Griglia: tap, trascinamento, tastiera
 // =====================================================================
 
-let paint = null;
+const paints = new Map();      // dito (pointerId) → pennello sugli step
+const padFingers = new Map();  // dito → pad sotto il dito (scivolando su un altro pad lo suona)
 
 function setStep(t, s, v) {
   pat().steps[t][s] = v;
@@ -649,10 +650,12 @@ grid.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   setFocusCell(c, false);
   const v = activateStep(+c.dataset.t, +c.dataset.s);
-  if (v !== null) paint = { v, seen: new Set([c]) };
+  // Multitouch: ogni dito dipinge per conto suo
+  if (v !== null) paints.set(e.pointerId, { v, seen: new Set([c]) });
 });
 
 grid.addEventListener('pointermove', (e) => {
+  const paint = paints.get(e.pointerId);
   if (!paint) return;
   const el = document.elementFromPoint(e.clientX, e.clientY);
   const c = el && el.closest && el.closest('.step');
@@ -661,7 +664,7 @@ grid.addEventListener('pointermove', (e) => {
   setStep(+c.dataset.t, +c.dataset.s, paint.v);
 });
 
-const endPaint = () => { paint = null; };
+const endPaint = (e) => { paints.delete(e.pointerId); padFingers.delete(e.pointerId); };
 window.addEventListener('pointerup', endPaint);
 window.addEventListener('pointercancel', endPaint);
 
@@ -735,7 +738,19 @@ padsEl.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   const t = +pad.dataset.t;
   hitPad(t, 1);
+  padFingers.set(e.pointerId, t);
   if (t !== state.sel) selectTrack(t);
+});
+// Dita che scivolano da un pad all'altro (rullate con più dita)
+padsEl.addEventListener('pointermove', (e) => {
+  if (!padFingers.has(e.pointerId) || !engine.ctx) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const pad = el && el.closest && el.closest('.pad');
+  if (!pad || !padsEl.contains(pad)) return;
+  const t = +pad.dataset.t;
+  if (t === padFingers.get(e.pointerId)) return;
+  padFingers.set(e.pointerId, t);
+  hitPad(t, 0.85);
 });
 
 function selectTrack(t) {

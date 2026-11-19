@@ -1015,6 +1015,52 @@ async function instrumentTests(browser, url) {
   await context.close();
 }
 
+
+/** Multitouch: due dita sugli step, sui pad e sulle manopole contemporaneamente. */
+async function multitouchTests(browser, url) {
+  console.log(`\n[${browser.browserType().name()}] Multitouch (iPhone portrait)`);
+  const { context, page, errors } = await openApp(browser, url, VIEWPORTS[0]);
+  // Eventi pointer di due dita (pointerId diversi), come sul telefono
+  await page.evaluate(() => {
+    window.__touch = (type, id, el) => {
+      const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const target = type === 'pointerdown' ? el : document.elementFromPoint(x, y) || el;
+      target.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', isPrimary: id === 1, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+    };
+  });
+  // Step: due dita dipingono su due tracce diverse nello stesso momento
+  const r = await page.evaluate(() => {
+    const p = drumbort.state.slots[drumbort.state.slot];
+    [0, 1].forEach((t) => p.steps[t].fill(0));
+    drumbort.renderAll();
+    const cell = (t, s) => document.querySelector(`.step[data-t="${t}"][data-s="${s}"]`);
+    __touch('pointerdown', 1, cell(0, 0)); __touch('pointerdown', 2, cell(1, 0));
+    __touch('pointermove', 1, cell(0, 1)); __touch('pointermove', 2, cell(1, 1));
+    __touch('pointermove', 1, cell(0, 2)); __touch('pointermove', 2, cell(1, 2));
+    __touch('pointerup', 1, cell(0, 2));
+    __touch('pointermove', 2, cell(1, 3));
+    __touch('pointerup', 2, cell(1, 3));
+    return [p.steps[0].slice(0, 4).map((v) => +!!v).join(''), p.steps[1].slice(0, 4).map((v) => +!!v).join('')];
+  });
+  check('due dita dipingono gli step insieme (e il secondo continua dopo che il primo si alza)', r[0] === '1110' && r[1] === '1111', JSON.stringify(r));
+  // Pad della batteria: due dita insieme + scivolamento su un altro pad
+  const hits = await page.evaluate(async () => {
+    const pads = [...document.querySelectorAll('#pads .pad')];
+    const n0 = drumbort.engine.voiceCount ? 0 : 0;
+    let count = 0;
+    const orig = drumbort.engine.trigger;
+    drumbort.engine.trigger = function (...a) { count++; return orig.apply(this, a); };
+    __touch('pointerdown', 3, pads[0]); __touch('pointerdown', 4, pads[1]);
+    __touch('pointermove', 4, pads[2]);
+    __touch('pointerup', 3, pads[0]); __touch('pointerup', 4, pads[2]);
+    drumbort.engine.trigger = orig;
+    return count + n0;
+  });
+  check('pad: due dita insieme e scivolamento su un altro pad', hits >= 3, `${hits} colpi`);
+  check('nessun errore', errors.length === 0, errors.join(' | '));
+  await context.close();
+}
+
 // ---------------------------------------------------------------------
 const local = process.env.BASE_URL ? null : await startServer();
 const url = process.env.BASE_URL || local.url;
@@ -1028,6 +1074,7 @@ for (const name of BROWSERS) {
     await functionalTests(browser, url);
     await synthTests(browser, url);
     await instrumentTests(browser, url);
+    await multitouchTests(browser, url);
     await featureTests(browser, url);
     await studioTests(browser, url);
     await labTests(browser, url);

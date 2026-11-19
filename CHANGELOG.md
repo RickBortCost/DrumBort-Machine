@@ -2,6 +2,16 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.29.0] - 2026-11-19
+
+### Aggiunto
+- **Multitouch sul telefono e sul tablet:**
+  - **step** (batteria e synth): più dita dipingono insieme, anche su tracce diverse; un dito che si alza non interrompe gli altri;
+  - **pad della batteria**: più dita insieme e **scivolamento** da un pad all'altro (rullate);
+  - **pad a note del synth**: accordi con più dita, ognuna con la sua nota, e scivolamento su un altro pad che cambia nota (glissando); ogni pad si spegne quando si alza il suo dito;
+  - **manopole dei device**: più manopole regolabili contemporaneamente, una per dito;
+  - il pinch-zoom resta disattivato, così due dita non ingrandiscono la pagina.
+
 ## [1.28.0] - 2026-11-19
 
 ### Aggiunto

@@ -183,7 +183,8 @@ export function initFxChain(app, el, h) {
   // ---------------------------------------------------------------
   // Manopole: trascinamento verticale, rotella, tastiera, doppio clic
   // ---------------------------------------------------------------
-  let drag = null, lastTap = null;
+  const drags = new Map();   // dito (pointerId) → manopola trascinata: più manopole insieme
+  let lastTap = null;
   el.addEventListener('pointerdown', (e) => {
     const dial = e.target.closest('.kb-dial');
     if (!dial) return;
@@ -196,10 +197,11 @@ export function initFxChain(app, el, h) {
     app.snapshot();
     dial.setPointerCapture(e.pointerId);
     dial.focus();
-    drag = { kb, d, x: e.clientX, y: e.clientY, f: clamp(norm(d, valueOf(kb)), 0, 1) };
+    drags.set(e.pointerId, { kb, d, x: e.clientX, y: e.clientY, f: clamp(norm(d, valueOf(kb)), 0, 1) });
     kb.classList.add('kb-drag');
   });
   el.addEventListener('pointermove', (e) => {
+    const drag = drags.get(e.pointerId);
     if (!drag) return;
     // Movimento relativo: si somma solo lo spostamento dall'evento precedente, così cambiare
     // modalità a metà gesto non fa saltare il valore. Fine: Shift/Ctrl, oppure al tocco
@@ -210,7 +212,7 @@ export function initFxChain(app, el, h) {
     drag.y = e.clientY;
     setValue(drag.kb, denorm(drag.d, drag.f));
   });
-  const end = () => { if (drag) { drag.kb.classList.remove('kb-drag'); drag = null; app.save(); } };
+  const end = (e) => { const drag = drags.get(e.pointerId); if (drag) { drag.kb.classList.remove('kb-drag'); drags.delete(e.pointerId); app.save(); } };
   el.addEventListener('pointerup', end);
   el.addEventListener('pointercancel', end);
   el.addEventListener('wheel', (e) => {

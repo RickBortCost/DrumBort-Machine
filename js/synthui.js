@@ -254,7 +254,7 @@ export function initSynthUI(app) {
   // ===================================================================
   // Griglia: inserisci con il pennello, cancella, trascina
   // ===================================================================
-  let paint = null;
+  const paints = new Map();   // dito (pointerId) → pennello sugli step
 
   function setCell(k, s, mode) {
     const t = tr(k);
@@ -281,10 +281,11 @@ export function initSynthUI(app) {
     const mode = tr(k).steps[s] ? 'erase' : 'add';
     setCell(k, s, mode);
     if (mode === 'add') preview(k, tr(k).steps[s]);
-    paint = { k, mode, seen: new Set([c]) };
+    paints.set(e.pointerId, { k, mode, seen: new Set([c]) });
   });
 
   grid.addEventListener('pointermove', (e) => {
+    const paint = paints.get(e.pointerId);
     if (!paint) return;
     const el = document.elementFromPoint(e.clientX, e.clientY);
     const c = el && el.closest && el.closest('.sstep');
@@ -293,7 +294,7 @@ export function initSynthUI(app) {
     const s = +c.dataset.s;
     if ((paint.mode === 'add') !== !!tr(paint.k).steps[s]) setCell(paint.k, s, paint.mode);
   });
-  const endPaint = () => { paint = null; };
+  const endPaint = (e) => { paints.delete(e.pointerId); };
   window.addEventListener('pointerup', endPaint);
   window.addEventListener('pointercancel', endPaint);
 
@@ -382,17 +383,36 @@ export function initSynthUI(app) {
     }
   }
 
+  // Multitouch: ogni dito suona la sua nota; scivolando su un altro pad la nota cambia
+  const fingers = new Map();   // pointerId → pad sotto il dito
   spadGrid.addEventListener('pointerdown', (e) => {
     const p = e.target.closest('.spad');
     if (!p || !engine.ctx) return;
     e.preventDefault();
     const { n, ch } = padNotes(ui.ssel, +p.dataset.d);
     noteOn(`p${e.pointerId}`, ui.ssel, n, ch);
+    fingers.set(e.pointerId, p);
+    p.classList.add('down');
+  });
+  spadGrid.addEventListener('pointermove', (e) => {
+    const cur = fingers.get(e.pointerId);
+    if (!cur) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const p = el && el.closest && el.closest('.spad');
+    if (!p || p === cur || !spadGrid.contains(p)) return;
+    noteOff(`p${e.pointerId}`);
+    if (![...fingers.values()].some((x, i) => x === cur && [...fingers.keys()][i] !== e.pointerId)) cur.classList.remove('down');
+    const { n, ch } = padNotes(ui.ssel, +p.dataset.d);
+    noteOn(`p${e.pointerId}`, ui.ssel, n, ch);
+    fingers.set(e.pointerId, p);
     p.classList.add('down');
   });
   const padUp = (e) => {
+    const p = fingers.get(e.pointerId);
+    if (!p) return;
     noteOff(`p${e.pointerId}`);
-    spads.forEach((p) => p.classList.remove('down'));
+    fingers.delete(e.pointerId);
+    if (![...fingers.values()].includes(p)) p.classList.remove('down');
   };
   window.addEventListener('pointerup', padUp);
   window.addEventListener('pointercancel', padUp);

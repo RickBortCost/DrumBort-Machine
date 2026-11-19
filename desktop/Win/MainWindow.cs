@@ -898,6 +898,27 @@ public sealed class MainWindow : Window
             ShotOf(ppw, Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-presetplayer.png"));
             Console.WriteLine($"preset player: {Doc.Str(Doc.TrackOf(doc.Pat, 9), "preset", "")} su LD");
             ppw.Close();
+            // Controller MIDI simulato sullo swing (50-75): aggancio, 14 bit, encoder infinito
+            {
+                double Sw() => (swing.Value - 50) / 25;
+                swing.Set(55); 
+                MidiLearn.Map("1:1", "swing", "pickup");
+                MidiLearn.OnControl(1, 1, 127);                     // lontano: nessun salto
+                bool noJump = Math.Abs(swing.Value - 55) < 0.01;
+                MidiLearn.OnControl(1, 1, 26);                      // 0,205 ≈ valore attuale: aggancio
+                MidiLearn.OnControl(1, 1, 64);
+                bool follows = Math.Abs(Sw() - 64 / 127.0) < 0.01;
+                MidiLearn.Map("1:2", "swing", "jump");
+                MidiLearn.OnControl(1, 2, 32); MidiLearn.OnControl(1, 34, 100);   // MSB + LSB = 14 bit
+                bool hi = Math.Abs(Sw() - (32 * 128 + 100) / 16383.0) < 0.002;
+                MidiLearn.Map("1:3", "swing", "rel");
+                double before = swing.Value;
+                MidiLearn.OnControl(1, 3, 1); MidiLearn.OnControl(1, 3, 1);
+                bool rel = swing.Value > before && swing.Value - before < 1;
+                Console.WriteLine($"midi: aggancio {(noJump && follows ? "ok" : "NO")}, 14 bit {(hi ? "ok" : "NO")}, encoder {(rel ? "ok" : "NO")}");
+                if (!(noJump && follows && hi && rel)) throw new Exception("midi learn: comportamento inatteso");
+                MidiLearn.Forget();
+            }
             // Audio e MIDI: driver ASIO e ingressi MIDI (sul runner nessuno), finestra di dialogo
             Console.WriteLine($"asio: {Asio.Drivers().Length} driver");
             MidiInput.Start(Dispatcher);

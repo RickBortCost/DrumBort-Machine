@@ -563,7 +563,7 @@ async function studioTests(browser, url) {
   const eqBox = '#fxbar .dv[data-type="eq"]';
   const kb = await page.locator(`${eqBox} .kb[data-k="lg"] .kb-dial`).boundingBox();
   await page.mouse.move(kb.x + kb.width / 2, kb.y + kb.height / 2); await page.mouse.down();
-  await page.mouse.move(kb.x + kb.width / 2, kb.y + kb.height / 2 - 40, { steps: 5 }); await page.mouse.up();
+  await page.mouse.move(kb.x + kb.width / 2, kb.y + kb.height / 2 - 55, { steps: 5 }); await page.mouse.up();
   const lo = await page.evaluate(() => drumbort.state.devs[1].find((d) => d.type === 'eq').p.lg);
   check('browser e pannello nascosti, manopola del device', pn.every(Boolean) && Math.abs(lo - 7.5) < 0.11, JSON.stringify([pn, lo]));
   // Riordino: il Saturator trascinato prima dell'EQ

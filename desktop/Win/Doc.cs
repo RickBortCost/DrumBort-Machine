@@ -85,15 +85,42 @@ public sealed class Doc
     /// <summary>Modifiche dell'interfaccia: motore, dispositivi, salvataggio automatico, ridisegno.</summary>
     public void Commit(params string[] keys)
     {
+        quietTimer?.Stop();
+        foreach (var k in keys) pendingKeys.Remove(k);
+        FlushQuiet();
         hub.LocalState(Parts(keys));
         ScheduleSave();
         Changed?.Invoke();
     }
-    /// <summary>Come Commit, senza ridisegnare (trascinamento di manopole e cursori).</summary>
+    /// <summary>
+    /// Come Commit, senza ridisegnare (trascinamento di manopole, cursori, controller MIDI). Gli invii
+    /// al motore sono raggruppati (al massimo uno ogni 15 ms, con l'ultimo valore): un movimento
+    /// veloce o un controller a 14 bit non riempie il motore di copie del progetto.
+    /// </summary>
     public void CommitQuiet(params string[] keys)
     {
-        hub.LocalState(Parts(keys));
+        foreach (var k in keys) pendingKeys.Add(k);
+        if ((DateTime.UtcNow - lastQuiet).TotalMilliseconds >= 15) FlushQuiet();
+        else
+        {
+            quietTimer ??= new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Send) { Interval = TimeSpan.FromMilliseconds(15) };
+            quietTimer.Tick -= OnQuiet; quietTimer.Tick += OnQuiet;
+            if (!quietTimer.IsEnabled) quietTimer.Start();
+        }
         ScheduleSave();
+    }
+    readonly HashSet<string> pendingKeys = new();
+    DateTime lastQuiet;
+    System.Windows.Threading.DispatcherTimer? quietTimer;
+    void OnQuiet(object? s, EventArgs e) { quietTimer!.Stop(); FlushQuiet(); }
+    /// <summary>Invia subito le modifiche raggruppate (anche prima di un Commit).</summary>
+    public void FlushQuiet()
+    {
+        if (pendingKeys.Count == 0) return;
+        var keys = pendingKeys.ToArray();
+        pendingKeys.Clear();
+        lastQuiet = DateTime.UtcNow;
+        hub.LocalState(Parts(keys));
     }
     public string PatKey => $"p{Slot}";
     public string[] AllPatKeys => Enumerable.Range(0, Slots).Select(i => $"p{i}").ToArray();

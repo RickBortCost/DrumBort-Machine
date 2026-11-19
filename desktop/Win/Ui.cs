@@ -139,7 +139,35 @@ public static class Menu
     }
 }
 
-/// <summary>Cursore orizzontale sottile (volume, pan, swing). Doppio clic: valore iniziale.</summary>
+/// <summary>Utilità comuni a manopole, cursori e fader: valore digitato, arrotondamento.</summary>
+public static class ControlInput
+{
+    /// <summary>Numero digitato: virgola o punto, unità ignorate, "k" = ×1000, "%" su parametri 0-1.</summary>
+    public static double? Parse(string text, double min, double max)
+    {
+        var t = text.Trim().ToLowerInvariant().Replace(',', '.');
+        bool pct = t.EndsWith("%"), kilo = t.Contains('k');
+        var num = new string(t.TakeWhile(c => char.IsDigit(c) || c is '.' or '-' or '+').ToArray());
+        if (!double.TryParse(num, NumberStyles.Float, CultureInfo.InvariantCulture, out double v)) return null;
+        if (kilo) v *= 1000;
+        if (pct && max <= 1.5) v /= 100;
+        return Math.Clamp(v, min, max);
+    }
+
+    /// <summary>Chiede un valore (finestra con il valore attuale).</summary>
+    public static void Ask(FrameworkElement el, string label, string current, double min, double max, Action<double> apply)
+    {
+        var txt = Prompt.Ask(Window.GetWindow(el), $"{label} ({F(min)} … {F(max)})", current);
+        if (txt != null && Parse(txt, min, max) is double v) apply(v);
+    }
+    static string F(double v) => v.ToString("0.###", CultureInfo.InvariantCulture);
+}
+
+/// <summary>
+/// Cursore orizzontale sottile (volume, pan, swing). Trascinando la maniglia il movimento è relativo
+/// (nessun salto), cliccando altrove il valore va lì; Shift = regolazione fine; rotella a passi
+/// dell'1% (Shift 0,2%); doppio clic: valore iniziale; tasto destro: digita valore, MIDI Learn.
+/// </summary>
 public sealed class HSlider : FrameworkElement
 {
     public double Min, Max, Def, Value;
@@ -147,17 +175,31 @@ public sealed class HSlider : FrameworkElement
     public bool Bipolar;
     public event Action<double>? Changed;
     public event Action? Begin, End;
-    bool drag;
+    bool drag; double lastX;
     public HSlider(double min, double max, double def, double value)
     {
         Min = min; Max = max; Def = def; Value = value;
         Height = 16; MinWidth = 40; Cursor = Cursors.SizeWE; Focusable = true;
         Bipolar = min < 0 && max > 0;
-        MidiLearn.Attach(this, () => LearnId, () => Begin?.Invoke(), f => { Value = Math.Round(Min + f * (Max - Min), 3); InvalidateVisual(); Changed?.Invoke(Value); }, () => End?.Invoke());
+        MidiLearn.Attach(this, () => LearnId, () => F, () => Begin?.Invoke(), f => SetValue(Min + f * (Max - Min)), () => End?.Invoke(),
+            () => new (string, Action?)[]
+            {
+                ($"Digita valore… (ora {Value.ToString("0.###", CultureInfo.InvariantCulture)})", () => ControlInput.Ask(this, "Valore", Value.ToString("0.###", CultureInfo.InvariantCulture), Min, Max, v => { Begin?.Invoke(); SetValue(v); End?.Invoke(); })),
+                ("Valore iniziale", () => { Begin?.Invoke(); SetValue(Def); End?.Invoke(); }),
+            });
     }
     /// <summary>Identificativo per il MIDI Learn (tasto destro); null = non assegnabile.</summary>
     public string? LearnId;
     double F => (Value - Min) / (Max - Min);
+    double ThumbX => F * ActualWidth;
+    void SetValue(double v)
+    {
+        v = Math.Round(Math.Clamp(v, Min, Max), 4);
+        if (v == Value) return;
+        Value = v;
+        InvalidateVisual();
+        Changed?.Invoke(Value);
+    }
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight, y = h / 2;
@@ -165,39 +207,55 @@ public sealed class HSlider : FrameworkElement
         dc.DrawRoundedRectangle(Theme.Dark, null, new Rect(0, y - 2, w, 4), 2, 2);
         double x0 = Bipolar ? (0 - Min) / (Max - Min) * w : 0, x1 = F * w;
         dc.DrawRectangle(Color, null, new Rect(Math.Min(x0, x1), y - 2, Math.Abs(x1 - x0), 4));
-        dc.DrawRoundedRectangle(Color, new Pen(Theme.Dark, 1), new Rect(Math.Clamp(x1 - 4, 0, w - 8), 1, 8, h - 2), 2, 2);
+        dc.DrawRoundedRectangle(drag ? Brushes.White : Color, new Pen(Theme.Dark, 1), new Rect(Math.Clamp(x1 - 4, 0, w - 8), 1, 8, h - 2), 2, 2);
         if (MidiLearn.Learning(LearnId)) dc.DrawRectangle(null, new Pen(Theme.Cyan, 2) { DashStyle = DashStyles.Dash }, new Rect(0, 0, w, h));
-    }
-    void SetFrom(double x)
-    {
-        double v = Min + Math.Clamp(x / Math.Max(1, ActualWidth), 0, 1) * (Max - Min);
-        Value = Math.Round(v, 3);
-        InvalidateVisual();
-        Changed?.Invoke(Value);
     }
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
-        if (e.ClickCount == 2) { Value = Def; InvalidateVisual(); Changed?.Invoke(Value); End?.Invoke(); e.Handled = true; return; }
+        if (e.ClickCount == 2) { Begin?.Invoke(); SetValue(Def); End?.Invoke(); e.Handled = true; return; }
         Begin?.Invoke();
         drag = true; CaptureMouse(); Focus();
-        SetFrom(e.GetPosition(this).X);
+        double x = e.GetPosition(this).X;
+        // Fuori dalla maniglia (e senza Shift) il valore va al punto cliccato; poi movimento relativo
+        if (Math.Abs(x - ThumbX) > 7 && !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) SetValue(Min + Math.Clamp(x / Math.Max(1, ActualWidth), 0, 1) * (Max - Min));
+        lastX = x;
+        InvalidateVisual();
         e.Handled = true;
     }
-    protected override void OnMouseMove(MouseEventArgs e) { if (drag) SetFrom(e.GetPosition(this).X); }
-    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) { if (drag) { drag = false; ReleaseMouseCapture(); End?.Invoke(); } }
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        if (!drag) return;
+        double x = e.GetPosition(this).X, dx = x - lastX;
+        lastX = x;
+        bool fine = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) || Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        SetValue(Value + dx / Math.Max(1, ActualWidth) * (Max - Min) * (fine ? 0.15 : 1));
+    }
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) { if (drag) { drag = false; ReleaseMouseCapture(); InvalidateVisual(); End?.Invoke(); } }
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         Begin?.Invoke();
-        Value = Math.Clamp(Value + Math.Sign(e.Delta) * (Max - Min) / 50, Min, Max);
-        InvalidateVisual(); Changed?.Invoke(Value); End?.Invoke();
+        double notch = e.Delta / 120.0;
+        SetValue(Value + notch * (Max - Min) * (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 0.002 : 0.01));
+        End?.Invoke();
+        e.Handled = true;
+    }
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        int dir = e.Key is Key.Up or Key.Right ? 1 : e.Key is Key.Down or Key.Left ? -1 : 0;
+        if (dir == 0) return;
+        Begin?.Invoke();
+        SetValue(Value + dir * (Max - Min) * (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 0.002 : 0.01));
+        End?.Invoke();
         e.Handled = true;
     }
     public void Set(double v) { Value = v; InvalidateVisual(); }
 }
 
 /// <summary>
-/// Manopola rotativa: trascina in verticale (Shift = fine), rotella, frecce, doppio clic = valore
-/// iniziale. Scala lineare o logaritmica; arco dal centro per i parametri bipolari.
+/// Manopola rotativa. Trascinamento verticale relativo (Shift o Ctrl = fine, 5× più preciso, anche
+/// a metà gesto senza salti); rotella a passi dell'1% (Shift 0,2%); frecce 1% (Shift 0,2%),
+/// PagSu/PagGiù 10%, Home/Fine = minimo/massimo; doppio clic = valore iniziale; tasto destro:
+/// digita un valore, MIDI Learn. Scala lineare o logaritmica; arco dal centro per i bipolari.
 /// </summary>
 public sealed class Knob : FrameworkElement
 {
@@ -208,33 +266,47 @@ public sealed class Knob : FrameworkElement
     public Brush Color = Theme.Orange;
     public event Action<double>? Changed;
     public event Action? Begin, End;
-    double dragY, dragF; bool drag;
+    double lastY, acc; bool drag;
 
     public Knob(string label, double min, double max, double def, double value, Func<double, string> fmt, bool log = false)
     {
         Label = label; Min = min; Max = max; Def = def; Value = value; Format = fmt; Log = log;
         Width = 62; Height = 74; Cursor = Cursors.SizeNS; Focusable = true;
-        ToolTip = $"{label}: trascina in verticale (Shift = fine), doppio clic = valore iniziale, tasto destro = MIDI Learn";
-        MidiLearn.Attach(this, () => LearnId, () => Begin?.Invoke(), f => Set(Denorm(f)), () => End?.Invoke());
+        ToolTip = $"{label}: trascina in verticale (Shift = fine), rotella, doppio clic = valore iniziale, tasto destro = digita valore / MIDI Learn";
+        MidiLearn.Attach(this, () => LearnId, () => Math.Clamp(Norm(Value), 0, 1), () => Begin?.Invoke(), f => Set(Denorm(f), true, true), () => End?.Invoke(),
+            () => new (string, Action?)[]
+            {
+                ($"Digita valore… (ora {Format(Value)})", () => ControlInput.Ask(this, Label, Value.ToString("0.####", CultureInfo.InvariantCulture), Min, Max, v => { Begin?.Invoke(); Set(v, true, true); End?.Invoke(); })),
+                ($"Valore iniziale ({Format(Def)})", () => { Begin?.Invoke(); Set(Def); End?.Invoke(); }),
+            });
     }
     /// <summary>Identificativo per il MIDI Learn (tasto destro); null = non assegnabile.</summary>
     public string? LearnId;
     double Norm(double v) => Log ? Math.Log(v / Min) / Math.Log(Max / Min) : (v - Min) / (Max - Min);
     double Denorm(double f) => Log ? Min * Math.Pow(Max / Min, f) : Min + f * (Max - Min);
-    double Round(double v)
+    /// <summary>Arrotondamento alla risoluzione del parametro (10× più fine in modalità fine).</summary>
+    double Round(double v, bool fine)
     {
         if (Integer) return Math.Round(v);
-        if (Log) { double m = Math.Pow(10, Math.Floor(Math.Log10(Math.Abs(v))) - 2); return Math.Round(v / m) * m; }
-        double r = Max - Min, st = r >= 20 ? 0.1 : 0.01;
-        return Math.Round(Math.Round(v / st) * st, 3);
+        if (Log)
+        {
+            if (v == 0) return 0;
+            double m = Math.Pow(10, Math.Floor(Math.Log10(Math.Abs(v))) - (fine ? 3 : 2));
+            return Math.Round(v / m) * m;
+        }
+        double r = Max - Min, st = r >= 20 ? 0.1 : r >= 2 ? 0.01 : 0.005;
+        if (fine) st /= 10;
+        return Math.Round(Math.Round(v / st) * st, 5);
     }
-    void Set(double v, bool notify = true)
+    void Set(double v, bool notify = true, bool fine = false)
     {
-        Value = Math.Clamp(Round(v), Min, Max);
+        double nv = Math.Clamp(Round(v, fine), Min, Max);
+        if (nv == Value) return;
+        Value = nv;
         InvalidateVisual();
         if (notify) Changed?.Invoke(Value);
     }
-    public void Update(double v) => Set(v, false);
+    public void Update(double v) { Value = v; InvalidateVisual(); }
 
     protected override void OnRender(DrawingContext dc)
     {
@@ -246,11 +318,11 @@ public sealed class Knob : FrameworkElement
         double f = Math.Clamp(Norm(Value), 0, 1), f0 = !Log && Min < 0 && Max > 0 ? Norm(0) : 0;
         DrawArc(dc, cx, cy, r + 3, 0, 1, Theme.Dark, 4);
         DrawArc(dc, cx, cy, r + 3, Math.Min(f0, f), Math.Max(f0, f), Color, 4);
-        dc.DrawEllipse(new RadialGradientBrush(System.Windows.Media.Color.FromRgb(0x4a, 0x54, 0x5d), System.Windows.Media.Color.FromRgb(0x26, 0x2c, 0x31)), new Pen(Theme.Dark, 1), new Point(cx, cy), r, r);
+        dc.DrawEllipse(new RadialGradientBrush(System.Windows.Media.Color.FromRgb(0x4a, 0x54, 0x5d), System.Windows.Media.Color.FromRgb(0x26, 0x2c, 0x31)), new Pen(drag ? Color : Theme.Dark, drag ? 1.5 : 1), new Point(cx, cy), r, r);
         double a = (-135 + f * 270) * Math.PI / 180;
         dc.DrawLine(new Pen(Brushes.WhiteSmoke, 2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round },
             new Point(cx + Math.Sin(a) * 4, cy - Math.Cos(a) * 4), new Point(cx + Math.Sin(a) * (r - 3), cy - Math.Cos(a) * (r - 3)));
-        var val = Fmt(Format(Value), 10.5, Theme.Lcd);
+        var val = Fmt(Format(Value), 10.5, drag ? Brushes.White : Theme.Lcd);
         dc.DrawText(val, new Point(cx - val.Width / 2, cy + r + 5));
         if (IsKeyboardFocused) dc.DrawEllipse(null, new Pen(Color, 1), new Point(cx, cy), r + 6, r + 6);
         if (MidiLearn.Learning(LearnId)) dc.DrawEllipse(null, new Pen(Theme.Cyan, 2) { DashStyle = DashStyles.Dash }, new Point(cx, cy), r + 7, r + 7);
@@ -274,33 +346,46 @@ public sealed class Knob : FrameworkElement
     FormattedText Fmt(string s, double size, Brush b) =>
         new(s, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface(Theme.Font, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal), size, b, VisualTreeHelper.GetDpi(this).PixelsPerDip);
 
+    static bool Fine => Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) || Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         if (e.ClickCount == 2) { Begin?.Invoke(); Set(Def); End?.Invoke(); e.Handled = true; return; }
         Begin?.Invoke();
-        drag = true; dragY = e.GetPosition(this).Y; dragF = Math.Clamp(Norm(Value), 0, 1);
-        CaptureMouse(); Focus(); e.Handled = true;
+        drag = true; lastY = e.GetPosition(this).Y; acc = Math.Clamp(Norm(Value), 0, 1);
+        CaptureMouse(); Focus(); InvalidateVisual(); e.Handled = true;
     }
     protected override void OnMouseMove(MouseEventArgs e)
     {
         if (!drag) return;
-        double px = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 600 : 160;
-        Set(Denorm(Math.Clamp(dragF + (dragY - e.GetPosition(this).Y) / px, 0, 1)));
+        double y = e.GetPosition(this).Y, dy = lastY - y;
+        lastY = y;
+        // Accumulo relativo: cambiare Shift a metà gesto non fa saltare il valore
+        acc = Math.Clamp(acc + dy / (Fine ? 1100 : 220), 0, 1);
+        Set(Denorm(acc), true, Fine);
     }
-    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) { if (drag) { drag = false; ReleaseMouseCapture(); End?.Invoke(); } }
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) { if (drag) { drag = false; ReleaseMouseCapture(); InvalidateVisual(); End?.Invoke(); } }
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         Begin?.Invoke();
-        Set(Denorm(Math.Clamp(Norm(Value) + Math.Sign(e.Delta) / 50.0, 0, 1)));
+        double notch = e.Delta / 120.0;
+        Set(Denorm(Math.Clamp(Norm(Value) + notch * (Fine ? 0.002 : 0.01), 0, 1)), true, Fine);
         End?.Invoke();
         e.Handled = true;
     }
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        int dir = e.Key is Key.Up or Key.Right ? 1 : e.Key is Key.Down or Key.Left ? -1 : 0;
-        if (dir == 0) return;
+        double step = e.Key switch
+        {
+            Key.Up or Key.Right => Fine ? 0.002 : 0.01,
+            Key.Down or Key.Left => Fine ? -0.002 : -0.01,
+            Key.PageUp => 0.1, Key.PageDown => -0.1,
+            Key.Home => -1, Key.End => 1,
+            _ => 0,
+        };
+        if (step == 0) return;
         Begin?.Invoke();
-        Set(Denorm(Math.Clamp(Norm(Value) + dir / (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 200.0 : 50.0), 0, 1)));
+        Set(Denorm(Math.Clamp(Norm(Value) + step, 0, 1)), true, Fine);
         End?.Invoke();
         e.Handled = true;
     }
@@ -335,7 +420,11 @@ public sealed class Meter : FrameworkElement
     }
 }
 
-/// <summary>Fader verticale del mixer: trascina, rotella, doppio clic = valore iniziale, tasto destro = MIDI Learn.</summary>
+/// <summary>
+/// Fader verticale del mixer: trascinando la maniglia il movimento è relativo (nessun salto),
+/// cliccando altrove il fader va lì; Shift = fine; rotella 1% (Shift 0,2%); doppio clic = valore
+/// iniziale; tasto destro = digita valore / MIDI Learn.
+/// </summary>
 public sealed class VFader : FrameworkElement
 {
     public double Min, Max, Def, Value;
@@ -343,48 +432,65 @@ public sealed class VFader : FrameworkElement
     public string? LearnId;
     public event Action<double>? Changed;
     public event Action? Begin, End;
-    bool drag;
+    bool drag; double lastY;
     public VFader(double min, double max, double def, double value)
     {
         Min = min; Max = max; Def = def; Value = value;
         Width = 22; Cursor = Cursors.SizeNS; Focusable = true;
-        MidiLearn.Attach(this, () => LearnId, () => Begin?.Invoke(), f => { Value = Math.Round(Min + f * (Max - Min), 3); InvalidateVisual(); Changed?.Invoke(Value); }, () => End?.Invoke());
+        MidiLearn.Attach(this, () => LearnId, () => (Value - Min) / (Max - Min), () => Begin?.Invoke(), f => SetValue(Min + f * (Max - Min)), () => End?.Invoke(),
+            () => new (string, Action?)[]
+            {
+                ($"Digita valore… (ora {Value.ToString("0.###", CultureInfo.InvariantCulture)})", () => ControlInput.Ask(this, "Valore", Value.ToString("0.###", CultureInfo.InvariantCulture), Min, Max, v => { Begin?.Invoke(); SetValue(v); End?.Invoke(); })),
+                ("Valore iniziale", () => { Begin?.Invoke(); SetValue(Def); End?.Invoke(); }),
+            });
     }
     double F => (Value - Min) / (Max - Min);
+    double ThumbY => 6 + (1 - F) * (ActualHeight - 12);
+    void SetValue(double v)
+    {
+        v = Math.Round(Math.Clamp(v, Min, Max), 4);
+        if (v == Value) return;
+        Value = v; InvalidateVisual(); Changed?.Invoke(Value);
+    }
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight, x = w / 2;
         dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, w, h));
         dc.DrawRoundedRectangle(Theme.Dark, null, new Rect(x - 2, 6, 4, h - 12), 2, 2);
-        double y = 6 + (1 - F) * (h - 12);
+        double y = ThumbY;
         dc.DrawRectangle(Color, null, new Rect(x - 2, y, 4, h - 6 - y));
         // Unità (0 dB = 0,8) come riferimento
         double y0 = 6 + (1 - (0.8 - Min) / (Max - Min)) * (h - 12);
         if (Max >= 0.8) dc.DrawRectangle(Theme.Dim, null, new Rect(0, y0, 4, 1));
-        dc.DrawRoundedRectangle(Theme.Panel3, new Pen(Color, 1.5), new Rect(1, y - 6, w - 2, 12), 2, 2);
+        dc.DrawRoundedRectangle(drag ? Theme.Hover : Theme.Panel3, new Pen(Color, 1.5), new Rect(1, y - 6, w - 2, 12), 2, 2);
         dc.DrawRectangle(Theme.Ink, null, new Rect(3, y - 0.5, w - 6, 1));
         if (MidiLearn.Learning(LearnId)) dc.DrawRectangle(null, new Pen(Theme.Cyan, 2) { DashStyle = DashStyles.Dash }, new Rect(0, 0, w, h));
     }
-    void SetFrom(double py)
-    {
-        double f = 1 - Math.Clamp((py - 6) / Math.Max(1, ActualHeight - 12), 0, 1);
-        Value = Math.Round(Min + f * (Max - Min), 3);
-        InvalidateVisual();
-        Changed?.Invoke(Value);
-    }
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
-        if (e.ClickCount == 2) { Begin?.Invoke(); Value = Def; InvalidateVisual(); Changed?.Invoke(Value); End?.Invoke(); e.Handled = true; return; }
+        if (e.ClickCount == 2) { Begin?.Invoke(); SetValue(Def); End?.Invoke(); e.Handled = true; return; }
         Begin?.Invoke(); drag = true; CaptureMouse(); Focus();
-        SetFrom(e.GetPosition(this).Y); e.Handled = true;
+        double y = e.GetPosition(this).Y;
+        if (Math.Abs(y - ThumbY) > 7 && !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            SetValue(Min + (1 - Math.Clamp((y - 6) / Math.Max(1, ActualHeight - 12), 0, 1)) * (Max - Min));
+        lastY = y;
+        InvalidateVisual();
+        e.Handled = true;
     }
-    protected override void OnMouseMove(MouseEventArgs e) { if (drag) SetFrom(e.GetPosition(this).Y); }
-    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) { if (drag) { drag = false; ReleaseMouseCapture(); End?.Invoke(); } }
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        if (!drag) return;
+        double y = e.GetPosition(this).Y, dy = lastY - y;
+        lastY = y;
+        bool fine = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) || Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        SetValue(Value + dy / Math.Max(1, ActualHeight - 12) * (Max - Min) * (fine ? 0.15 : 1));
+    }
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) { if (drag) { drag = false; ReleaseMouseCapture(); InvalidateVisual(); End?.Invoke(); } }
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         Begin?.Invoke();
-        Value = Math.Clamp(Value + Math.Sign(e.Delta) * (Max - Min) / 50, Min, Max);
-        InvalidateVisual(); Changed?.Invoke(Value); End?.Invoke(); e.Handled = true;
+        SetValue(Value + e.Delta / 120.0 * (Max - Min) * (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 0.002 : 0.01));
+        End?.Invoke(); e.Handled = true;
     }
     public void Set(double v) { Value = v; InvalidateVisual(); }
 }

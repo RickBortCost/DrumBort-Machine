@@ -1388,3 +1388,5 @@ input.mxi-vol::-moz-range-thumb, input.mxi-pan::-moz-range-thumb { width: 8px; h
 .pp-g { height: 34px; border-radius: 4px; border: 1px solid #46505a; background: #12171b; padding: 0; }
 .pp-g:nth-child(4n+1) { margin-left: 2px; }
 .pp-g.on { background: #a98be0; }
+.kb.kb-drag .kb-v { color: #fff; }
+.kb.kb-drag .kb-dial { box-shadow: 0 0 0 2px var(--tc, #f2c230); }

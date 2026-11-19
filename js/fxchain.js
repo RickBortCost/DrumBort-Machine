@@ -10,7 +10,9 @@
  *     sull'effetto nel browser (lo accoda) o "＋" nella zona finale.
  *   • Riordinare: trascina un device dalla barra del titolo.
  *   • Eliminare: seleziona il device (clic sul titolo) e premi Canc/Backspace. Ctrl/Cmd+D duplica.
- * Manopole: trascina in verticale (Shift = fine), rotella, frecce, doppio clic = valore iniziale.
+ * Manopole: trascina in verticale con movimento relativo (Shift = fine; al tocco, allontanando il
+ * dito di lato la regolazione diventa più fine), rotella a passi dell'1% (Shift 0,2%), frecce,
+ * doppio clic/doppio tocco = valore iniziale.
  * La catena appartiene alla traccia (vale in tutti i pattern): state.devs[canale] (devices.js).
  */
 
@@ -56,7 +58,9 @@ export function initFxChain(app, el, h) {
     if (d.k === 'bits' || d.k === 'tune') return Math.round(v);
     if (d.curve === 'log') { const m = Math.pow(10, Math.floor(Math.log10(Math.abs(v))) - 2); return Math.round(v / m) * m; }
     const r = d.max - d.min;
-    return +(Math.round(v / (r >= 20 ? 0.1 : 0.01)) * (r >= 20 ? 0.1 : 0.01)).toFixed(3);
+    // Risoluzione: 0,05 sulle scale ampie (dB, semitoni), 0,005 o 0,001 sulle scale piccole
+    const st = r >= 20 ? 0.05 : r >= 2 ? 0.005 : 0.001;
+    return +(Math.round(v / st) * st).toFixed(4);
   }
 
   // ---------------------------------------------------------------
@@ -179,23 +183,34 @@ export function initFxChain(app, el, h) {
   // ---------------------------------------------------------------
   // Manopole: trascinamento verticale, rotella, tastiera, doppio clic
   // ---------------------------------------------------------------
-  let drag = null;
+  let drag = null, lastTap = null;
   el.addEventListener('pointerdown', (e) => {
     const dial = e.target.closest('.kb-dial');
     if (!dial) return;
     e.preventDefault();
     const kb = dial.parentElement, d = defOf(kb);
+    // Doppio tocco (i browser touch non sempre generano dblclick): valore iniziale
+    const now = performance.now();
+    if (lastTap && lastTap.kb === kb && now - lastTap.t < 320) { lastTap = null; app.snapshot(); setValue(kb, d.def); app.save(); return; }
+    lastTap = { kb, t: now };
     app.snapshot();
     dial.setPointerCapture(e.pointerId);
     dial.focus();
-    drag = { kb, d, y: e.clientY, f: clamp(norm(d, valueOf(kb)), 0, 1) };
+    drag = { kb, d, x: e.clientX, y: e.clientY, f: clamp(norm(d, valueOf(kb)), 0, 1) };
+    kb.classList.add('kb-drag');
   });
   el.addEventListener('pointermove', (e) => {
     if (!drag) return;
-    const px = e.shiftKey ? 600 : 160;
-    setValue(drag.kb, denorm(drag.d, clamp(drag.f + (drag.y - e.clientY) / px, 0, 1)));
+    // Movimento relativo: si somma solo lo spostamento dall'evento precedente, così cambiare
+    // modalità a metà gesto non fa saltare il valore. Fine: Shift/Ctrl, oppure al tocco
+    // allontanando il dito di lato dalla manopola (fino a 6× più preciso).
+    const side = Math.min(5, Math.abs(e.clientX - drag.x) / 60);
+    const px = (e.shiftKey || e.ctrlKey ? 1100 : 220) * (1 + side);
+    drag.f = clamp(drag.f + (drag.y - e.clientY) / px, 0, 1);
+    drag.y = e.clientY;
+    setValue(drag.kb, denorm(drag.d, drag.f));
   });
-  const end = () => { if (drag) { drag = null; app.save(); } };
+  const end = () => { if (drag) { drag.kb.classList.remove('kb-drag'); drag = null; app.save(); } };
   el.addEventListener('pointerup', end);
   el.addEventListener('pointercancel', end);
   el.addEventListener('wheel', (e) => {
@@ -203,7 +218,9 @@ export function initFxChain(app, el, h) {
     if (!kb) return;
     e.preventDefault();
     const d = defOf(kb);
-    setValue(kb, denorm(d, clamp(norm(d, valueOf(kb)) + Math.sign(-e.deltaY) / 50, 0, 1)));
+    // Rotella: 1% per scatto (Shift 0,2%); i touchpad mandano scatti piccoli e continui
+    const notch = clamp(-e.deltaY / 100, -3, 3);
+    setValue(kb, denorm(d, clamp(norm(d, valueOf(kb)) + notch * (e.shiftKey ? 0.002 : 0.01), 0, 1)));
     app.save();
   }, { passive: false });
   el.addEventListener('change', (e) => {
@@ -227,7 +244,7 @@ export function initFxChain(app, el, h) {
     if (kb && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
       e.preventDefault();
       const d = defOf(kb), dir = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : -1;
-      setValue(kb, denorm(d, clamp(norm(d, valueOf(kb)) + dir / (e.shiftKey ? 200 : 50), 0, 1)));
+      setValue(kb, denorm(d, clamp(norm(d, valueOf(kb)) + dir * (e.shiftKey ? 0.002 : 0.01), 0, 1)));
       app.save();
       return;
     }

@@ -2,6 +2,24 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.27.0] - 2026-11-19
+
+### Migliorato
+- **Controller MIDI (potenziometri, fader, encoder)** – Windows:
+  - **14 bit**: i CC 0-31 con il loro LSB (32-63) danno 16384 passi invece di 128, senza scalini;
+  - **aggancio (soft takeover)**, predefinito: se la manopola fisica è in un'altra posizione il parametro non salta; si aggancia quando lo raggiunge e un messaggio indica dove portarla;
+  - **encoder infiniti** (relativi, 64 ± n) con passi fini e accelerazione; modalità **salto immediato** per chi la preferisce;
+  - modalità scelta per ogni assegnazione dal tasto destro sul controllo;
+  - **meno ritardo e scatti**: le modifiche dei controlli arrivano al motore raggruppate (al massimo una ogni 15 ms, sempre con l'ultimo valore), invece di una copia del progetto per ogni messaggio.
+- **Manopole, cursori e fader a schermo** – Windows:
+  - trascinamento **relativo**: niente salti, nemmeno passando alla modalità fine a metà gesto;
+  - **modalità fine** con Shift o Ctrl (5× più precisa) e risoluzione 10× più fine;
+  - cursori e fader: trascinando la maniglia non saltano, cliccando altrove vanno al punto;
+  - rotella a passi dell'1% (Shift 0,2%), anche con i touchpad; tastiera: frecce, PagSu/PagGiù, Home/Fine;
+  - tasto destro: **digita un valore** (accetta "k" e "%") e **valore iniziale**;
+  - evidenziazione durante il trascinamento.
+- **Manopole della web app e del telefono:** movimento relativo; regolazione fine con Shift o, al tocco, allontanando il dito di lato (fino a 6×); rotella più precisa; doppio tocco = valore iniziale; risoluzione più fine.
+
 ## [1.26.0] - 2026-11-19
 
 ### Migliorato

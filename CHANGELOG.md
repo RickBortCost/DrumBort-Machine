@@ -2,6 +2,16 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.23.0] - 2026-11-19
+
+### Aggiunto
+- **Windows – Preset Player in una finestra a parte** (◈ PRESET PLAYER, tasto P, o PRESET PLAYER nel DEVICE di una traccia synth), sul modello dei ROMpler come Nexus. La finestra non è modale.
+  - **Browser:** categorie con il numero di suoni, preferiti ★ salvati, ricerca per nome, categoria o tag; display con ◀ ▶ (anche con le frecce della tastiera).
+  - **Macro:** cutoff, risonanza, inviluppo del filtro, attacco, decay, rilascio, profondità e velocità LFO, riverbero, delay, volume. Hanno il MIDI Learn.
+  - **Arpeggiatore:** on/off, modo, passo, ottave, gate.
+  - **Trance gate:** 16 step con pattern pronti (1/8, 1/4, offbeat, trance, sincopi, pump) e profondità, sul pattern corrente o su tutti. È scritto come automazione del volume, quindi funziona anche nell'export, nei telefoni e nella web app.
+  - **Come strumento sulle tracce vuote:** APPLICA ALLA TRACCIA la attiva col preset; da collegata, ogni preset scelto suona subito. In Nuove tracce c'è l'opzione "Preset Player".
+
 ## [1.22.0] - 2026-11-19
 
 ### Aggiunto

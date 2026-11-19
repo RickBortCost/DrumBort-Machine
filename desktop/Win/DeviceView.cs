@@ -76,6 +76,7 @@ public sealed class DeviceView : DockPanel
     string? sel;
     public Action<int>? OpenLibrary;
     public Action<int>? OpenWavetable;
+    public Action<int>? OpenPresetPlayer;
     public Action? ShowNotes;
 
     public DeviceView(Doc doc)
@@ -259,6 +260,9 @@ public sealed class DeviceView : DockPanel
             var wtb = new Btn("WAVETABLE", 0, "Apre l'editor del synth wavetable in una finestra a parte");
             wtb.Click += () => OpenWavetable?.Invoke(Ch);
             info.Children.Add(wtb);
+            var ppb = new Btn("PRESET PLAYER", 0, "Browser dei suoni con macro, arpeggiatore e trance gate");
+            ppb.Click += () => OpenPresetPlayer?.Invoke(Ch);
+            info.Children.Add(ppb);
             row.Children.Add(info);
             var g = KnobGrid();
             string Sig(double v) => (v > 0 ? "+" : "") + v.ToString("0.00", CultureInfo.InvariantCulture);

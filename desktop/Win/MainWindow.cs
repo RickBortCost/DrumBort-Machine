@@ -75,7 +75,7 @@ public sealed class MainWindow : Window
         DeviceSpecs.Load(Path.Combine(AppContext.BaseDirectory, "Assets", "devices.json"));
         doc = new Doc(Program.Hub, Program.DataDir);
         library = new Library(doc) { Selected = () => sel };
-        devices = new DeviceView(doc) { OpenLibrary = OpenLibraryFor, ShowNotes = () => SetBottom("roll"), OpenWavetable = c => WavetableWindow.Open(this, doc, c) };
+        devices = new DeviceView(doc) { OpenLibrary = OpenLibraryFor, ShowNotes = () => SetBottom("roll"), OpenWavetable = c => WavetableWindow.Open(this, doc, c), OpenPresetPlayer = c => PresetPlayerWindow.Open(this, doc, c) };
         library.AddDevice = t => { if (sel >= 0) { devices.Add(t, null); SetBottom("dev"); } };
         // Plugin VST 3: chiusura sul thread dell'interfaccia, stato nel progetto prima di salvare
         Vst3.Reaper = p => Dispatcher.BeginInvoke(() => { Vst3Editor.CloseFor(p); p.Dispose(); });
@@ -198,6 +198,9 @@ public sealed class MainWindow : Window
         var wtB = new Btn("〰 WAVETABLE", 0, "Synth wavetable in una finestra a parte: si applica come strumento a una traccia synth, anche vuota (W)");
         wtB.Click += OpenWavetable;
         tb.Children.Add(wtB);
+        var ppB = new Btn("◈ PRESET PLAYER", 0, "Browser dei suoni con macro, arpeggiatore e trance gate, in una finestra a parte: si applica a una traccia synth, anche vuota (P)");
+        ppB.Click += OpenPresetPlayer;
+        tb.Children.Add(ppB);
         libB.Click += ToggleLibrary;
         tb.Children.Add(libB);
         tb.Children.Add(new Border { Width = 16 });
@@ -511,10 +514,16 @@ public sealed class MainWindow : Window
         sel = d.Result[0];
         doc.Commit(new[] { "tracks" }.Concat(doc.AllPatKeys).ToArray());
         if (d.Wavetable && sel >= 8) WavetableWindow.Open(this, doc, sel, applyNow: true);
+        else if (d.PresetPlayer && sel >= 8) PresetPlayerWindow.Open(this, doc, sel, applyNow: true);
         else if (d.OpenLibrary) OpenLibraryFor(sel);
     }
 
     /// <summary>Editor wavetable sulla traccia synth selezionata, altrimenti sulla prima traccia synth vuota.</summary>
+    void OpenPresetPlayer()
+    {
+        int target = sel >= 8 ? sel : Enumerable.Range(8, 4).FirstOrDefault(c => !doc.Tracks.Contains(c), 8);
+        PresetPlayerWindow.Open(this, doc, target);
+    }
     void OpenWavetable()
     {
         int target = sel >= 8 ? sel : Enumerable.Range(8, 4).FirstOrDefault(c => !doc.Tracks.Contains(c), 8);
@@ -729,6 +738,7 @@ public sealed class MainWindow : Window
         else if (e.Key == Key.R && mod == ModifierKeys.None) { ToggleRec(); e.Handled = true; }
         else if (e.Key == Key.D && mod == ModifierKeys.None && !(Keyboard.FocusedElement is Timeline)) { OpenPlayers(); e.Handled = true; }
         else if (e.Key == Key.W && mod == ModifierKeys.None) { OpenWavetable(); e.Handled = true; }
+        else if (e.Key == Key.P && mod == ModifierKeys.None) { OpenPresetPlayer(); e.Handled = true; }
         else if (e.Key == Key.X && mod == ModifierKeys.None) { SetBottom(bottom == "mix" ? "dev" : "mix"); e.Handled = true; }
         else if (e.Key == Key.F5 && mod == ModifierKeys.None) { SetView(true); e.Handled = true; }
         else if (e.Key == Key.F6 && mod == ModifierKeys.None) { SetView(false); e.Handled = true; }
@@ -869,6 +879,14 @@ public sealed class MainWindow : Window
             if (!doc.Tracks.Contains(11) || Doc.TrackOf(doc.Pat, 11)["patch"]?["wt"] == null) throw new Exception("wavetable: patch non applicata alla traccia vuota");
             Console.WriteLine("wavetable: patch applicata a KY");
             wtw.Close();
+            // Preset Player sulla traccia LEAD (vuota nel progetto di prova), con arpeggiatore e trance gate
+            PresetPlayerWindow.Open(this, doc, 9, applyNow: true);
+            var ppw = PresetPlayerWindow.Current!;
+            ppw.UpdateLayout();
+            if (!doc.Tracks.Contains(9) || Doc.Str(Doc.TrackOf(doc.Pat, 9), "preset", "") == "") throw new Exception("preset player: preset non applicato alla traccia vuota");
+            ShotOf(ppw, Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-presetplayer.png"));
+            Console.WriteLine($"preset player: {Doc.Str(Doc.TrackOf(doc.Pat, 9), "preset", "")} su LD");
+            ppw.Close();
             // Audio e MIDI: driver ASIO e ingressi MIDI (sul runner nessuno), finestra di dialogo
             Console.WriteLine($"asio: {Asio.Drivers().Length} driver");
             MidiInput.Start(Dispatcher);

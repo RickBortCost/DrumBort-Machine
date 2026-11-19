@@ -42,6 +42,8 @@ public sealed class NewTrackDialog : DarkDialog
     public bool OpenLibrary = true;
     /// <summary>Strumento: synth wavetable (si apre il suo editor in una finestra a parte).</summary>
     public bool Wavetable;
+    /// <summary>Strumento: Preset Player (browser di preset con macro, arpeggiatore e trance gate).</summary>
+    public bool PresetPlayer;
     readonly Doc doc;
     string type;
     readonly StackPanel cards = new() { Orientation = Orientation.Horizontal };
@@ -117,8 +119,11 @@ public sealed class NewTrackDialog : DarkDialog
         if (type == "inst")
         {
             var wt = new CheckBox { Content = "Synth wavetable (3 oscillatori, filtri, LFO, stepper: editor in una finestra a parte)", IsChecked = Wavetable, Foreground = Theme.Ink, Margin = new Thickness(0, 6, 0, 0) };
-            wt.Checked += (_, _) => Wavetable = true; wt.Unchecked += (_, _) => Wavetable = false;
+            var pp = new CheckBox { Content = "Preset Player (browser dei suoni, macro, arpeggiatore, trance gate: finestra a parte)", IsChecked = PresetPlayer, Foreground = Theme.Ink, Margin = new Thickness(0, 4, 0, 0) };
+            wt.Checked += (_, _) => { Wavetable = true; pp.IsChecked = false; }; wt.Unchecked += (_, _) => Wavetable = false;
+            pp.Checked += (_, _) => { PresetPlayer = true; wt.IsChecked = false; }; pp.Unchecked += (_, _) => PresetPlayer = false;
             details.Children.Add(wt);
+            details.Children.Add(pp);
         }
     }
     static UIElement Row(string label, UIElement c)

@@ -209,6 +209,7 @@ public sealed class WavetableWindow : Window
         var play = new Btn("▶ ASCOLTA", 0, "Suona la tonica (Spazio)");
         play.Click += Preview;
         top.Children.Add(play);
+        (status.Parent as Panel)?.Children.Remove(status);
         status.Margin = new Thickness(10, 0, 0, 0); status.VerticalAlignment = VerticalAlignment.Center;
         status.Text = linked ? $"Modifiche dal vivo su {doc.TrackShort(ch)}. La finestra principale resta utilizzabile." : "Anteprima della patch: APPLICA per usarla come strumento della traccia.";
         top.Children.Add(status);

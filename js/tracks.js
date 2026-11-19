@@ -200,6 +200,7 @@ export function initTracksView(app, root, COLORS) {
     const lane = e.target.closest('.tv-lane');
     if (!lane || e.button === 2) return;
     e.preventDefault();
+    if (drag) return;              // una regione alla volta: il secondo dito non interferisce
     const i = +lane.dataset.i, b = barAt(lane, e.clientX);
     const reg = e.target.closest('.tv-reg');
     app.snapshot();
@@ -216,12 +217,13 @@ export function initTracksView(app, root, COLORS) {
       drag = { mode: 'len', i, b0: b, b1: b, slot: state.slot };
       pick(i);
     }
+    if (drag) drag.pid = e.pointerId;
     lane.setPointerCapture(e.pointerId);
     app.renderAll();
   });
 
   root.addEventListener('pointermove', (e) => {
-    if (!drag) return;
+    if (!drag || e.pointerId !== drag.pid) return;
     const lane = $(`.tv-lane[data-i="${drag.i}"]`, root);
     if (!lane) return;
     const b = barAt(lane, e.clientX);
@@ -243,8 +245,8 @@ export function initTracksView(app, root, COLORS) {
     render();
   });
 
-  const end = () => {
-    if (!drag) return;
+  const end = (e) => {
+    if (!drag || e.pointerId !== drag.pid) return;
     drag = null;
     trim();
     app.save();

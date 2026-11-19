@@ -374,7 +374,8 @@ export function initStudio(app) {
   }
 
   // Pittura con trascinamento: il primo clic decide se scrivere il pattern o svuotare
-  let paint = null;
+  const paints = new Map();   // dito (pointerId) → pennello
+  let paint = null;           // pennello in uso da paintCell
   function paintCell(el) {
     const b = +el.dataset.ab, bar = state.arr.bars[b];
     if (!bar) return;
@@ -387,7 +388,7 @@ export function initStudio(app) {
   }
   arrGrid.addEventListener('pointerdown', (e) => {
     const c = e.target.closest('.ar-cell');
-    if (c) { e.preventDefault(); paint = {}; paintCell(c); return; }
+    if (c) { e.preventDefault(); paint = {}; paints.set(e.pointerId, paint); paintCell(c); return; }
     const r = e.target.closest('[data-rb]');
     if (r) {
       ui.arrStart = +r.dataset.rb;
@@ -396,12 +397,15 @@ export function initStudio(app) {
     }
   });
   window.addEventListener('pointermove', (e) => {
+    paint = paints.get(e.pointerId);
     if (!paint) return;
     const c = document.elementFromPoint(e.clientX, e.clientY);
     const cell = c && c.closest && c.closest('.ar-cell');
     if (cell && arrGrid.contains(cell)) paintCell(cell);
   });
-  window.addEventListener('pointerup', () => { if (paint) { paint = null; app.save(); } });
+  const arrEnd = (e) => { if (paints.delete(e.pointerId)) { paint = null; app.save(); } };
+  window.addEventListener('pointerup', arrEnd);
+  window.addEventListener('pointercancel', arrEnd);
 
   $('#sxArr .ar-tools').addEventListener('click', (e) => {
     const b = e.target.closest('[data-ar]');
@@ -433,6 +437,13 @@ export function initStudio(app) {
     renderArr();
   });
 
+  // iPad: lancio di clip, scene e stop con più dita nello stesso momento
+  app.touchTap(grid, '[data-launch], [data-scene], [data-stop], [data-stopall]', (b) => {
+    if (b.matches('[data-launch]')) { const cell = b.closest('.sx-cell'); app.launchClip(+cell.dataset.t, +cell.dataset.s); }
+    else if (b.matches('[data-scene]')) app.launchScene(+b.dataset.scene);
+    else if (b.matches('[data-stop]')) app.launchClip(+b.dataset.stop, -1);
+    else app.stopAllClips();
+  });
   grid.addEventListener('click', (e) => {
     const cell = e.target.closest('.sx-cell');
     if (cell) {

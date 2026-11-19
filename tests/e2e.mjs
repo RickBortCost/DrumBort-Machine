@@ -1016,10 +1016,13 @@ async function instrumentTests(browser, url) {
 }
 
 
-/** Multitouch: due dita sugli step, sui pad e sulle manopole contemporaneamente. */
+/** Multitouch su iPhone e iPad: più dita su step, pad, clip e scene contemporaneamente. */
 async function multitouchTests(browser, url) {
-  console.log(`\n[${browser.browserType().name()}] Multitouch (iPhone portrait)`);
-  const { context, page, errors } = await openApp(browser, url, VIEWPORTS[0]);
+  for (const vp of [VIEWPORTS[0], VIEWPORTS[2], VIEWPORTS[3]]) await multitouchOn(browser, url, vp);
+}
+async function multitouchOn(browser, url, vp) {
+  console.log(`\n[${browser.browserType().name()}] Multitouch (${vp.name})`);
+  const { context, page, errors } = await openApp(browser, url, vp);
   // Eventi pointer di due dita (pointerId diversi), come sul telefono
   await page.evaluate(() => {
     window.__touch = (type, id, el) => {
@@ -1057,6 +1060,31 @@ async function multitouchTests(browser, url) {
     return count + n0;
   });
   check('pad: due dita insieme e scivolamento su un altro pad', hits >= 3, `${hits} colpi`);
+  // Doppio tocco → un solo dblclick (Safari non lo genera in modo affidabile)
+  const dbl = await page.evaluate(() => {
+    const el = document.body.appendChild(Object.assign(document.createElement('div'), { style: 'position:fixed;left:0;top:0;width:80px;height:80px;z-index:99999' }));
+    let n = 0;
+    const h = () => n++;
+    window.addEventListener('dblclick', h);
+    for (let i = 0; i < 2; i++) { __touch('pointerdown', 9, el); __touch('pointerup', 9, el); }
+    window.removeEventListener('dblclick', h);
+    el.remove();
+    return n;
+  });
+  check('doppio tocco genera un dblclick', dbl === 1, `${dbl}`);
+  if (vp.width >= 1000) {
+    // iPad orizzontale, layout Studio: due clip lanciate insieme con due dita
+    await page.evaluate(() => { if (document.querySelector('#app').dataset.layout !== 'studio') document.querySelector('#layoutBtn').click(); });
+    const sv = await page.evaluate(() => {
+      if (document.querySelector('#app').dataset.layout !== 'studio') return 'no studio';
+      const L = (t, s) => document.querySelector(`.sx-cell[data-t="${t}"][data-s="${s}"] [data-launch]`);
+      __touch('pointerdown', 5, L(0, 4)); __touch('pointerdown', 6, L(1, 5));
+      __touch('pointerup', 5, L(0, 4)); __touch('pointerup', 6, L(1, 5));
+      const at = (t, s) => drumbort.state.session.map[t] === s || drumbort.ui.queued[t] === s;
+      return at(0, 4) && at(1, 5) ? 'ok' : JSON.stringify({ map: drumbort.state.session.map, q: drumbort.ui.queued });
+    });
+    check('Studio su iPad: due clip lanciate insieme con due dita', sv === 'ok', sv);
+  }
   check('nessun errore', errors.length === 0, errors.join(' | '));
   await context.close();
 }

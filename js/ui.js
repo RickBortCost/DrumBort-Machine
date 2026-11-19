@@ -39,6 +39,50 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
  * ?lab forza il Lab, ?full forza la drum machine completa.
  */
 const QS = new URLSearchParams(location.search);
+
+/*
+ * Touch (iPhone e iPad): Safari non genera dblclick in modo affidabile al doppio tocco, e con
+ * più dita sullo schermo spesso non genera neppure i click. Il doppio tocco viene quindi
+ * tradotto in un dblclick (quello nativo, se arriva, viene ignorato per non contare due volte).
+ * Step, pad e manopole hanno una gestione propria e sono esclusi.
+ */
+{
+  let last = null, synthAt = 0;
+  window.addEventListener('pointerup', (e) => {
+    if (e.pointerType !== 'touch' || !(e.target instanceof Element)) return;
+    const t = e.target, now = performance.now();
+    if (t.closest('.kb, .step, .pad, .spad, .sstep')) { last = null; return; }
+    if (last && last.t === t && now - last.at < 350 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 30) {
+      last = null; synthAt = now;
+      t.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, detail: 2, clientX: e.clientX, clientY: e.clientY }));
+      return;
+    }
+    last = { t, at: now, x: e.clientX, y: e.clientY };
+  }, true);
+  window.addEventListener('dblclick', (e) => { if (e.isTrusted && performance.now() - synthAt < 600) e.stopImmediatePropagation(); }, true);
+}
+
+/**
+ * Pulsanti da suonare con più dita insieme (clip, scene, mute): al tocco agiscono subito sul
+ * pointerdown, il click che segue viene ignorato; col mouse resta il click.
+ */
+function touchTap(root, selector, fn) {
+  const done = new WeakMap();
+  root.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return;
+    const b = e.target.closest(selector);
+    if (!b || !root.contains(b)) return;
+    e.preventDefault();
+    done.set(b, performance.now());
+    fn(b, e);
+  });
+  root.addEventListener('click', (e) => {
+    const b = e.target.closest(selector);
+    if (!b || !root.contains(b)) return;
+    const t = done.get(b);
+    if (t && performance.now() - t < 1000) { done.delete(b); e.stopImmediatePropagation(); return; }
+  }, true);
+}
 const LAB = QS.has('lab') || (!QS.has('full') && matchMedia('(pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px)').matches);
 let lab = null;
 let piano = null;       // piano roll (pianoroll.js)
@@ -2034,7 +2078,7 @@ synthUI = initSynthUI({
 const app = {
   engine, seq, ui, state, pat, kitOf, save, snapshot, toast, setToggle, isPlayingPattern, remoteOp,
   openSheet, closeSheet, deliver, syncPlayback, renderAll, buildKitSelect, exportData, importData, newProject,
-  paramGet, paramSet,
+  paramGet, paramSet, touchTap,
 };
 panels = initPanels(app);
 auto = initAutomation(app);

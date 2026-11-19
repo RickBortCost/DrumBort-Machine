@@ -35,19 +35,24 @@ export function initPerformance(app) {
     $$('#muteGrid .btn').forEach((b) => app.setToggle(b, muted.has(b.dataset.g)));
     if (app.remoteOp) app.remoteOp('mutes', { d: [...seq.muteD], s: [...seq.muteS] });
   }
-  $('#muteGrid').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-g]');
-    if (!b) return;
+  const toggleMute = (b) => {
     if (muted.has(b.dataset.g)) muted.delete(b.dataset.g); else muted.add(b.dataset.g);
     applyMutes();
+  };
+  app.touchTap($('#muteGrid'), '[data-g]', toggleMute);   // più gruppi insieme con più dita
+  $('#muteGrid').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-g]');
+    if (b) toggleMute(b);
   });
 
   // ----- Beat repeat (tieni premuto) -----
   const stutBtns = $$('.perf .stut .btn');
+  let stutFinger = null;   // dito che tiene il beat repeat: un altro dito cambia lunghezza
   const stutDown = (e) => {
     const b = e.target.closest('[data-st]');
     if (!b) return;
     e.preventDefault();
+    stutFinger = e.pointerId;
     seq.startStutter(+b.dataset.st);
     if (app.remoteOp) app.remoteOp('stut', { len: +b.dataset.st });
     stutBtns.forEach((x) => x.classList.toggle('on', x === b));
@@ -58,19 +63,23 @@ export function initPerformance(app) {
     stutBtns.forEach((x) => x.classList.remove('on'));
   };
   $('.perf .stut').addEventListener('pointerdown', stutDown);
-  window.addEventListener('pointerup', () => { if (seq.stutter) stutUp(); });
-  window.addEventListener('pointercancel', stutUp);
+  const stutEnd = (e) => { if (e.pointerId === stutFinger) { stutFinger = null; stutUp(); } };
+  window.addEventListener('pointerup', stutEnd);
+  window.addEventListener('pointercancel', stutEnd);
 
   // ----- Fill (tieni premuto) -----
   const fill = $('#fillBtn');
+  let fillFinger = null;
   fill.addEventListener('pointerdown', (e) => {
     e.preventDefault();
+    fillFinger = e.pointerId;
     seq.fillPattern = fillPattern(seq.pattern);
     if (app.remoteOp) app.remoteOp('fill', { on: true });
     fill.classList.add('on');
   });
-  const fillUp = () => {
-    if (!seq.fillPattern) return;
+  const fillUp = (e) => {
+    if (!seq.fillPattern || (e && e.pointerId !== fillFinger)) return;
+    fillFinger = null;
     seq.fillPattern = null;
     if (app.remoteOp) app.remoteOp('fill', { on: false });
     fill.classList.remove('on');

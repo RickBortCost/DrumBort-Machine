@@ -2,6 +2,18 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.30.0] - 2026-11-19
+
+### Aggiunto
+- **Multitouch su iPad** (e telefono), oltre a step, pad e manopole:
+  - **layout Studio su iPad orizzontale**: clip, scene e stop si lanciano con più dita insieme (azione al tocco, senza attendere il click);
+  - **arrangiamento**: un pennello per dito sulle celle;
+  - **modalità performance**: mute di più gruppi insieme; beat repeat e fill restano attivi finché non si alza il dito che li tiene;
+  - **doppio tocco** riconosciuto ovunque serve il doppio clic (reset di fader, Libreria dal nome traccia, nuova traccia, device), dato che Safari non lo genera in modo affidabile.
+
+### Corretto
+- Piano roll, automazione e regioni della timeline: un secondo dito non interrompe né altera la modifica in corso.
+
 ## [1.29.0] - 2026-11-19
 
 ### Aggiunto

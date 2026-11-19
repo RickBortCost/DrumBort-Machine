@@ -26,7 +26,7 @@ const notesOf = (st) => (st ? (st.ch || [0]).map((x) => st.n + x) : []);
 export function initPianoRoll(app) {
   const { engine, ui } = app;
   const sheet = $('#pianoSheet'), wrap = $('#prWrap'), cv = $('#prCanvas'), lane = $('#prLane');
-  let k = 0, colW = 40, open = false, drag = null, playTick = -1;
+  let k = 0, colW = 40, open = false, drag = null, owner = null, playTick = -1;
 
   const syn = () => app.pat().synth;
   const tr = () => syn().tracks[k];
@@ -162,6 +162,8 @@ export function initPianoRoll(app) {
     const c = cell(e);
     if (c.x < KEY_W) { audition([c.pitch]); return; }
     if (c.step < 0 || c.step >= N() || c.pitch < LO || c.pitch > HI) return;
+    if (drag) return;              // un secondo dito non interrompe la modifica in corso
+    owner = e.pointerId;
     cv.setPointerCapture(e.pointerId);
     app.snapshot();
     const h = hit(c.step, c.pitch);
@@ -182,7 +184,7 @@ export function initPianoRoll(app) {
   });
 
   cv.addEventListener('pointermove', (e) => {
-    if (!drag) return;
+    if (!drag || e.pointerId !== owner) return;
     const c = cell(e), st = tr().steps[drag.s];
     if (!st) return;
     if (drag.mode === 'len') {
@@ -199,8 +201,8 @@ export function initPianoRoll(app) {
     }
   });
 
-  const end = () => {
-    if (!drag) return;
+  const end = (e) => {
+    if (!drag || e.pointerId !== owner) return;
     if (drag.mode === 'move' && !drag.moved) {
       const st = tr().steps[drag.s];
       setStep(drag.s, notesOf(st).filter((n) => n !== drag.from), st.g, st);

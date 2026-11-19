@@ -186,14 +186,15 @@ export function initAutomation(app) {
 
   cv.addEventListener('pointerdown', (e) => {
     e.preventDefault();
+    if (drawing) return;           // un dito solo disegna la curva
     cv.setPointerCapture(e.pointerId);
     app.snapshot();
-    drawing = { erase: e.button === 2 || e.altKey || $('[data-auto="erase"]').classList.contains('on'), s: null, v: 0 };
+    drawing = { pid: e.pointerId, erase: e.button === 2 || e.altKey || $('[data-auto="erase"]').classList.contains('on'), s: null, v: 0 };
     paint(e);
   });
-  cv.addEventListener('pointermove', (e) => { if (drawing) paint(e); });
-  const end = () => {
-    if (!drawing) return;
+  cv.addEventListener('pointermove', (e) => { if (drawing && e.pointerId === drawing.pid) paint(e); });
+  const end = (e) => {
+    if (!drawing || e.pointerId !== drawing.pid) return;
     drawing = null;
     const p = app.pat();
     if (p.auto && p.auto[key] && p.auto[key].every((v) => v == null)) delete p.auto[key];

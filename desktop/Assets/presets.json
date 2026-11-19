@@ -2169,6 +2169,18 @@
     "s": 0,
     "r": 0.3
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 2,
@@ -2179,6 +2191,51 @@
     "rate": 0.3,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -2279,6 +2336,18 @@
     "s": 0,
     "r": 0.3
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "triangle",
     "rate": 1,
@@ -2289,6 +2358,51 @@
     "rate": 0.3,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -2384,6 +2498,18 @@
     "s": 0,
     "r": 0.1
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 2,
@@ -2394,6 +2520,51 @@
     "rate": 0.3,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      0,
@@ -2494,6 +2665,18 @@
     "s": 0,
     "r": 0.3
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 2,
@@ -2504,6 +2687,51 @@
     "rate": 0.3,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -2599,6 +2827,18 @@
     "s": 0,
     "r": 0.3
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 2,
@@ -2609,6 +2849,51 @@
     "rate": 0.3,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -2704,6 +2989,18 @@
     "s": 0,
     "r": 0.2
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 2,
@@ -2714,6 +3011,51 @@
     "rate": 0.3,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -2809,6 +3151,18 @@
     "s": 0.2,
     "r": 0.3
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 2,
@@ -2819,6 +3173,51 @@
     "rate": 0.3,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -2914,6 +3313,18 @@
     "s": 0,
     "r": 0.3
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 5.5,
@@ -2924,6 +3335,51 @@
     "rate": 0.5,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -3024,6 +3480,18 @@
     "s": 0,
     "r": 0.1
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 2,
@@ -3034,6 +3502,51 @@
     "rate": 0.3,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -3134,6 +3647,18 @@
     "s": 0,
     "r": 0.3
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 2,
@@ -3144,6 +3669,51 @@
     "rate": 0.3,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -3239,6 +3809,18 @@
     "s": 0,
     "r": 0.5
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 2,
@@ -3249,6 +3831,51 @@
     "rate": 0.3,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -3344,6 +3971,18 @@
     "s": 0,
     "r": 0.3
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 0.08,
@@ -3354,6 +3993,51 @@
     "rate": 0.13,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -3459,6 +4143,18 @@
     "s": 0,
     "r": 0.3
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 6,
@@ -3469,6 +4165,51 @@
     "rate": 0.2,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -3569,6 +4310,18 @@
     "s": 0,
     "r": 0.3
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 2,
@@ -3579,6 +4332,51 @@
     "rate": 0.3,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -3674,6 +4472,18 @@
     "s": 0,
     "r": 0.3
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 0.15,
@@ -3684,6 +4494,51 @@
     "rate": 0.3,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -3779,6 +4634,18 @@
     "s": 1,
     "r": 0.5
    },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
    "lfo1": {
     "shape": "sine",
     "rate": 2,
@@ -3789,6 +4656,51 @@
     "rate": 0.3,
     "sync": 0
    },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
    "step": {
     "values": [
      1,
@@ -3829,5 +4741,344 @@
    ]
   },
   "id": "wtRiser"
+ },
+ "wtRingBell": {
+  "name": "Ring Mod Bell",
+  "cat": "Wavetable",
+  "tags": [
+   "wavetable",
+   "bell",
+   "metallic",
+   "ring"
+  ],
+  "a": 0.002,
+  "d": 1.4,
+  "s": 0,
+  "r": 1.2,
+  "glide": 0,
+  "gain": 1.3,
+  "rev": 0,
+  "wt": {
+   "osc": [
+    {
+     "table": "harmonic",
+     "pos": 0.4,
+     "semi": 0,
+     "fine": 0,
+     "level": 1
+    },
+    {
+     "table": "fm",
+     "pos": 0.2,
+     "semi": 12,
+     "fine": 0,
+     "level": 0.4
+    },
+    {
+     "table": "analog",
+     "pos": 0,
+     "semi": -12,
+     "fine": 0,
+     "level": 0
+    }
+   ],
+   "uni": {
+    "voices": 1,
+    "detune": 12
+   },
+   "noise": 0,
+   "f1": {
+    "type": "lowpass",
+    "cut": 9000,
+    "res": 1
+   },
+   "f2": {
+    "type": "none",
+    "cut": 1200,
+    "res": 1
+   },
+   "route": "serial",
+   "mix": 0.5,
+   "drive": 0,
+   "env2": {
+    "a": 0.01,
+    "d": 0.4,
+    "s": 0,
+    "r": 0.3
+   },
+   "env3": {
+    "a": 0.001,
+    "d": 1.2,
+    "s": 0,
+    "r": 0.8
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
+   "lfo1": {
+    "shape": "sine",
+    "rate": 2,
+    "sync": 0
+   },
+   "lfo2": {
+    "shape": "triangle",
+    "rate": 0.3,
+    "sync": 0
+   },
+   "lfo3": {
+    "shape": "sine",
+    "rate": 5,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "square",
+    "rate": 0.5,
+    "sync": 0
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 7,
+    "fine": 0,
+    "rm": [
+     0.7,
+     0.4,
+     0
+    ],
+    "pm": [
+     0,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
+   "step": {
+    "values": [
+     1,
+     0,
+     0.6,
+     0,
+     1,
+     0,
+     0.6,
+     0.3,
+     1,
+     0,
+     0.6,
+     0,
+     1,
+     0.3,
+     0.6,
+     0
+    ],
+    "div": 1
+   },
+   "mod": [
+    {
+     "src": "env3",
+     "dst": "cut",
+     "amt": 0.4
+    },
+    {
+     "src": "lfo3",
+     "dst": "pitch",
+     "amt": 0.01
+    }
+   ]
+  },
+  "id": "wtRingBell"
+ },
+ "wtPmGrowl": {
+  "name": "Phase Mod Growl",
+  "cat": "Wavetable",
+  "tags": [
+   "wavetable",
+   "bass",
+   "growl",
+   "phase mod"
+  ],
+  "a": 0.003,
+  "d": 0.4,
+  "s": 0.9,
+  "r": 0.12,
+  "glide": 0,
+  "gain": 1.1,
+  "rev": 0,
+  "wt": {
+   "osc": [
+    {
+     "table": "analog",
+     "pos": 0.1,
+     "semi": 0,
+     "fine": 0,
+     "level": 1
+    },
+    {
+     "table": "analog",
+     "pos": 0,
+     "semi": -12,
+     "fine": 0,
+     "level": 0.5
+    },
+    {
+     "table": "analog",
+     "pos": 0,
+     "semi": -12,
+     "fine": 0,
+     "level": 0
+    }
+   ],
+   "uni": {
+    "voices": 1,
+    "detune": 12
+   },
+   "noise": 0,
+   "f1": {
+    "type": "lowpass",
+    "cut": 1400,
+    "res": 3
+   },
+   "f2": {
+    "type": "none",
+    "cut": 1200,
+    "res": 1
+   },
+   "route": "serial",
+   "mix": 0.5,
+   "drive": 0.4,
+   "env2": {
+    "a": 0.01,
+    "d": 0.4,
+    "s": 0,
+    "r": 0.3
+   },
+   "env3": {
+    "a": 0.3,
+    "d": 0.8,
+    "s": 0.5,
+    "r": 0.6
+   },
+   "env4": {
+    "a": 1.5,
+    "d": 2,
+    "s": 1,
+    "r": 1.5
+   },
+   "lfo1": {
+    "shape": "sine",
+    "rate": 2,
+    "sync": 0
+   },
+   "lfo2": {
+    "shape": "triangle",
+    "rate": 0.3,
+    "sync": 0
+   },
+   "lfo3": {
+    "shape": "sawtooth",
+    "rate": 4,
+    "sync": 0
+   },
+   "lfo4": {
+    "shape": "triangle",
+    "rate": 2,
+    "sync": 0.5
+   },
+   "modosc": {
+    "shape": "sine",
+    "semi": 0,
+    "fine": 0,
+    "rm": [
+     0,
+     0,
+     0
+    ],
+    "pm": [
+     0.35,
+     0,
+     0
+    ]
+   },
+   "macros": [
+    0.6,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "macroNames": [
+    "Macro 1",
+    "Macro 2",
+    "Macro 3",
+    "Macro 4",
+    "Macro 5",
+    "Macro 6",
+    "Macro 7",
+    "Macro 8"
+   ],
+   "step": {
+    "values": [
+     1,
+     0,
+     0.6,
+     0,
+     1,
+     0,
+     0.6,
+     0.3,
+     1,
+     0,
+     0.6,
+     0,
+     1,
+     0.3,
+     0.6,
+     0
+    ],
+    "div": 1
+   },
+   "mod": [
+    {
+     "src": "lfo4",
+     "dst": "pm",
+     "amt": 0.5
+    },
+    {
+     "src": "m1",
+     "dst": "cut",
+     "amt": 0.3
+    },
+    {
+     "src": "lfo4",
+     "dst": "pos1",
+     "amt": 0.4
+    }
+   ]
+  },
+  "id": "wtPmGrowl"
  }
 }

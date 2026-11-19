@@ -1,8 +1,9 @@
 // WavetableWindow.cs — Editor del synth wavetable in una finestra a parte (non modale: la finestra
 // principale resta utilizzabile). Struttura ispirata ai synth wavetable come Massive:
-//   3 oscillatori wavetable con posizione (morph) · rumore e unisono · 2 filtri in serie o parallelo
-//   con mix · drive · inviluppo d'ampiezza e di modulazione · 2 LFO · stepper a 16 passi ·
-//   matrice di modulazione a 6 slot.
+//   3 oscillatori wavetable con posizione (morph) · oscillatore di modulazione (ring e phase mod per
+//   oscillatore) · rumore e unisono · 2 filtri in serie o parallelo con mix · drive · inviluppo
+//   d'ampiezza + 3 inviluppi di modulazione · 4 LFO · stepper a 16 passi · 8 macro ·
+//   matrice di modulazione a 16 slot.
 // La patch è quella della web app (track.patch = { name, a, d, s, r, glide, gain, wt: {...} }), quindi
 // suona uguale nel motore C#, nei telefoni collegati e nella web app.
 
@@ -29,10 +30,16 @@ public sealed class WavetableWindow : Window
     static readonly Dictionary<string, string> TableName = new() { ["analog"] = "Analog", ["sync"] = "Sync", ["formant"] = "Vocal", ["digital"] = "Digital", ["harmonic"] = "Additive", ["growl"] = "Growl", ["fm"] = "FM" };
     static readonly string[] Filters = { "lowpass", "bandpass", "highpass", "notch" };
     static readonly Dictionary<string, string> FilterName = new() { ["none"] = "Off", ["lowpass"] = "Passa-basso", ["bandpass"] = "Passa-banda", ["highpass"] = "Passa-alto", ["notch"] = "Notch" };
-    static readonly string[] Sources = { "env2", "lfo1", "lfo2", "step", "vel" };
-    static readonly Dictionary<string, string> SourceName = new() { ["env2"] = "Inv. mod", ["lfo1"] = "LFO 1", ["lfo2"] = "LFO 2", ["step"] = "Stepper", ["vel"] = "Velocity" };
-    static readonly string[] Dests = { "pos", "pos1", "pos2", "pos3", "cut", "cut1", "cut2", "pitch", "amp", "res" };
-    static readonly Dictionary<string, string> DestName = new() { ["pos"] = "WT pos (tutti)", ["pos1"] = "WT pos 1", ["pos2"] = "WT pos 2", ["pos3"] = "WT pos 3", ["cut"] = "Cutoff (tutti)", ["cut1"] = "Cutoff 1", ["cut2"] = "Cutoff 2", ["pitch"] = "Intonazione", ["amp"] = "Volume", ["res"] = "Risonanza" };
+    static readonly string[] Sources = { "env2", "env3", "env4", "lfo1", "lfo2", "lfo3", "lfo4", "step", "vel", "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8" };
+    string SourceName(string s) => s switch
+    {
+        "env2" => "Env 2", "env3" => "Env 3", "env4" => "Env 4", "lfo1" => "LFO 1", "lfo2" => "LFO 2", "lfo3" => "LFO 3", "lfo4" => "LFO 4",
+        "step" => "Stepper", "vel" => "Velocity",
+        _ => (W["macroNames"] as JsonArray)?[int.Parse(s[1..]) - 1]?.ToString() ?? $"Macro {s[1..]}",
+    };
+    static readonly string[] Dests = { "pos", "pos1", "pos2", "pos3", "cut", "cut1", "cut2", "pitch", "amp", "res", "pm", "noise" };
+    static readonly Dictionary<string, string> DestName = new() { ["pos"] = "WT pos (tutti)", ["pos1"] = "WT pos 1", ["pos2"] = "WT pos 2", ["pos3"] = "WT pos 3", ["cut"] = "Cutoff (tutti)", ["cut1"] = "Cutoff 1", ["cut2"] = "Cutoff 2", ["pitch"] = "Intonazione", ["amp"] = "Volume", ["res"] = "Risonanza", ["pm"] = "Phase mod", ["noise"] = "Rumore" };
+    const int ModSlots = 16;
     static readonly string[] Shapes = { "sine", "triangle", "sawtooth", "square" };
     static readonly double[] Syncs = { 0, 0.25, 0.5, 1, 2, 4 };
 
@@ -65,7 +72,7 @@ public sealed class WavetableWindow : Window
         // Annulla, file aperto o modifica da un telefono: si rilegge la patch della traccia
         if (!IsLoaded) return;
         var t = Doc.TrackOf(doc.Pat, ch);
-        if (linked && t["patch"] is JsonObject tp && tp["wt"] is JsonObject && tp.ToJsonString() != P.ToJsonString()) { P = (JsonObject)tp.DeepClone(); Render(); }
+        if (linked && t["patch"] is JsonObject tp && tp["wt"] is JsonObject && tp.ToJsonString() != P.ToJsonString()) { P = Normalize((JsonObject)tp.DeepClone()); Render(); }
         else if (linked && t["patch"] is not JsonObject) { linked = false; Render(); }
     }
 
@@ -84,8 +91,15 @@ public sealed class WavetableWindow : Window
             ["f2"] = new JsonObject { ["type"] = "none", ["cut"] = 1200, ["res"] = 1 },
             ["route"] = "serial", ["mix"] = 0.5, ["drive"] = 0,
             ["env2"] = new JsonObject { ["a"] = 0.01, ["d"] = 0.4, ["s"] = 0, ["r"] = 0.3 },
+            ["env3"] = new JsonObject { ["a"] = 0.3, ["d"] = 0.8, ["s"] = 0.5, ["r"] = 0.6 },
+            ["env4"] = new JsonObject { ["a"] = 1.5, ["d"] = 2, ["s"] = 1, ["r"] = 1.5 },
             ["lfo1"] = new JsonObject { ["shape"] = "sine", ["rate"] = 2, ["sync"] = 0 },
             ["lfo2"] = new JsonObject { ["shape"] = "triangle", ["rate"] = 0.3, ["sync"] = 0 },
+            ["lfo3"] = new JsonObject { ["shape"] = "sawtooth", ["rate"] = 4, ["sync"] = 0 },
+            ["lfo4"] = new JsonObject { ["shape"] = "square", ["rate"] = 0.5, ["sync"] = 0 },
+            ["modosc"] = new JsonObject { ["shape"] = "sine", ["semi"] = 0, ["fine"] = 0, ["rm"] = new JsonArray(0, 0, 0), ["pm"] = new JsonArray(0, 0, 0) },
+            ["macros"] = new JsonArray(0, 0, 0, 0, 0, 0, 0, 0),
+            ["macroNames"] = new JsonArray(Enumerable.Range(1, 8).Select(i => (JsonNode)$"Macro {i}").ToArray()),
             ["step"] = new JsonObject { ["values"] = new JsonArray(1, 0, 0.6, 0, 1, 0, 0.6, 0.3, 1, 0, 0.6, 0, 1, 0.3, 0.6, 0), ["div"] = 1 },
             ["mod"] = new JsonArray(),
         },
@@ -105,7 +119,7 @@ public sealed class WavetableWindow : Window
         ch = Math.Clamp(c, 8, 11);
         var t = Doc.TrackOf(doc.Pat, ch);
         linked = doc.Tracks.Contains(ch) && t["patch"] is JsonObject p && p["wt"] is JsonObject;
-        if (linked) P = (JsonObject)t["patch"]!.DeepClone();
+        if (linked) P = Normalize((JsonObject)t["patch"]!.DeepClone());
         else if (Synth.Presets.ContainsKey(Doc.Str(t, "preset", "")) && Presets().FirstOrDefault(x => x.id == Doc.Str(t, "preset", "")) is var (pid, pp) && pid != null) P = Normalize((JsonObject)pp.DeepClone());
         Render();
     }
@@ -242,6 +256,25 @@ public sealed class WavetableWindow : Window
         nz.Children.Add(K("VOCI", 1, 3, 1, () => N(uni, "voices", 1), v => uni["voices"] = (int)Math.Round(v), v => F(v, "0"), integer: true, col: cyan));
         nz.Children.Add(K("DETUNE", 0, 60, 12, () => N(uni, "detune", 12), v => uni["detune"] = Math.Round(v), v => F(v, "0") + " ct", col: cyan));
         oscRow.Children.Add(Panel("NOISE · UNISONO", cyan, nz, 220));
+        var mo = (JsonObject)W["modosc"]!;
+        var moSp = new StackPanel();
+        var moH = Row();
+        moH.Children.Add(D(100, Shapes.Select(s => (s, s switch { "sine" => "Sinusoide", "triangle" => "Triangolo", "sawtooth" => "Dente sega", _ => "Quadra" })), Doc.Str(mo, "shape", "sine"), v => mo["shape"] = v));
+        moSp.Children.Add(moH);
+        var moK = Row();
+        moK.Children.Add(K("PITCH", -36, 36, 0, () => N(mo, "semi", 0), v => mo["semi"] = (int)Math.Round(v), v => F(v, "+0;-0;0") + " st", integer: true, col: Theme.Red));
+        moK.Children.Add(K("FINE", -100, 100, 0, () => N(mo, "fine", 0), v => mo["fine"] = Math.Round(v), v => F(v, "+0;-0;0") + " ct", integer: true, col: Theme.Red));
+        moSp.Children.Add(moK);
+        var rmRow = Row(); var pmRow = Row();
+        var rm = (JsonArray)mo["rm"]!; var pm = (JsonArray)mo["pm"]!;
+        for (int i = 0; i < 3; i++)
+        {
+            int ii = i;
+            rmRow.Children.Add(K($"RING {i + 1}", 0, 1, 0, () => Doc.Val(rm[ii]), v => rm[ii] = v, Pct, col: Theme.Red));
+            pmRow.Children.Add(K($"PHASE {i + 1}", 0, 1, 0, () => Doc.Val(pm[ii]), v => pm[ii] = v, Pct, col: Theme.Red));
+        }
+        moSp.Children.Add(rmRow); moSp.Children.Add(pmRow);
+        oscRow.Children.Add(Panel("MOD OSC · ring e phase mod sugli oscillatori", Theme.Red, moSp, 290));
         body.Children.Add(oscRow);
 
         // --- filtri, routing, insert, ampiezza
@@ -289,14 +322,17 @@ public sealed class WavetableWindow : Window
 
         // --- modulatori: inviluppo, LFO, stepper, matrice
         var mRow = new WrapPanel();
-        var e2 = (JsonObject)W["env2"]!;
-        var env = Row();
-        env.Children.Add(K("A", 0.001, 8, 0.01, () => N(e2, "a", 0.01), v => e2["a"] = v, Sec, log: true, col: purple));
-        env.Children.Add(K("D", 0.01, 8, 0.4, () => N(e2, "d", 0.4), v => e2["d"] = v, Sec, log: true, col: purple));
-        env.Children.Add(K("S", 0, 1, 0, () => N(e2, "s", 0), v => e2["s"] = v, Pct, col: purple));
-        env.Children.Add(K("R", 0.01, 8, 0.3, () => N(e2, "r", 0.3), v => e2["r"] = v, Sec, log: true, col: purple));
-        mRow.Children.Add(Panel("INVILUPPO MOD", purple, env));
-        foreach (var key in new[] { "lfo1", "lfo2" })
+        foreach (var ek in new[] { "env2", "env3", "env4" })
+        {
+            var e = (JsonObject)W[ek]!;
+            var env = Row();
+            env.Children.Add(K("A", 0.001, 8, 0.01, () => N(e, "a", 0.01), v => e["a"] = v, Sec, log: true, col: purple));
+            env.Children.Add(K("D", 0.01, 8, 0.4, () => N(e, "d", 0.4), v => e["d"] = v, Sec, log: true, col: purple));
+            env.Children.Add(K("S", 0, 1, 0, () => N(e, "s", 0), v => e["s"] = v, Pct, col: purple));
+            env.Children.Add(K("R", 0.01, 8, 0.3, () => N(e, "r", 0.3), v => e["r"] = v, Sec, log: true, col: purple));
+            mRow.Children.Add(Panel($"ENV {ek[3]}", purple, env));
+        }
+        foreach (var key in new[] { "lfo1", "lfo2", "lfo3", "lfo4" })
         {
             var l = (JsonObject)W[key]!;
             var sp = new StackPanel();
@@ -307,7 +343,7 @@ public sealed class WavetableWindow : Window
             var r = Row();
             r.Children.Add(K("RATE", 0.02, 30, 2, () => N(l, "rate", 2), v => l["rate"] = v, v => F(v, "0.00") + " Hz", log: true, col: purple));
             sp.Children.Add(r);
-            mRow.Children.Add(Panel(key == "lfo1" ? "LFO 1" : "LFO 2", purple, sp, 210));
+            mRow.Children.Add(Panel($"LFO {key[3]}", purple, sp, 210));
         }
         var st = (JsonObject)W["step"]!;
         var stepSp = new StackPanel();
@@ -320,6 +356,26 @@ public sealed class WavetableWindow : Window
         stepSp.Children.Add(sr);
         mRow.Children.Add(Panel("STEPPER", purple, stepSp));
 
+        var macros = (JsonArray)W["macros"]!;
+        var names = (JsonArray)W["macroNames"]!;
+        var mac = Row();
+        for (int i = 0; i < 8; i++)
+        {
+            int ii = i;
+            var box = new StackPanel();
+            var kb = K((names[ii]?.ToString() ?? $"Macro {ii + 1}").ToUpperInvariant(), 0, 1, 0, () => Doc.Val(macros[ii]), v => macros[ii] = v, Pct, col: Theme.Orange);
+            kb.LearnId = $"wtmacro:{ch}:{ii}";
+            box.Children.Add(kb);
+            var rn = new Btn("✎", 0, "Rinomina la macro") { Padding = new Thickness(4, 0, 4, 0), HorizontalAlignment = HorizontalAlignment.Center };
+            rn.Click += () => { var n = Prompt.Ask(this, $"Nome della macro {ii + 1}", names[ii]?.ToString() ?? ""); if (n != null) { Begin(); names[ii] = n[..Math.Min(16, n.Length)]; Push(true); End(); } };
+            box.Children.Add(rn);
+            mac.Children.Add(box);
+        }
+        var macSp = new StackPanel();
+        macSp.Children.Add(mac);
+        macSp.Children.Add(Txt.Make("Collega le macro ai parametri nella matrice (sorgente = nome della macro). Tasto destro su una macro: MIDI Learn.", 11, Theme.Dim));
+        body.Children.Add(Panel("8 MACRO", Theme.Orange, macSp));
+
         var mods = (JsonArray)W["mod"]!;
         var mx = new StackPanel { Margin = new Thickness(6, 0, 6, 6) };
         for (int i = 0; i < mods.Count; i++)
@@ -327,7 +383,7 @@ public sealed class WavetableWindow : Window
             var m = (JsonObject)mods[i]!;
             int idx = i;
             var row = new StackPanel { Orientation = Orientation.Horizontal };
-            row.Children.Add(D(92, Sources.Select(s => (s, SourceName[s])), Doc.Str(m, "src", "lfo1"), v => m["src"] = v));
+            row.Children.Add(D(110, Sources.Select(s => (s, SourceName(s))), Doc.Str(m, "src", "lfo1"), v => m["src"] = v));
             row.Children.Add(Txt.Make("→", 12, Theme.Dim));
             row.Children.Add(D(122, Dests.Select(s => (s, DestName[s])), Doc.Str(m, "dst", "pos"), v => m["dst"] = v));
             var amt = new HSlider(-1, 1, 0, N(m, "amt", 0)) { Width = 110, Color = purple, VerticalAlignment = VerticalAlignment.Center, ToolTip = "Quantità (doppio clic: 0)" };
@@ -339,7 +395,7 @@ public sealed class WavetableWindow : Window
             row.Children.Add(x);
             mx.Children.Add(row);
         }
-        if (mods.Count < 6)
+        if (mods.Count < ModSlots)
         {
             var add = new Btn("＋ MODULAZIONE", 0, "Collega una sorgente (LFO, inviluppo, stepper, velocity) a un parametro");
             add.Click += () => { Begin(); mods.Add(new JsonObject { ["src"] = "lfo1", ["dst"] = "pos", ["amt"] = 0.5 }); Push(true); End(); };

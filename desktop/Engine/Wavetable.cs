@@ -199,13 +199,19 @@ public static class Wavetable
         // Sorgenti di modulazione
         var one = ctx.Constant(1);
         sources.Add(one);
-        var env2 = ctx.Gain();
+        GainNode EnvNode(WtEnv e)
+        {
+            var g = ctx.Gain();
+            double ea = e.A * p.Atk, ed = e.D * decMul;
+            g.GainParam.SetValueAtTime(0, t);
+            g.GainParam.LinearRampToValueAtTime(1, t + ea);
+            g.GainParam.SetTargetAtTime((float)e.S, t + ea, Math.Max(0.01, ed / 3));
+            one.Connect(g);
+            return g;
+        }
         var e2 = W.Env2;
-        double e2a = e2.A * p.Atk, e2d = e2.D * decMul;
-        env2.GainParam.SetValueAtTime(0, t);
-        env2.GainParam.LinearRampToValueAtTime(1, t + e2a);
-        env2.GainParam.SetTargetAtTime((float)e2.S, t + e2a, Math.Max(0.01, e2d / 3));
-        one.Connect(env2);
+        var env2 = EnvNode(e2);
+        var envs = new List<(GainNode g, WtEnv e)> { (env2, e2) };
         var velSrc = ctx.Gain((float)vel);
         one.Connect(velSrc);
         var src = new Dictionary<string, AudioNode> { ["env2"] = env2, ["vel"] = velSrc };
@@ -219,6 +225,12 @@ public static class Wavetable
         var used = W.Mod.Select(m => m.Src).ToHashSet();
         if (used.Contains("lfo1")) src["lfo1"] = Lfo(W.Lfo1);
         if (used.Contains("lfo2")) src["lfo2"] = Lfo(W.Lfo2);
+        if (used.Contains("lfo3")) src["lfo3"] = Lfo(W.Lfo3);
+        if (used.Contains("lfo4")) src["lfo4"] = Lfo(W.Lfo4);
+        if (used.Contains("env3")) { var g3 = EnvNode(W.Env3); src["env3"] = g3; envs.Add((g3, W.Env3)); }
+        if (used.Contains("env4")) { var g4 = EnvNode(W.Env4); src["env4"] = g4; envs.Add((g4, W.Env4)); }
+        for (int mi = 0; mi < 8; mi++)
+            if (used.Contains($"m{mi + 1}")) { var mg = ctx.Gain((float)W.Macros[mi]); one.Connect(mg); src[$"m{mi + 1}"] = mg; }
         if (used.Contains("step"))
         {
             var st = ctx.BufferSource(StepBuffer(ctx, W.StepValues));
@@ -230,7 +242,7 @@ public static class Wavetable
         }
         void Route(string sname, AudioParam param, double scale)
         {
-            bool lfoLike = sname is "lfo1" or "lfo2" or "step";
+            bool lfoLike = sname is "lfo1" or "lfo2" or "lfo3" or "lfo4" or "step";
             var g = ctx.Gain((float)(scale * (lfoLike ? modDepth : 1)));
             src[sname].Connect(g);
             g.Connect(param);
@@ -281,6 +293,30 @@ public static class Wavetable
         var pitchBus = ctx.Gain();
         var oscs = new List<SourceNode>();
         double glide = glideFrom != null && pr.Glide > 0 ? pr.Glide : 0;
+        // Oscillatore di modulazione (uno per nota): ring mod sul volume, phase mod sulla frequenza
+        bool pmDest = W.Mod.Any(m => m.Dst == "pm" && m.Amt != 0);
+        bool useMO = W.Rm.Any(x => x > 0) || W.Pm.Any(x => x > 0) || pmDest;
+        var modOsc = new Dictionary<int, AudioNode>();
+        var pmNote = new Dictionary<int, GainNode>();
+        var pmAmts = new List<GainNode>();
+        AudioNode? ModOf(int n)
+        {
+            if (!useMO) return null;
+            if (!modOsc.TryGetValue(n, out var mo))
+            {
+                var o = ctx.Oscillator(W.ModShape);
+                o.Frequency.SetValueAtTime((float)Synth.Mtof(n + W.ModSemi), t);
+                o.Detune.Value = (float)W.ModFine;
+                pitchBus.Connect(o.Detune);
+                oscs.Add(o);
+                modOsc[n] = mo = o;
+                var g = ctx.Gain(1);
+                o.Connect(g);
+                pmNote[n] = g;
+                pmAmts.Add(g);
+            }
+            return mo;
+        }
         for (int i = 0; i < W.Osc.Length; i++)
         {
             var o = W.Osc[i];
@@ -292,6 +328,21 @@ public static class Wavetable
             var frames = Frames(o.Table);
             foreach (var n in notes)
             {
+                var mo = ModOf(n);
+                AudioNode dest = lvl;
+                if (mo != null && W.Rm[i] > 0)
+                {
+                    var ring = ctx.Gain((float)(1 - W.Rm[i]));
+                    mo.Connect(ctx.Gain((float)W.Rm[i])).Connect(ring.GainParam);
+                    ring.Connect(lvl);
+                    dest = ring;
+                }
+                GainNode? pmIn = null;
+                if (mo != null && (W.Pm[i] > 0 || pmDest))
+                {
+                    pmIn = ctx.Gain((float)(W.Pm[i] * 3 * Synth.Mtof(n + o.Semi)));
+                    pmNote[n].Connect(pmIn);
+                }
                 foreach (var sp in spread)
                 {
                     var osc = new WtOscNode(ctx, frames);
@@ -306,16 +357,19 @@ public static class Wavetable
                     pitchBus.Connect(osc.Detune);
                     osc.Position.Value = 0;
                     posBus[i]!.Connect(osc.Position);
-                    osc.Connect(lvl);
+                    osc.Connect(dest);
+                    if (pmIn != null) pmIn.Connect(osc.Frequency);
                     oscs.Add(osc);
                 }
             }
         }
-        if (W.Noise > 0)
+        GainNode? noiseGain = null;
+        if (W.Noise > 0 || W.Mod.Any(m => m.Dst == "noise" && m.Amt != 0))
         {
             var nz = ctx.BufferSource(Kits.Noise(ctx));
             nz.Loop = true;
-            nz.Connect(ctx.Gain((float)(W.Noise * 0.6))).Connect(pre);
+            noiseGain = ctx.Gain((float)(W.Noise * 0.6));
+            nz.Connect(noiseGain).Connect(pre);
             sources.Add(nz);
         }
 
@@ -324,7 +378,7 @@ public static class Wavetable
         foreach (var m in W.Mod)
         {
             if (!src.ContainsKey(m.Src) || m.Amt == 0) continue;
-            double amt = m.Amt * (m.Src == "env2" ? envAmt : 1);
+            double amt = m.Amt * (m.Src.StartsWith("env") ? envAmt : 1);
             switch (m.Dst)
             {
                 case "pos":
@@ -341,9 +395,11 @@ public static class Wavetable
                 case "cut2": if (f2 != null) Route(m.Src, f2.Detune, amt * 4800); break;
                 case "pitch": RouteNode(m.Src, pitchBus, amt * 1200); break;
                 case "res": Route(m.Src, f1.Q, amt * 10); break;
+                case "pm": foreach (var g in pmAmts) Route(m.Src, g.GainParam, amt * 2); break;
+                case "noise": if (noiseGain != null) Route(m.Src, noiseGain.GainParam, amt * 0.6); break;
                 case "amp":
                 {
-                    bool bip = m.Src is "lfo1" or "lfo2";
+                    bool bip = m.Src is "lfo1" or "lfo2" or "lfo3" or "lfo4";
                     Route(m.Src, trem.GainParam, bip ? amt / 2 : Math.Abs(amt));
                     tremDepth += Math.Abs(amt) * (bip ? 0.5 : 1);
                     break;
@@ -355,13 +411,13 @@ public static class Wavetable
         // Collega una sorgente all'ingresso di un nodo-bus (somma di segnali)
         void RouteNode(string sname, AudioNode bus, double scale)
         {
-            bool lfoLike = sname is "lfo1" or "lfo2" or "step";
+            bool lfoLike = sname is "lfo1" or "lfo2" or "lfo3" or "lfo4" or "step";
             src[sname].Connect(ctx.Gain((float)(scale * (lfoLike ? modDepth : 1)))).Connect(bus);
         }
 
         foreach (var x in sources) x.Start(t);
         foreach (var x in oscs) x.Start(t);
         var all = sources.Concat(oscs).ToList();
-        return Synth.MakeHandle(ctx, rel, all, r, t, dur, when => env2.GainParam.SetTargetAtTime(0, when, Math.Max(0.01, e2.R / 3)));
+        return Synth.MakeHandle(ctx, rel, all, r, t, dur, when => { foreach (var (g, e) in envs) g.GainParam.SetTargetAtTime(0, when, Math.Max(0.01, e.R / 3)); });
     }
 }

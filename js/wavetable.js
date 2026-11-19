@@ -144,8 +144,12 @@ function stepBuffer(ctx, values) {
 // Patch: modello e validazione
 // =====================================================================
 
-export const MOD_SOURCES = ['env2', 'lfo1', 'lfo2', 'step', 'vel'];
-export const MOD_DESTS = ['pos', 'pos1', 'pos2', 'pos3', 'cut', 'cut1', 'cut2', 'pitch', 'amp', 'res'];
+export const MOD_SOURCES = ['env2', 'env3', 'env4', 'lfo1', 'lfo2', 'lfo3', 'lfo4', 'step', 'vel', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8'];
+export const MOD_DESTS = ['pos', 'pos1', 'pos2', 'pos3', 'cut', 'cut1', 'cut2', 'pitch', 'amp', 'res', 'pm', 'noise'];
+export const MOD_SLOTS = 16;
+export const MODOSC_SHAPES = ['sine', 'triangle', 'sawtooth', 'square'];
+const LFO_LIKE = new Set(['lfo1', 'lfo2', 'lfo3', 'lfo4', 'step']);
+const BIPOLAR = new Set(['lfo1', 'lfo2', 'lfo3', 'lfo4']);
 export const FILTER_TYPES = ['lowpass', 'bandpass', 'highpass', 'notch'];
 export const LFO_SHAPES = ['sine', 'triangle', 'sawtooth', 'square'];
 export const LFO_SYNC = [0, 0.25, 0.5, 1, 2, 4];   // 0 = libero (Hz); altrimenti durata in battiti
@@ -162,8 +166,15 @@ export const WT_DEFAULT = Object.freeze({
   f2: { type: 'none', cut: 1200, res: 1 },
   route: 'serial', mix: 0.5, drive: 0,
   env2: { a: 0.01, d: 0.4, s: 0, r: 0.3 },
+  env3: { a: 0.3, d: 0.8, s: 0.5, r: 0.6 },
+  env4: { a: 1.5, d: 2, s: 1, r: 1.5 },
   lfo1: { shape: 'sine', rate: 2, sync: 0 },
   lfo2: { shape: 'triangle', rate: 0.3, sync: 0 },
+  lfo3: { shape: 'sawtooth', rate: 4, sync: 0 },
+  lfo4: { shape: 'square', rate: 0.5, sync: 0 },
+  modosc: { shape: 'sine', semi: 0, fine: 0, rm: [0, 0, 0], pm: [0, 0, 0] },
+  macros: [0, 0, 0, 0, 0, 0, 0, 0],
+  macroNames: ['Macro 1', 'Macro 2', 'Macro 3', 'Macro 4', 'Macro 5', 'Macro 6', 'Macro 7', 'Macro 8'],
   step: { values: [1, 0, 0.6, 0, 1, 0, 0.6, 0.3, 1, 0, 0.6, 0, 1, 0.3, 0.6, 0], div: 1 },
   mod: [],
 });
@@ -186,7 +197,7 @@ export function normalizeWT(w) {
   const env = (s, def) => ({ a: clamp(s && s.a, 0.001, 8, def.a), d: clamp(s && s.d, 0.01, 8, def.d), s: clamp(s && s.s, 0, 1, def.s), r: clamp(s && s.r, 0.01, 8, def.r) });
   const lfo = (s, def) => ({ shape: pick(s && s.shape, LFO_SHAPES, def.shape), rate: clamp(s && s.rate, 0.02, 30, def.rate), sync: pick(s && s.sync, LFO_SYNC, 0) });
   const values = Array.from({ length: 16 }, (_, i) => clamp(o.step && Array.isArray(o.step.values) ? o.step.values[i] : undefined, 0, 1, d.step.values[i]));
-  const mod = (Array.isArray(o.mod) ? o.mod : []).slice(0, 6)
+  const mod = (Array.isArray(o.mod) ? o.mod : []).slice(0, MOD_SLOTS)
     .filter((m) => m && MOD_SOURCES.includes(m.src) && MOD_DESTS.includes(m.dst))
     .map((m) => ({ src: m.src, dst: m.dst, amt: clamp(m.amt, -1, 1, 0) }));
   return {
@@ -195,7 +206,16 @@ export function normalizeWT(w) {
     noise: clamp(o.noise, 0, 1, 0),
     f1: filt(o.f1, d.f1, false), f2: filt(o.f2, d.f2, true),
     route: pick(o.route, ['serial', 'parallel'], 'serial'), mix: clamp(o.mix, 0, 1, 0.5), drive: clamp(o.drive, 0, 1, 0),
-    env2: env(o.env2, d.env2), lfo1: lfo(o.lfo1, d.lfo1), lfo2: lfo(o.lfo2, d.lfo2),
+    env2: env(o.env2, d.env2), env3: env(o.env3, d.env3), env4: env(o.env4, d.env4),
+    lfo1: lfo(o.lfo1, d.lfo1), lfo2: lfo(o.lfo2, d.lfo2), lfo3: lfo(o.lfo3, d.lfo3), lfo4: lfo(o.lfo4, d.lfo4),
+    modosc: {
+      shape: pick(o.modosc && o.modosc.shape, MODOSC_SHAPES, 'sine'),
+      semi: Math.round(clamp(o.modosc && o.modosc.semi, -36, 36, 0)), fine: clamp(o.modosc && o.modosc.fine, -100, 100, 0),
+      rm: [0, 1, 2].map((i) => clamp(o.modosc && Array.isArray(o.modosc.rm) ? o.modosc.rm[i] : 0, 0, 1, 0)),
+      pm: [0, 1, 2].map((i) => clamp(o.modosc && Array.isArray(o.modosc.pm) ? o.modosc.pm[i] : 0, 0, 1, 0)),
+    },
+    macros: Array.from({ length: 8 }, (_, i) => clamp(Array.isArray(o.macros) ? o.macros[i] : 0, 0, 1, 0)),
+    macroNames: Array.from({ length: 8 }, (_, i) => (Array.isArray(o.macroNames) && typeof o.macroNames[i] === 'string' && o.macroNames[i].trim() ? o.macroNames[i].slice(0, 16) : d.macroNames[i])),
     step: { values, div: pick(o.step && o.step.div, STEP_DIV, 1) },
     mod,
   };
@@ -247,12 +267,17 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
   // --- Sorgenti di modulazione ---
   const one = ctx.createConstantSource();
   sources.push(one);
-  const env2 = ctx.createGain();
-  const e2 = W.env2, e2a = e2.a * (p.atk ?? 1), e2d = e2.d * decMul;
-  env2.gain.setValueAtTime(0, t);
-  env2.gain.linearRampToValueAtTime(1, t + e2a);
-  env2.gain.setTargetAtTime(e2.s, t + e2a, Math.max(0.01, e2d / 3));
-  one.connect(env2);
+  /** Inviluppo di modulazione 0..1 (A lineare, D/R esponenziali). */
+  const envNode = (e) => {
+    const g = ctx.createGain(), ea = e.a * (p.atk ?? 1), ed = e.d * decMul;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(1, t + ea);
+    g.gain.setTargetAtTime(e.s, t + ea, Math.max(0.01, ed / 3));
+    one.connect(g);
+    return g;
+  };
+  const e2 = W.env2;
+  const env2 = envNode(e2);
   const velSrc = ctx.createGain();
   velSrc.gain.value = vel;
   one.connect(velSrc);
@@ -265,8 +290,10 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
   };
   const used = new Set(W.mod.map((m) => m.src));
   const src = { env2, vel: velSrc };
-  if (used.has('lfo1')) src.lfo1 = lfoNode(W.lfo1);
-  if (used.has('lfo2')) src.lfo2 = lfoNode(W.lfo2);
+  const envs = [[env2, e2]];
+  for (const e of ['env3', 'env4']) if (used.has(e) && W[e]) { src[e] = envNode(W[e]); envs.push([src[e], W[e]]); }
+  for (const l of ['lfo1', 'lfo2', 'lfo3', 'lfo4']) if (used.has(l) && W[l]) src[l] = lfoNode(W[l]);
+  (W.macros || []).forEach((v, i) => { if (used.has(`m${i + 1}`)) { const g = ctx.createGain(); g.gain.value = v; one.connect(g); src[`m${i + 1}`] = g; } });
   if (used.has('step')) {
     const st = ctx.createBufferSource();
     st.buffer = stepBuffer(ctx, W.step.values);
@@ -279,9 +306,10 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
   /** Collega una sorgente a un parametro con un'ampiezza. */
   const route = (s, param, scale) => {
     const g = ctx.createGain();
-    g.gain.value = scale * (s === src.lfo1 || s === src.lfo2 || s === src.step ? modDepth : 1);
+    g.gain.value = scale * (lfoLikeNode(s) ? modDepth : 1);
     s.connect(g).connect(param);
   };
+  function lfoLikeNode(s) { for (const k of LFO_LIKE) if (src[k] === s) return true; return false; }
 
   // --- Filtri e drive ---
   const accentCents = accent ? 700 : 0;
@@ -334,6 +362,29 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
   const pitchBus = ctx.createGain();     // somma delle modulazioni di pitch (cent) → detune di tutti gli oscillatori
   const oscs = [];
   const glide = glideFrom != null && pr.glide ? pr.glide : 0;
+  // Oscillatore di modulazione (uno per nota): ring mod sul volume e phase mod sulla frequenza
+  const MO = W.modosc || { rm: [0, 0, 0], pm: [0, 0, 0], semi: 0, fine: 0, shape: 'sine' };
+  const pmDest = W.mod.some((m) => m.dst === 'pm' && m.amt);
+  const useMO = MO.rm.some((x) => x > 0) || MO.pm.some((x) => x > 0) || pmDest;
+  const pmAmts = [];                                 // quantità di phase mod per nota (modulabile dalla matrice)
+  const modOsc = new Map(), pmNote = new Map();
+  const modOf = (n) => {
+    if (!useMO) return null;
+    if (!modOsc.has(n)) {
+      const o = ctx.createOscillator();
+      o.type = MO.shape;
+      o.frequency.setValueAtTime(mtof(n + MO.semi), t);
+      o.detune.value = MO.fine;
+      pitchBus.connect(o.detune);
+      oscs.push(o);
+      modOsc.set(n, o);
+      const g = ctx.createGain();
+      o.connect(g);
+      pmNote.set(n, g);
+      pmAmts.push(g);
+    }
+    return modOsc.get(n);
+  };
   W.osc.forEach((o, i) => {
     if (!o.level) return;
     const weights = windowCurves.map((curve) => {
@@ -348,6 +399,24 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
     lvl.gain.value = o.level / voices;
     lvl.connect(mix);
     for (const n of notes) {
+      const mo = modOf(n);
+      // Ring mod: volume dell'oscillatore = (1 − rm) + rm · modulatore
+      let dest = lvl;
+      if (mo && MO.rm[i] > 0) {
+        dest = ctx.createGain();
+        dest.gain.value = 1 - MO.rm[i];
+        const rg = ctx.createGain();
+        rg.gain.value = MO.rm[i];
+        mo.connect(rg).connect(dest.gain);
+        dest.connect(lvl);
+      }
+      // Phase mod (come FM): modulatore → frequenza, indice proporzionale alla nota
+      let pmIn = null;
+      if (mo && (MO.pm[i] > 0 || pmDest)) {
+        pmIn = ctx.createGain();
+        pmIn.gain.value = MO.pm[i] * 3 * mtof(n + o.semi);
+        pmNote.get(n).connect(pmIn);
+      }
       for (const sp of spread) {
         for (let k = 0; k < F; k++) {
           const osc = ctx.createOscillator();
@@ -364,19 +433,22 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
           const fg = ctx.createGain();
           fg.gain.value = 0;
           weights[k].connect(fg.gain);
-          osc.connect(fg).connect(lvl);
+          osc.connect(fg).connect(dest);
+          if (pmIn) pmIn.connect(osc.frequency);
           oscs.push(osc);
         }
       }
     }
   });
-  if (W.noise > 0) {
+  const noiseDest = W.mod.some((m) => m.dst === 'noise' && m.amt);
+  let noiseGain = null;
+  if (W.noise > 0 || noiseDest) {
     const n = ctx.createBufferSource();
     n.buffer = getNoise(ctx);
     n.loop = true;
-    const ng = ctx.createGain();
-    ng.gain.value = W.noise * 0.6;
-    n.connect(ng).connect(pre);
+    noiseGain = ctx.createGain();
+    noiseGain.gain.value = W.noise * 0.6;
+    n.connect(noiseGain).connect(pre);
     sources.push(n);
   }
 
@@ -386,7 +458,7 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
   for (const m of W.mod) {
     const s0 = src[m.src];
     if (!s0 || !m.amt) continue;
-    const amt = m.amt * (m.src === 'env2' ? envAmt : 1);
+    const amt = m.amt * (m.src.startsWith('env') ? envAmt : 1);
     switch (m.dst) {
       case 'pos': posBus.forEach((b) => b && route(s0, b, 2 * amt)); break;
       case 'pos1': case 'pos2': case 'pos3': { const b = posBus[+m.dst[3] - 1]; if (b) route(s0, b, 2 * amt); break; }
@@ -395,10 +467,12 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
       case 'cut2': if (f2) route(s0, f2.detune, amt * 4800); break;
       case 'pitch': route(s0, pitchBus, amt * 1200); break;
       case 'res': route(s0, f1.Q, amt * 10); break;
+      case 'pm': pmAmts.forEach((g) => route(s0, g.gain, amt * 2)); break;
+      case 'noise': if (noiseGain) route(s0, noiseGain.gain, amt * 0.6); break;
       case 'amp': {
         // Sorgenti unipolari (inviluppo, step, velocity): 0 → volume ridotto di |amt| (gate);
         // LFO bipolari: oscillazione di ±|amt|/2 attorno a 1 - |amt|/2
-        const bip = m.src === 'lfo1' || m.src === 'lfo2';
+        const bip = BIPOLAR.has(m.src);
         route(s0, trem.gain, bip ? amt / 2 : Math.abs(amt));
         tremDepth += Math.abs(amt) * (bip ? 0.5 : 1);
         break;
@@ -420,7 +494,7 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
       const when = Math.max(at, ctx.currentTime);
       rel.gain.setValueAtTime(1, when);
       rel.gain.setTargetAtTime(0, when, Math.max(0.005, r / 4));
-      env2.gain.setTargetAtTime(0, when, Math.max(0.01, e2.r / 3));
+      envs.forEach(([g, e]) => g.gain.setTargetAtTime(0, when, Math.max(0.01, e.r / 3)));
       all().forEach((o) => { try { o.stop(when + r * 1.6 + 0.05); } catch (_) { /* già fermo */ } });
     },
     kill(at) {
@@ -498,4 +572,15 @@ export const WT_PRESETS = {
   wtRiser: P('Wavetable Riser', ['fx', 'riser', 'build-up'], { a: 3, d: 1, s: 1, r: 0.5 }, {
     osc: O3({ table: 'sync', pos: 0 }), uni: { voices: 3, detune: 25 }, noise: 0.4, f1: { type: 'highpass', cut: 200, res: 2 },
     env2: { a: 4, d: 1, s: 1, r: 0.5 }, mod: [{ src: 'env2', dst: 'pos', amt: 0.9 }, { src: 'env2', dst: 'cut', amt: 0.8 }, { src: 'env2', dst: 'pitch', amt: 0.3 }] }),
+  wtRingBell: P('Ring Mod Bell', ['bell', 'metallic', 'ring'], { a: 0.002, d: 1.4, s: 0, r: 1.2, gain: 1.3 }, {
+    osc: O3({ table: 'harmonic', pos: 0.4 }, { table: 'fm', pos: 0.2, semi: 12, level: 0.4 }),
+    modosc: { shape: 'sine', semi: 7, fine: 0, rm: [0.7, 0.4, 0], pm: [0, 0, 0] },
+    f1: { type: 'lowpass', cut: 9000, res: 1 }, env3: { a: 0.001, d: 1.2, s: 0, r: 0.8 },
+    mod: [{ src: 'env3', dst: 'cut', amt: 0.4 }, { src: 'lfo3', dst: 'pitch', amt: 0.01 }], lfo3: { shape: 'sine', rate: 5, sync: 0 } }),
+  wtPmGrowl: P('Phase Mod Growl', ['bass', 'growl', 'phase mod'], { a: 0.003, d: 0.4, s: 0.9, r: 0.12, gain: 1.1 }, {
+    osc: O3({ table: 'analog', pos: 0.1 }, { semi: -12, level: 0.5 }),
+    modosc: { shape: 'sine', semi: 0, fine: 0, rm: [0, 0, 0], pm: [0.35, 0, 0] },
+    f1: { type: 'lowpass', cut: 1400, res: 3 }, drive: 0.4,
+    lfo4: { shape: 'triangle', rate: 2, sync: 0.5 }, macros: [0.6, 0, 0, 0, 0, 0, 0, 0],
+    mod: [{ src: 'lfo4', dst: 'pm', amt: 0.5 }, { src: 'm1', dst: 'cut', amt: 0.3 }, { src: 'lfo4', dst: 'pos1', amt: 0.4 }] }),
 };

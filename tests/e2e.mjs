@@ -1001,6 +1001,16 @@ async function instrumentTests(browser, url) {
   else await page.$eval('#waveBody input[type="range"]', (el) => { el.value = String(+el.min + (+el.max - +el.min) / 2); el.dispatchEvent(new Event('input', { bubbles: true })); });
   const w = await page.evaluate(() => ({ on: drumbort.state.tracks.includes(11), wt: !!(drumbort.state.slots[drumbort.state.slot].synth.tracks[3].patch || {}).wt }));
   check('wavetable applicato alla traccia vuota', w.on && w.wt, JSON.stringify(w));
+  // Funzioni stile Massive: oscillatore di modulazione, 4 inviluppi/LFO, 8 macro, 16 slot
+  await page.tap('#waveTabs [data-tab="osc"]');
+  check('oscillatore di modulazione (ring e phase)', await page.evaluate(() => document.querySelectorAll('#waveBody [data-path^="wt.modosc.rm"], #waveBody [data-path^="wt.modosc.pm"]').length === 6));
+  await page.tap('#waveTabs [data-tab="lfo"]');
+  check('4 LFO', await page.evaluate(() => document.querySelectorAll('#waveBody [data-path$=".rate"]').length === 4));
+  await page.tap('#waveTabs [data-tab="macro"]');
+  check('8 macro', await page.evaluate(() => document.querySelectorAll('#waveBody [data-path^="wt.macros"]').length === 8));
+  await page.tap('#waveTabs [data-tab="mod"]');
+  check('matrice a 16 slot con macro e nuove destinazioni', await page.evaluate(() => document.querySelectorAll('#waveBody .mod-slot').length === 16
+    && !!document.querySelector('#waveBody [data-mod="src"] option[value="m1"]') && !!document.querySelector('#waveBody [data-mod="dst"] option[value="pm"]')));
   check('nessun errore', errors.length === 0, errors.join(' | '));
   await context.close();
 }

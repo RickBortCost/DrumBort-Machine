@@ -2,6 +2,18 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.25.0] - 2026-11-19
+
+### Aggiunto
+- **Synth wavetable, funzioni in stile Massive** (motore web e C#, editor su PC e telefono):
+  - **oscillatore di modulazione** (forma, pitch, fine) con **ring mod** e **phase mod** regolabili per ciascuno dei 3 oscillatori;
+  - **4 inviluppi**: ampiezza più ENV 2, ENV 3 ed ENV 4 di modulazione;
+  - **4 LFO**, liberi o a tempo;
+  - **8 macro** con nome modificabile (su PC) e MIDI Learn, usabili come sorgenti della matrice;
+  - **matrice di modulazione a 16 slot**, con le nuove destinazioni phase mod e rumore.
+- Nuovi preset: **Ring Mod Bell** e **Phase Mod Growl**.
+- I progetti e i preset esistenti suonano come prima: le nuove funzioni sono spente se non usate.
+
 ## [1.24.0] - 2026-11-19
 
 ### Aggiunto

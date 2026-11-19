@@ -8,7 +8,7 @@
 import { PRESETS, setUserPresets } from './presets.js';
 import { SYNTH_TRACKS, presetOf, isChordTrack, diatonicChord } from './synth.js';
 import { trackBase } from './synthpattern.js';
-import { TABLES, TABLE_LABEL, MOD_SOURCES, MOD_DESTS, FILTER_TYPES, LFO_SHAPES, LFO_SYNC, STEP_DIV, WT_DEFAULT, waveShape, normalizeWTPreset } from './wavetable.js';
+import { TABLES, TABLE_LABEL, MOD_SOURCES, MOD_DESTS, MOD_SLOTS, MODOSC_SHAPES, FILTER_TYPES, LFO_SHAPES, LFO_SYNC, STEP_DIV, WT_DEFAULT, waveShape, normalizeWTPreset } from './wavetable.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -36,8 +36,10 @@ const SEL = (path, label, options) => ({ type: 'select', path, label, options })
 const H = (label) => ({ type: 'head', label });
 
 const FT_LABEL = { none: 'OFF', lowpass: 'LP', bandpass: 'BP', highpass: 'HP', notch: 'NOTCH' };
-const SRC_LABEL = { env2: 'MOD ENV', lfo1: 'LFO 1', lfo2: 'LFO 2', step: 'STEP', vel: 'VELOCITY' };
-const DST_LABEL = { pos: 'WAVE (tutti)', pos1: 'WAVE 1', pos2: 'WAVE 2', pos3: 'WAVE 3', cut: 'CUTOFF (tutti)', cut1: 'CUTOFF 1', cut2: 'CUTOFF 2', pitch: 'PITCH', amp: 'VOLUME', res: 'RISONANZA 1' };
+const SRC_LABEL = { env2: 'ENV 2', env3: 'ENV 3', env4: 'ENV 4', lfo1: 'LFO 1', lfo2: 'LFO 2', lfo3: 'LFO 3', lfo4: 'LFO 4', step: 'STEP', vel: 'VELOCITY',
+  m1: 'MACRO 1', m2: 'MACRO 2', m3: 'MACRO 3', m4: 'MACRO 4', m5: 'MACRO 5', m6: 'MACRO 6', m7: 'MACRO 7', m8: 'MACRO 8' };
+const DST_LABEL = { pos: 'WAVE (tutti)', pos1: 'WAVE 1', pos2: 'WAVE 2', pos3: 'WAVE 3', cut: 'CUTOFF (tutti)', cut1: 'CUTOFF 1', cut2: 'CUTOFF 2', pitch: 'PITCH', amp: 'VOLUME', res: 'RISONANZA 1', pm: 'PHASE MOD', noise: 'RUMORE' };
+const SHAPE_LABEL = { sine: 'SIN', triangle: 'TRI', sawtooth: 'SAW', square: 'SQR' };
 const SYNC_LABEL = { 0: 'LIBERO', 0.25: '1/16', 0.5: '1/8', 1: '1/4', 2: '1/2', 4: '1 BAR' };
 const DIV_LABEL = { 0.5: '1/32', 1: '1/16', 2: '1/8', 4: '1/4' };
 
@@ -51,6 +53,11 @@ const TABS = {
       R(`wt.osc.${i}.semi`, 'SEMITONI', -24, 24, 1, (v) => (v > 0 ? `+${v}` : `${v}`)),
       R(`wt.osc.${i}.fine`, 'FINE', -50, 50, 1, (v) => `${v}c`),
     ]),
+    H('OSCILLATORE DI MODULAZIONE (RING / PHASE MOD)'),
+    S('wt.modosc.shape', 'FORMA', MODOSC_SHAPES.map((s) => [s, SHAPE_LABEL[s]])),
+    R('wt.modosc.semi', 'SEMITONI', -36, 36, 1, (v) => (v > 0 ? `+${v}` : `${v}`)),
+    R('wt.modosc.fine', 'FINE', -100, 100, 1, (v) => `${v}c`),
+    ...[0, 1, 2].flatMap((i) => [R(`wt.modosc.rm.${i}`, `RING → OSC ${i + 1}`, 0, 1, 0.01, pct), R(`wt.modosc.pm.${i}`, `PHASE → OSC ${i + 1}`, 0, 1, 0.01, pct)]),
     H('UNISONO (OSC 1) E RUMORE'),
     S('wt.uni.voices', 'VOCI', [[1, '1'], [2, '2'], [3, '3']]),
     R('wt.uni.detune', 'DETUNE', 0, 60, 1, (v) => `${v}c`),
@@ -75,11 +82,13 @@ const TABS = {
     R('a', 'ATTACK', 0.001, 8, 0.001, sec, true), R('d', 'DECAY', 0.01, 8, 0.001, sec, true),
     R('s', 'SUSTAIN', 0, 1, 0.01, pct), R('r', 'RELEASE', 0.01, 8, 0.001, sec, true),
     R('glide', 'GLIDE', 0, 0.5, 0.005, sec), R('gain', 'GUADAGNO', 0.2, 3, 0.01, (v) => v.toFixed(2)),
-    H('INVILUPPO DI MODULAZIONE'),
-    R('wt.env2.a', 'ATTACK', 0.001, 8, 0.001, sec, true), R('wt.env2.d', 'DECAY', 0.01, 8, 0.001, sec, true),
-    R('wt.env2.s', 'SUSTAIN', 0, 1, 0.01, pct), R('wt.env2.r', 'RELEASE', 0.01, 8, 0.001, sec, true),
+    ...[2, 3, 4].flatMap((n) => [
+      H(`INVILUPPO ${n} (MODULAZIONE)`),
+      R(`wt.env${n}.a`, 'ATTACK', 0.001, 8, 0.001, sec, true), R(`wt.env${n}.d`, 'DECAY', 0.01, 8, 0.001, sec, true),
+      R(`wt.env${n}.s`, 'SUSTAIN', 0, 1, 0.01, pct), R(`wt.env${n}.r`, 'RELEASE', 0.01, 8, 0.001, sec, true),
+    ]),
   ],
-  lfo: () => [1, 2].flatMap((n) => [
+  lfo: () => [1, 2, 3, 4].flatMap((n) => [
     H(`LFO ${n}`),
     S(`wt.lfo${n}.shape`, 'FORMA', LFO_SHAPES.map((s) => [s, { sine: 'SIN', triangle: 'TRI', sawtooth: 'SAW', square: 'SQR' }[s]])),
     SEL(`wt.lfo${n}.sync`, 'TEMPO', LFO_SYNC.map((v) => [v, SYNC_LABEL[v]])),
@@ -90,9 +99,13 @@ const TABS = {
     { type: 'steps', path: 'wt.step.values' },
     S('wt.step.div', 'PASSO', STEP_DIV.map((v) => [v, DIV_LABEL[v]])),
   ],
+  macro: () => [
+    H('8 MACRO: usale come sorgente nella matrice (MOD)'),
+    ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => R(`wt.macros.${i}`, `MACRO ${i + 1}`, 0, 1, 0.01, pct)),
+  ],
   mod: () => [
     H('MATRICE: SORGENTE → DESTINAZIONE × QUANTITÀ'),
-    ...[0, 1, 2, 3, 4, 5].map((i) => ({ type: 'mod', i })),
+    ...Array.from({ length: MOD_SLOTS }, (_, i) => ({ type: 'mod', i })),
   ],
 };
 

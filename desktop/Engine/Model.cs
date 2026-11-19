@@ -245,8 +245,12 @@ public sealed class WtPatch
     public int UniVoices = 1; public double UniDetune = 12, Noise, Mix = 0.5, Drive;
     public WtFilter F1 = new("lowpass", 3000, 1), F2 = new("none", 1200, 1);
     public string Route = "serial";
-    public WtEnv Env2 = new(0.01, 0.4, 0, 0.3);
-    public WtLfo Lfo1 = new("sine", 2, 0), Lfo2 = new("triangle", 0.3, 0);
+    public WtEnv Env2 = new(0.01, 0.4, 0, 0.3), Env3 = new(0.3, 0.8, 0.5, 0.6), Env4 = new(1.5, 2, 1, 1.5);
+    public WtLfo Lfo1 = new("sine", 2, 0), Lfo2 = new("triangle", 0.3, 0), Lfo3 = new("sawtooth", 4, 0), Lfo4 = new("square", 0.5, 0);
+    // Oscillatore di modulazione: ring mod (rm) e phase mod (pm) per ciascuno dei 3 oscillatori
+    public string ModShape = "sine"; public double ModSemi, ModFine;
+    public double[] Rm = new double[3], Pm = new double[3];
+    public double[] Macros = new double[8];
     public double[] StepValues = new double[16]; public double StepDiv = 1;
     public WtMod[] Mod = Array.Empty<WtMod>();
 
@@ -260,7 +264,13 @@ public sealed class WtPatch
             Noise = J.D(w, "noise", 0), Mix = J.D(w, "mix", 0.5), Drive = J.D(w, "drive", 0), Route = J.S(w, "route", "serial"),
             F1 = F(w["f1"], "lowpass"), F2 = F(w["f2"], "none"),
             Env2 = new WtEnv(J.D(w["env2"], "a", 0.01), J.D(w["env2"], "d", 0.4), J.D(w["env2"], "s", 0), J.D(w["env2"], "r", 0.3)),
-            Lfo1 = L(w["lfo1"], "sine"), Lfo2 = L(w["lfo2"], "triangle"),
+            Lfo1 = L(w["lfo1"], "sine"), Lfo2 = L(w["lfo2"], "triangle"), Lfo3 = L(w["lfo3"], "sawtooth"), Lfo4 = L(w["lfo4"], "square"),
+            Env3 = new WtEnv(J.D(w["env3"], "a", 0.3), J.D(w["env3"], "d", 0.8), J.D(w["env3"], "s", 0.5), J.D(w["env3"], "r", 0.6)),
+            Env4 = new WtEnv(J.D(w["env4"], "a", 1.5), J.D(w["env4"], "d", 2), J.D(w["env4"], "s", 1), J.D(w["env4"], "r", 1.5)),
+            ModShape = J.S(w["modosc"], "shape", "sine"), ModSemi = J.D(w["modosc"], "semi", 0), ModFine = J.D(w["modosc"], "fine", 0),
+            Rm = J.Nums(w["modosc"]?["rm"]).Concat(new double[3]).Take(3).Select(x => Math.Clamp(x, 0, 1)).ToArray(),
+            Pm = J.Nums(w["modosc"]?["pm"]).Concat(new double[3]).Take(3).Select(x => Math.Clamp(x, 0, 1)).ToArray(),
+            Macros = J.Nums(w["macros"]).Concat(new double[8]).Take(8).Select(x => Math.Clamp(x, 0, 1)).ToArray(),
             StepValues = J.Nums(w["step"]?["values"]).Concat(new double[16]).Take(16).ToArray(), StepDiv = J.D(w["step"], "div", 1),
         };
         if (w["osc"] is JsonArray oa) p.Osc = oa.Select(o => new WtOsc(J.S(o, "table", "analog"), J.D(o, "pos", 0), J.D(o, "semi", 0), J.D(o, "fine", 0), J.D(o, "level", 0))).ToArray();

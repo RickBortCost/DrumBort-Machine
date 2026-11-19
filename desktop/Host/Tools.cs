@@ -10,6 +10,31 @@ namespace DrumBort.Host;
 public static class Tools
 {
     /// <summary>Picco e RMS di ogni voce di batteria e di ogni preset synth (render offline isolato).</summary>
+    /// <summary>Benchmark del synth wavetable: ogni preset come accordo di 3 note (2 s), tempo per preset.</summary>
+    public static void BenchWavetable(int rate, int reps)
+    {
+        double total = 0, audio = 0;
+        var rows = new List<(string id, double ms)>();
+        foreach (var (id, pr) in Synth.Presets.Where(x => x.Value.Wt != null))
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            for (int k = 0; k < reps; k++)
+            {
+                var ctx = new AudioContext(rate);
+                var vp = new VoiceParams(0, 0, 1, 1, 1, 1, 1, 1, 0, 120);
+                Synth.PlayVoice(ctx, ctx.Destination, 0.01, 2, new[] { 48, 52, 55 }, 0.9, pr, vp, null);
+                var l = new float[AudioContext.Block]; var r = new float[AudioContext.Block];
+                for (int f = 0; f < rate * 2.5; f += AudioContext.Block) ctx.RenderBlock(l, r, 0);
+                audio += 2.5;
+            }
+            double ms = sw.Elapsed.TotalMilliseconds / reps;
+            total += ms; rows.Add((id, ms));
+        }
+        foreach (var (id, ms) in rows.OrderByDescending(x => x.ms)) Console.WriteLine($"{id,-16} {ms,7:0.0} ms per 2,5 s ({2500 / ms,5:0}× tempo reale)");
+        Console.WriteLine($"TOTALE {total:0} ms · media {2500 * rows.Count / total:0}× tempo reale per voce (accordo di 3 note)");
+        Profiler.Report();
+    }
+
     public static void RenderVoices(string outPath, int rate)
     {
         var res = new JsonObject();

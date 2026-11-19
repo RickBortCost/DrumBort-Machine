@@ -344,8 +344,11 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
   }
 
   // --- Bus di posizione per oscillatore (segnale -1..1) ---
-  const posBus = W.osc.map((o) => {
-    if (!o.level) return null;
+  // Se la posizione di un oscillatore non è modulata i pesi dei frame sono costanti: bastano i
+  // 1-2 frame vicini con guadagni fissi (niente bus, niente waveshaper, 2 oscillatori invece di 4).
+  const posMod = W.osc.map((_, i) => W.mod.some((m) => m.amt && MOD_SOURCES.includes(m.src) && (m.dst === 'pos' || m.dst === `pos${i + 1}`)));
+  const posBus = W.osc.map((o, i) => {
+    if (!o.level || !posMod[i]) return null;
     const bus = ctx.createGain();
     const off = ctx.createConstantSource();
     off.offset.value = Math.min(1, Math.max(0, o.pos + (p.pos || 0))) * 2 - 1;
@@ -360,6 +363,7 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
   mix.gain.value = 1 / activeLvl;
   mix.connect(pre);
   const pitchBus = ctx.createGain();     // somma delle modulazioni di pitch (cent) → detune di tutti gli oscillatori
+  const pitchMod = W.mod.some((m) => m.dst === 'pitch' && m.amt);
   const oscs = [];
   const glide = glideFrom != null && pr.glide ? pr.glide : 0;
   // Oscillatore di modulazione (uno per nota): ring mod sul volume e phase mod sulla frequenza
@@ -375,7 +379,7 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
       o.type = MO.shape;
       o.frequency.setValueAtTime(mtof(n + MO.semi), t);
       o.detune.value = MO.fine;
-      pitchBus.connect(o.detune);
+      if (pitchMod) pitchBus.connect(o.detune);
       oscs.push(o);
       modOsc.set(n, o);
       const g = ctx.createGain();
@@ -387,12 +391,18 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
   };
   W.osc.forEach((o, i) => {
     if (!o.level) return;
-    const weights = windowCurves.map((curve) => {
-      const sh = ctx.createWaveShaper();
-      sh.curve = curve;
-      posBus[i].connect(sh);
-      return sh;
-    });
+    let weights = null, fixed = null;
+    if (posMod[i]) {
+      weights = windowCurves.map((curve) => {
+        const sh = ctx.createWaveShaper();
+        sh.curve = curve;
+        posBus[i].connect(sh);
+        return sh;
+      });
+    } else {
+      const x = Math.min(1, Math.max(0, o.pos + (p.pos || 0))) * (F - 1);
+      fixed = Array.from({ length: F }, (_, k) => Math.max(0, 1 - Math.abs(x - k)));
+    }
     const voices = i === 0 ? W.uni.voices : 1;
     const spread = voices === 1 ? [0] : voices === 2 ? [-0.5, 0.5] : [-1, 0, 1];
     const lvl = ctx.createGain();
@@ -419,6 +429,7 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
       }
       for (const sp of spread) {
         for (let k = 0; k < F; k++) {
+          if (fixed && fixed[k] <= 0) continue;
           const osc = ctx.createOscillator();
           osc.setPeriodicWave(wave(ctx, o.table, k));
           const target = mtof(n + o.semi);
@@ -429,10 +440,10 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
             osc.frequency.setValueAtTime(target, t);
           }
           osc.detune.value = o.fine + sp * W.uni.detune;
-          pitchBus.connect(osc.detune);
+          if (pitchMod) pitchBus.connect(osc.detune);
           const fg = ctx.createGain();
-          fg.gain.value = 0;
-          weights[k].connect(fg.gain);
+          if (fixed) fg.gain.value = fixed[k];
+          else { fg.gain.value = 0; weights[k].connect(fg.gain); }
           osc.connect(fg).connect(dest);
           if (pmIn) pmIn.connect(osc.frequency);
           oscs.push(osc);

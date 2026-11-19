@@ -41,6 +41,8 @@ public sealed class MainWindow : Window
     readonly List<StepRow> stepRows = new();
     readonly List<(int ch, Meter m)> meters = new();
     readonly Meter masterMeter = new() { Width = 120, Height = 6 };
+    readonly TextBlock cpu = Txt.Make("CPU —", 9, Theme.Dim);
+    int cpuTick;
     PianoRoll? roll;
     int sel = -1;
     string bottom = "dev";
@@ -291,6 +293,9 @@ public sealed class MainWindow : Window
         sp.Children.Add(audio); sp.Children.Add(phone);
         var mm = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         mm.Children.Add(Txt.Make("MASTER", 9, Theme.Dim)); mm.Children.Add(masterMeter);
+        cpu.Margin = new Thickness(0, 2, 0, 0);
+        cpu.ToolTip = "Carico del motore audio. Sopra l'80% le code delle note in rilascio sfumano subito e la polifonia per traccia scende a 2, per evitare interruzioni.";
+        mm.Children.Add(cpu);
         sp.Children.Add(mm);
         midiStatus.Margin = new Thickness(12, 0, 0, 0); midiStatus.VerticalAlignment = VerticalAlignment.Center;
         sp.Children.Add(midiStatus);
@@ -611,6 +616,12 @@ public sealed class MainWindow : Window
             else if (playing) pos.Text = $"{step / 16 + 1}.{step % 16 / 4 + 1}.{step % 4 + 1}";
         }
         else if (playing) pos.Text = $"{step / 16 + 1}.{step % 16 / 4 + 1}.{step % 4 + 1}";
+        if (++cpuTick % 10 == 0)
+        {
+            double ld = e.RenderLoad;
+            cpu.Text = $"CPU {ld * 100:0}%" + (e.Underruns > 0 ? $" · {e.Underruns} interruz." : "");
+            cpu.Foreground = ld >= Mixer.ShedAt ? Theme.Red : ld >= 0.6 ? Theme.Orange : Theme.Dim;
+        }
         var pk = e.Mx.Peaks;
         foreach (var (ch, m) in meters) m.Set(pk[ch]);
         masterMeter.Set(pk[Mixer.Channels]);

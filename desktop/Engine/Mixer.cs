@@ -53,7 +53,19 @@ public sealed class Mixer
     public double Bpm = 120;
     double revSize = -1;
 
-    sealed class Voice { public required GainNode G; public required VoiceScope Scope; public IVoiceHandle? Handle; public double End; }
+    sealed class Voice { public required GainNode G; public required VoiceScope Scope; public IVoiceHandle? Handle; public double End, Off = double.MaxValue; public bool Shed; }
+    /// <summary>Carico del rendering (0-1, dal motore): sopra la soglia si tagliano le code delle voci.</summary>
+    public double Load;
+    public const double ShedAt = 0.8;
+    public int Shedded;
+
+    /// <summary>Sovraccarico: le voci sintetizzate dal vivo già in rilascio sfumano subito (le code costano come le note).</summary>
+    void ShedTails(double t)
+    {
+        if (Load < ShedAt) return;
+        foreach (var v in live)
+            if (!v.Shed && v.Handle != null && v.Off <= t) { v.Shed = true; Kill(v, t, 0.008); Shedded++; }
+    }
     readonly Voice?[] drum = new Voice?[Tracks];
     readonly Voice?[] mono = new Voice?[2];
     readonly List<Voice>[] poly = { new(), new(), new(), new() };
@@ -412,12 +424,15 @@ public sealed class Mixer
         var pr = Synth.PresetOf(tr);
         if (pr == null) return null;
         double t = Math.Max(time, Ctx.CurrentTime);
+        ShedTails(t);
         bool isMono = SynthDefs.Tracks[k].Mono;
         if (isMono) { if (mono[k] != null) Kill(mono[k]!, t, 0.006); }
         else
         {
             poly[k].RemoveAll(x => x.End <= t);
-            while (poly[k].Count >= 3) { Kill(poly[k][0], t, 0.04); poly[k].RemoveAt(0); }
+            // Polifonia per traccia: 3 voci, 2 quando il motore è sovraccarico
+            int max = Load >= ShedAt ? 2 : 3;
+            while (poly[k].Count >= max) { Kill(poly[k][0], t, 0.04); poly[k].RemoveAt(0); }
         }
         var vp = tr.Params(Bpm);
         double rel = pr.Wt != null ? pr.R * Math.Sqrt(vp.Dec) * vp.Rel : Synth.ReleaseTime(pr, vp);
@@ -441,6 +456,7 @@ public sealed class Mixer
         }
         finally { Ctx.Scope = null; }
         if (v.End == 0) v.End = dur != null ? t + dur.Value + rel * 1.7 : double.MaxValue;
+        if (dur != null) v.Off = t + dur.Value;
         if (isMono) mono[k] = v; else poly[k].Add(v);
         return v.Handle ?? new CachedHandle(this, v);
     }

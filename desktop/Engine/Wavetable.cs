@@ -20,6 +20,13 @@ public sealed class WtOscNode : SourceNode
         Frequency = new AudioParam(c, 440); Detune = new AudioParam(c, 0); Position = new AudioParam(c, -1);
     }
 
+    static bool Same(float[] v, int from, int to)
+    {
+        float x = v[from];
+        for (int i = from + 1; i < to; i++) if (v[i] != x) return false;
+        return true;
+    }
+
     protected override void Process()
     {
         Stereo = false;
@@ -30,28 +37,66 @@ public sealed class WtOscNode : SourceNode
         float sr = Ctx.SampleRate, ny = Ctx.Nyquist;
         int F = frames.Length;
         var tabs = tabsBuf;
+        // Caso più comune: intonazione e posizione costanti nel blocco → pesi e incremento calcolati una volta
+        bool fConst = (Frequency.Constant || Same(fq, from, to)) && (Detune.Constant || Same(dt, from, to));
+        bool pConst = Position.Constant || Same(ps, from, to);
         float fRef = fq[from] * MathF.Pow(2, dt[from] / 1200f);
+        if (fConst && pConst)
+        {
+            float x = Math.Clamp((ps[from] + 1) * 0.5f, 0, 1) * (F - 1);
+            int k0 = Math.Min((int)x, F - 1), k1 = Math.Min(k0 + 1, F - 1);
+            float w1 = x - k0, w0 = 1 - w1;
+            var t0 = frames[k0].TableFor(Math.Abs(fRef), ny);
+            double inc = fRef / sr, ph = phase;
+            if (inc < 0) inc += Math.Ceiling(-inc);
+            if (w1 <= 0 || k1 == k0)
+            {
+                for (int i = from; i < to; i++)
+                {
+                    double p = ph * PeriodicWave.Size;
+                    int idx = (int)p; float fr = (float)(p - idx);
+                    L[i] = t0[idx] + (t0[idx + 1] - t0[idx]) * fr;
+                    ph += inc; if (ph >= 1) ph -= Math.Floor(ph);
+                }
+            }
+            else
+            {
+                var t1 = frames[k1].TableFor(Math.Abs(fRef), ny);
+                for (int i = from; i < to; i++)
+                {
+                    double p = ph * PeriodicWave.Size;
+                    int idx = (int)p; float fr = (float)(p - idx);
+                    float a0 = t0[idx] + (t0[idx + 1] - t0[idx]) * fr;
+                    float a1 = t1[idx] + (t1[idx + 1] - t1[idx]) * fr;
+                    L[i] = w0 * a0 + w1 * a1;
+                    ph += inc; if (ph >= 1) ph -= Math.Floor(ph);
+                }
+            }
+            phase = ph;
+            return;
+        }
         for (int k = 0; k < F; k++) tabs[k] = frames[k].TableFor(Math.Abs(fRef), ny);
-        bool cst = Frequency.Constant && Detune.Constant;
+        float f = fRef, inv = 1f / sr;
         for (int i = from; i < to; i++)
         {
-            float f = cst ? fRef : fq[i] * MathF.Pow(2, dt[i] / 1200f);
-            if (!cst && (i & 31) == 0) for (int k = 0; k < F; k++) tabs[k] = frames[k].TableFor(Math.Abs(f), ny);
+            // Frequenza variabile (glide, modulazione di pitch): potenza ricalcolata ogni 8 campioni,
+            // tabelle band-limited aggiornate ogni 32
+            if (!fConst && ((i - from) & 7) == 0)
+            {
+                f = fq[i] * MathF.Pow(2, dt[i] / 1200f);
+                if (((i - from) & 31) == 0) for (int k = 0; k < F; k++) tabs[k] = frames[k].TableFor(Math.Abs(f), ny);
+            }
             float x = Math.Clamp((ps[i] + 1) * 0.5f, 0, 1) * (F - 1);
+            int k0 = Math.Min((int)x, F - 1), k1 = k0 + 1 < F ? k0 + 1 : k0;
+            float w1 = x - k0;
             double p = phase * PeriodicWave.Size;
             int idx = (int)p; float fr = (float)(p - idx);
-            float v = 0;
-            int k0 = (int)x;
-            for (int k = Math.Max(0, k0); k <= Math.Min(F - 1, k0 + 1); k++)
-            {
-                float w = 1 - Math.Abs(x - k);
-                if (w <= 0) continue;
-                var t = tabs[k];
-                v += w * (t[idx] + (t[idx + 1] - t[idx]) * fr);
-            }
-            L[i] = v;
-            phase += f / sr;
-            phase -= Math.Floor(phase);
+            var t0 = tabs[k0]; var t1 = tabs[k1];
+            float a0 = t0[idx] + (t0[idx + 1] - t0[idx]) * fr;
+            float a1 = t1[idx] + (t1[idx + 1] - t1[idx]) * fr;
+            L[i] = a0 + (a1 - a0) * w1;
+            phase += f * inv;
+            if (phase >= 1 || phase < 0) phase -= Math.Floor(phase);
         }
     }
 }
@@ -277,9 +322,11 @@ public static class Wavetable
         }
 
         // Bus di posizione per oscillatore (−1…1)
-        var posBus = W.Osc.Select(o =>
+        // Posizione non modulata: valore fisso sull'oscillatore (niente bus né sorgente costante)
+        var posMod = W.Osc.Select((_, i) => W.Mod.Any(m => m.Amt != 0 && (m.Dst == "pos" || m.Dst == $"pos{i + 1}"))).ToArray();
+        var posBus = W.Osc.Select((o, i) =>
         {
-            if (o.Level <= 0) return null;
+            if (o.Level <= 0 || !posMod[i]) return null;
             var bus = ctx.Gain();
             var off = ctx.Constant((float)(Math.Clamp(o.Pos + p.Pos, 0, 1) * 2 - 1));
             off.Connect(bus);
@@ -291,6 +338,7 @@ public static class Wavetable
         var mix = ctx.Gain((float)(1 / (W.Osc.Sum(o => o.Level) is var al && al > 0 ? al : 1)));
         mix.Connect(pre);
         var pitchBus = ctx.Gain();
+        bool pitchMod = W.Mod.Any(m => m.Dst == "pitch" && m.Amt != 0);
         var oscs = new List<SourceNode>();
         double glide = glideFrom != null && pr.Glide > 0 ? pr.Glide : 0;
         // Oscillatore di modulazione (uno per nota): ring mod sul volume, phase mod sulla frequenza
@@ -307,7 +355,7 @@ public static class Wavetable
                 var o = ctx.Oscillator(W.ModShape);
                 o.Frequency.SetValueAtTime((float)Synth.Mtof(n + W.ModSemi), t);
                 o.Detune.Value = (float)W.ModFine;
-                pitchBus.Connect(o.Detune);
+                if (pitchMod) pitchBus.Connect(o.Detune);
                 oscs.Add(o);
                 modOsc[n] = mo = o;
                 var g = ctx.Gain(1);
@@ -354,9 +402,9 @@ public static class Wavetable
                     }
                     else osc.Frequency.SetValueAtTime((float)target, t);
                     osc.Detune.Value = (float)(o.Fine + sp * W.UniDetune);
-                    pitchBus.Connect(osc.Detune);
-                    osc.Position.Value = 0;
-                    posBus[i]!.Connect(osc.Position);
+                    if (pitchMod) pitchBus.Connect(osc.Detune);
+                    if (posBus[i] is GainNode pb) { osc.Position.Value = 0; pb.Connect(osc.Position); }
+                    else osc.Position.Value = (float)(Math.Clamp(o.Pos + p.Pos, 0, 1) * 2 - 1);
                     osc.Connect(dest);
                     if (pmIn != null) pmIn.Connect(osc.Frequency);
                     oscs.Add(osc);

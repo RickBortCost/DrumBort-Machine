@@ -2,6 +2,19 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.26.0] - 2026-11-19
+
+### Migliorato
+- **Synth wavetable più leggero**, a parità di suono (verificato dal confronto web ↔ C# sulle 229 voci):
+  - **motore web (telefono e browser):** circa 2× più veloce. Se la posizione nella tabella non è modulata si creano solo i 1-2 frame necessari, con guadagni fissi, invece di 4 oscillatori e 4 waveshaper per voce; il bus del pitch si collega solo se c'è una modulazione di pitch;
+  - **motore C# (PC):** circa 1,7× più veloce, da ~95× a ~165× il tempo reale per accordo di 3 note. Fanno la differenza:
+    - percorso veloce dell'oscillatore quando pitch e posizione sono costanti nel blocco, con pesi e incremento calcolati una volta;
+    - frequenza ricalcolata ogni 8 campioni durante glide e modulazioni;
+    - posizione fissa senza nodi di bus;
+    - sovracampionamento del drive con prodotti vettoriali SIMD e scorciatoia per il silenzio, valida per tutte le saturazioni.
+- **Protezione dal sovraccarico (PC):** con il motore oltre l'80% del tempo reale le code delle note in rilascio sfumano subito e la polifonia per traccia passa da 3 a 2 voci, per evitare le interruzioni audio. Indicatore **CPU** sotto il livello master (arancione dal 60%, rosso dall'80%, con le interruzioni contate).
+- Host: `--bench-wt` misura il costo di ogni preset wavetable.
+
 ## [1.25.0] - 2026-11-19
 
 ### Aggiunto

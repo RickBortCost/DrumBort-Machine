@@ -109,6 +109,7 @@ public sealed class AudioEngine : IDisposable
             }
             Interlocked.Add(ref written, AudioContext.Block);
             RenderLoad = RenderLoad * 0.99 + 0.01 * (sw.Elapsed.TotalSeconds / blockSec);
+            Mx.Load = RenderLoad;
         }
     }
 
@@ -379,7 +380,7 @@ public sealed class AudioEngine : IDisposable
     {
         playing = Seq.Playing, tick = Seq.Tick, slot = Seq.P.Slot, mode = Seq.P.Mode, bpm = Seq.Pattern.Bpm,
         map = Seq.Map, voices = Mx.LiveVoices, cached = Mx.Cache?.Count ?? 0, underruns = Underruns,
-        load = Math.Round(RenderLoad, 3),
+        load = Math.Round(RenderLoad, 3), shed = Mx.Shedded,
         steps = Seq.P.Slots[Seq.P.Slot].Steps.Sum(r => r.Count(v => v > 0)),
         kit = Seq.P.Slots[Seq.P.Slot].Kit,
         sounds = Kits.UserSoundCount,

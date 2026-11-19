@@ -395,18 +395,20 @@ public sealed class WaveShaperNode : AudioNode
 /// </summary>
 public sealed class Resampler
 {
-    const int Taps = 24;
-    static readonly Dictionary<int, float[]> kernels = new();
-    float[] histIn = new float[Taps], histOut = new float[Taps * 4];
-    float[] up = new float[AudioContext.Block * 4];
+    const int Taps = 24, B = AudioContext.Block;
+    // Kernel per fase (interpolazione) e kernel completo (decimazione), già invertiti: i prodotti
+    // diventano scalari su memoria contigua, vettorizzati con SIMD.
+    static readonly Dictionary<int, (float[][] up, float[] down)> kernels = new();
+    float[] extIn = new float[Taps - 1 + B], extUp = Array.Empty<float>(), up = Array.Empty<float>();
     int factor;
+    bool silent = true;                  // ingressi e storia a zero: l'uscita è costante
 
-    static float[] Kernel(int os)
+    static (float[][] up, float[] down) Kernels(int os)
     {
         lock (kernels)
         {
-            if (kernels.TryGetValue(os, out var k)) return k;
-            int n = Taps * os; k = new float[n];
+            if (kernels.TryGetValue(os, out var kk)) return kk;
+            int n = Taps * os; var k = new float[n];
             double fc = 0.45 / os, sum = 0, mid = (n - 1) / 2.0;
             for (int i = 0; i < n; i++)
             {
@@ -416,49 +418,72 @@ public sealed class Resampler
                 k[i] = (float)(sinc * w); sum += k[i];
             }
             for (int i = 0; i < n; i++) k[i] = (float)(k[i] / sum);
-            kernels[os] = k;
-            return k;
+            var upK = new float[os][];
+            for (int p = 0; p < os; p++)
+            {
+                upK[p] = new float[Taps];
+                for (int u = 0; u < Taps; u++) upK[p][u] = (float)(k[(Taps - 1 - u) * os + p] * os);
+            }
+            var down = new float[n];
+            for (int u = 0; u < n; u++) down[u] = k[n - 1 - u];
+            kernels[os] = kk = (upK, down);
+            return kk;
         }
+    }
+
+    static float Dot(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
+    {
+        int i = 0, n = a.Length;
+        float acc = 0;
+        if (System.Numerics.Vector.IsHardwareAccelerated && n >= System.Numerics.Vector<float>.Count)
+        {
+            var v = System.Numerics.Vector<float>.Zero;
+            int w = System.Numerics.Vector<float>.Count;
+            for (; i <= n - w; i += w) v += new System.Numerics.Vector<float>(a.Slice(i, w)) * new System.Numerics.Vector<float>(b.Slice(i, w));
+            acc = System.Numerics.Vector.Dot(v, System.Numerics.Vector<float>.One);
+        }
+        for (; i < n; i++) acc += a[i] * b[i];
+        return acc;
     }
 
     public void Process(float[] buf, int os, Action<float[], int> fn)
     {
-        if (os != factor) { factor = os; Array.Clear(histIn); histOut = new float[Taps * os]; }
-        var k = Kernel(os);
-        int B = AudioContext.Block, n = Taps * os;
-        // 1) interpolazione: up[j] = os · Σ x[m] · k[j − m·os]   (polifase)
+        int n = Taps * os;
+        if (os != factor)
+        {
+            factor = os;
+            extIn = new float[Taps - 1 + B]; extUp = new float[n - 1 + B * os]; up = new float[B * os];
+            silent = true;
+        }
+        bool zero = true;
+        for (int i = 0; i < B; i++) if (buf[i] != 0) { zero = false; break; }
+        if (zero && silent)
+        {
+            // Silenzio prolungato: la non linearità di 0 è costante, il filtro la lascia invariata
+            up[0] = 0; fn(up, 1);
+            Array.Fill(buf, up[0]);
+            return;
+        }
+        var (upK, down) = Kernels(os);
+        // 1) interpolazione polifase
+        Array.Copy(buf, 0, extIn, Taps - 1, B);
         for (int i = 0; i < B; i++)
         {
-            for (int p = 0; p < os; p++)
-            {
-                float acc = 0;
-                // campioni d'ingresso i, i−1, … (Taps per fase)
-                for (int t = 0; t < Taps; t++)
-                {
-                    int m = i - t;
-                    float x = m >= 0 ? buf[m] : histIn[Taps + m];
-                    acc += x * k[t * os + p];
-                }
-                up[i * os + p] = acc * os;
-            }
+            var x = extIn.AsSpan(i, Taps);
+            for (int p = 0; p < os; p++) up[i * os + p] = Dot(x, upK[p]);
         }
-        Array.Copy(buf, B - Taps, histIn, 0, Taps);
+        Array.Copy(extIn, B, extIn, 0, Taps - 1);
         // 2) non linearità alla frequenza alta
         fn(up, B * os);
         // 3) filtro anti-aliasing e decimazione
-        for (int i = 0; i < B; i++)
-        {
-            int j = i * os + os - 1;
-            float acc = 0;
-            for (int t = 0; t < n; t++)
-            {
-                int m = j - t;
-                acc += (m >= 0 ? up[m] : histOut[n + m]) * k[t];
-            }
-            buf[i] = acc;
-        }
-        Array.Copy(up, B * os - n, histOut, 0, n);
+        Array.Copy(up, 0, extUp, n - 1, B * os);
+        for (int i = 0; i < B; i++) buf[i] = Dot(extUp.AsSpan(i * os + os - 1, n), down);
+        Array.Copy(extUp, B * os, extUp, 0, n - 1);
+        // Torna "silenzioso" quando ingresso e storia sono a zero (fine della coda del filtro)
+        silent = zero && AllZero(extIn) && AllEqual(buf);
     }
+    static bool AllZero(float[] a) { foreach (var v in a) if (v != 0) return false; return true; }
+    static bool AllEqual(float[] a) { for (int i = 1; i < a.Length; i++) if (a[i] != a[0]) return false; return true; }
 }
 
 public sealed class StereoPannerNode : AudioNode

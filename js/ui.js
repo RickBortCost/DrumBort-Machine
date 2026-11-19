@@ -4,6 +4,7 @@
  * La sezione SYNTH è in synthui.js.
  */
 
+import { initPresetPlayer } from './presetplayer.js';
 import { normalizeChain, legacyChain, LEGACY_KEYS, quickGet, quickSet } from './devices.js';
 import { KITS, USER_KITS, kitById, findKit, setUserKits, setUserSounds, normalizeSound, USER_SOUNDS, kitWithSound } from './kits.js';
 import { setUserPresets } from './presets.js';
@@ -93,6 +94,7 @@ ui.arrStart = 0;          // battuta da cui parte la riproduzione dell'arrangiam
 ui.arrRec = false;        // registrazione session → arrangiamento armata
 ui.arrRecOn = false;      // registrazione in corso (prima battuta già scritta)
 let perf = null;        // vista performance (performance.js)
+let presetPlayer = null; // Preset Player (presetplayer.js)
 let remote = null;      // controllo remoto tramite l'host desktop (remote.js)
 const remoteOp = (op, data) => { if (remote) remote.op(op, data); };
 
@@ -1478,6 +1480,7 @@ $('#menu').addEventListener('click', async (e) => {
     case 'phone': openPhone(); return;
     case 'auto': auto.open(ui.view === 'synth' ? `s${ui.ssel || 0}.cut` : `d${state.sel}.vol`); return;
     case 'wt': synthUI.openEditor(); return;
+    case 'pp': presetPlayer.open(ui.ssel || 0); return;
     case 'recout': panels.recordOutput(); return;
     case 'mid-pattern': panels.exportMid(new Array(4 * (p.bars || 1)).fill(clonePattern(p)), `pat${state.slot + 1}`); return;
     case 'mid-song': {
@@ -1926,6 +1929,7 @@ function applyRemoteParts(parts, full) {
   if (full) { undoStack.length = 0; redoStack.length = 0; toast('Progetto sincronizzato'); }
   syncPlayback();
   renderAll();
+  if (presetPlayer) presetPlayer.refresh();
   save();
 }
 
@@ -2032,6 +2036,7 @@ if (state.layout === null) state.layout = matchMedia('(pointer: fine) and (min-w
 if (state.layout === 'studio' && state.session.map.every((v) => v < 0)) { state.session.map.fill(state.slot); state.session.master = state.slot; }
 $('#layoutBtn').addEventListener('click', toggleLayout);
 $('#wtBtn').addEventListener('click', () => synthUI.openEditor());
+presetPlayer = initPresetPlayer(app);
 piano = initPianoRoll({ ...app, synthUI });
 $('#srollBtn').addEventListener('click', () => piano.open());
 $('#kbBtn').addEventListener('click', () => piano.toggleKb());

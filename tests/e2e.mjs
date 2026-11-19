@@ -964,6 +964,47 @@ async function pwaTests(browser, url) {
   await context.close();
 }
 
+
+/** Preset Player e Wavetable dal telefono: applicati a tracce vuote come strumento. */
+async function instrumentTests(browser, url) {
+  console.log(`\n[${browser.browserType().name()}] Strumenti dal telefono (iPhone portrait)`);
+  const { context, page, errors } = await openApp(browser, url, VIEWPORTS[0]);
+  // Tracce LEAD (9) e KEYS (11) vuote
+  await page.evaluate(() => { drumbort.state.tracks = drumbort.state.tracks.filter((t) => t !== 9 && t !== 11); drumbort.renderAll(); });
+  await page.tap('#menuBtn');
+  await page.tap('[data-act="pp"]');
+  check('Preset Player aperto', await page.isVisible('#ppSheet'));
+  await page.tap('.pp-tracks [data-k="1"]');
+  check('traccia vuota segnalata', (await page.textContent('.pp-tracks [data-k="1"]')).includes('vuota'));
+  await page.tap('.pp-cats [data-cat="Pad"]');
+  const first = await page.getAttribute('.pp-item', 'data-id');
+  await page.tap('.pp-item');
+  await page.tap('[data-act="pp-apply"]');
+  const r = await page.evaluate(() => ({ tracks: drumbort.state.tracks, presets: drumbort.state.slots.map((p) => p.synth.tracks[1].preset), mute: drumbort.state.slots[0].synth.tracks[1].mute }));
+  check('preset applicato alla traccia vuota (attivata, tutti i pattern)', r.tracks.includes(9) && r.presets.every((x) => x === first) && !r.mute, JSON.stringify(r));
+  await page.tap('.pp-nav[data-step="1"]');
+  check('▶ passa al preset successivo', (await page.evaluate(() => drumbort.state.slots[0].synth.tracks[1].preset)) !== first);
+  await page.$eval('[data-m="cut"]', (el) => { el.value = '-0.5'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
+  check('macro cutoff su tutti i pattern', (await page.evaluate(() => drumbort.state.slots.every((p) => p.synth.tracks[1].cut === -0.5))));
+  await page.tap('[data-arp="on"]');
+  check('arpeggiatore attivo', await page.evaluate(() => drumbort.state.slots[0].synth.tracks[1].arp.on === true));
+  await page.tap('[data-gp="0010001000100010"]');
+  const lane = await page.evaluate(() => drumbort.state.slots[drumbort.state.slot].auto && drumbort.state.slots[drumbort.state.slot].auto['s1.vol']);
+  check('trance gate → automazione del volume', Array.isArray(lane) && lane[2] > lane[0], JSON.stringify(lane && lane.slice(0, 4)));
+  await page.tap('#ppSheet [data-close]');
+  // Wavetable sulla traccia KEYS vuota
+  await page.tap('#wtBtn');
+  await page.tap('#waveTracks [data-wtk="3"]');
+  check('wavetable: traccia vuota segnalata', await page.evaluate(() => document.querySelector('#waveTracks [data-wtk="3"]').classList.contains('empty')));
+  const init = await page.$('[data-act="wave-init"]');
+  if (init && await init.isVisible()) await init.tap();
+  else await page.$eval('#waveBody input[type="range"]', (el) => { el.value = String(+el.min + (+el.max - +el.min) / 2); el.dispatchEvent(new Event('input', { bubbles: true })); });
+  const w = await page.evaluate(() => ({ on: drumbort.state.tracks.includes(11), wt: !!(drumbort.state.slots[drumbort.state.slot].synth.tracks[3].patch || {}).wt }));
+  check('wavetable applicato alla traccia vuota', w.on && w.wt, JSON.stringify(w));
+  check('nessun errore', errors.length === 0, errors.join(' | '));
+  await context.close();
+}
+
 // ---------------------------------------------------------------------
 const local = process.env.BASE_URL ? null : await startServer();
 const url = process.env.BASE_URL || local.url;
@@ -976,6 +1017,7 @@ for (const name of BROWSERS) {
     await layoutTests(browser, url);
     await functionalTests(browser, url);
     await synthTests(browser, url);
+    await instrumentTests(browser, url);
     await featureTests(browser, url);
     await studioTests(browser, url);
     await labTests(browser, url);

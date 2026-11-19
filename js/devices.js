@@ -109,14 +109,20 @@ const uid = () => `d${Date.now().toString(36)}${(seq++).toString(36)}`;
 export function newDevice(type, p = {}) {
   const d = DEVICES[type];
   const params = {};
-  for (const x of d.params) params[x.k] = x.def;
+  if (d) for (const x of d.params) params[x.k] = x.def;
   return { id: uid(), type, on: true, p: { ...params, ...p } };
 }
 
 /** Valida una catena (progetti salvati, sincronizzazione). */
 export function normalizeChain(a) {
   if (!Array.isArray(a)) return [];
-  return a.filter((d) => d && DEVICES[d.type]).slice(0, 16).map((d) => {
+  return a.filter((d) => d && (DEVICES[d.type] || d.type === 'vst3')).slice(0, 16).map((d) => {
+    // Plugin VST 3 (app per PC): conservato così com'è, qui l'audio passa invariato
+    if (d.type === 'vst3') {
+      const p = {};
+      for (const k of ['path', 'cid', 'name', 'state']) if (d.p && typeof d.p[k] === 'string') p[k] = d.p[k];
+      return { id: typeof d.id === 'string' && d.id ? d.id.slice(0, 24) : uid(), type: 'vst3', on: d.on !== false, p };
+    }
     const def = DEVICES[d.type];
     const p = {};
     for (const x of def.params) {

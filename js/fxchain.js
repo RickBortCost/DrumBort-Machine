@@ -74,7 +74,7 @@ export function initFxChain(app, el, h) {
   }
 
   function devHTML(dev, i) {
-    const D = DEVICES[dev.type];
+    const D = DEVICES[dev.type] || { name: `VST3 · ${(dev.p && dev.p.name) || 'plugin'}`, params: [] };
     const name = dev.name || D.name;
     return `<section class="dv${dev.on ? '' : ' off'}${dev.fold ? ' fold' : ''}${sel === dev.id ? ' sel' : ''}" data-id="${dev.id}" data-type="${dev.type}" tabindex="-1" aria-label="${esc(name)}">
       <header class="dv-h" draggable="true" title="Trascina per spostare · doppio clic per piegare · tasto destro per il menu">
@@ -302,9 +302,9 @@ export function initFxChain(app, el, h) {
     showMenu(items.map(([m, l, dis]) => `<button class="btn" role="menuitem" data-m="${m}"${dis ? ' disabled' : ''}>${l}</button>`).join(''), anchor, x, y, (m) => {
       if (m === 'del') del(id);
       else if (m === 'dup') dup(id);
-      else if (m === 'copy') { clip = JSON.parse(JSON.stringify(d)); app.toast(`${d.name || DEVICES[d.type].name} copiato`); }
+      else if (m === 'copy') { clip = JSON.parse(JSON.stringify(d)); app.toast(`${d.name || (DEVICES[d.type] || { name: 'VST3' }).name} copiato`); }
       else if (m === 'paste' && clip) structural((c) => { const k = c.findIndex((x) => x.id === id); const n = copyOf(clip); c.splice(k + 1, 0, n); sel = n.id; });
-      else if (m === 'reset') structural(() => { const n = newDevice(d.type); d.p = n.p; });
+      else if (m === 'reset') { if (DEVICES[d.type]) structural(() => { const n = newDevice(d.type); d.p = n.p; }); }
       else if (m === 'fold') structural(() => { d.fold = !d.fold; });
       else if (m === 'on') structural(() => { d.on = !d.on; });
       else if (m === 'rename') rename(id);
@@ -320,7 +320,7 @@ export function initFxChain(app, el, h) {
     const done = (ok) => {
       nm.contentEditable = 'false';
       const v = nm.textContent.trim().slice(0, 24);
-      if (ok) structural(() => { if (v && v !== DEVICES[d.type].name) d.name = v; else delete d.name; });
+      if (ok) structural(() => { if (v && v !== (DEVICES[d.type] || {}).name) d.name = v; else delete d.name; });
       else render();
     };
     nm.addEventListener('keydown', function k(ev) {

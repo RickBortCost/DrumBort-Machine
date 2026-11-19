@@ -230,6 +230,7 @@
         <h3>SUONI</h3>
         <div class="mgrid">
           <button class="btn mitem" data-act="wt"><span class="mi" aria-hidden="true">≋</span><span class="ml">Synth wavetable<small>oscillatori, filtri, LFO, matrice</small></span></button>
+          <button class="btn mitem" data-act="pp"><span class="mi" aria-hidden="true">◈</span><span class="ml">Preset Player<small>suoni, macro, arpeggiatore, trance gate</small></span></button>
           <button class="btn mitem" data-act="kits"><span class="mi" aria-hidden="true">🥁</span><span class="ml">Crea kit<small>voci da kit diversi</small></span></button>
           <button class="btn mitem" data-act="audioout"><span class="mi" aria-hidden="true">🎧</span><span class="ml">Uscita audio<small>cuffie, casse, scheda</small></span></button>
           <button class="btn mitem" data-act="phone"><span class="mi" aria-hidden="true">📱</span><span class="ml">Collega telefono<small>QR code per il controllo dal telefono</small></span></button>
@@ -332,6 +333,13 @@
       <small id="libCount" class="hint"></small>
       <div id="libList" class="lib-list"></div>
       <button class="btn close" data-close>Chiudi</button>
+    </div>
+  </div>
+
+  <div id="ppSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="ppTitle" hidden>
+    <div class="sheet-box pp-box">
+      <div class="menu-head"><span class="sheet-title" id="ppTitle">PRESET PLAYER</span><button class="btn sm close" data-close aria-label="Chiudi">✕</button></div>
+      <div id="ppBody"></div>
     </div>
   </div>
 

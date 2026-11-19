@@ -108,8 +108,18 @@ export function initWaveEditor(app) {
   const tr = () => app.pat().synth.tracks[k];
   const patch = () => presetOf(tr());
 
+  /** Traccia vuota → attiva (strumento della traccia), anche nell'app per PC collegata. */
+  function activate() {
+    const ch = 8 + k;
+    if (!Array.isArray(state.tracks) || state.tracks.includes(ch)) return;
+    state.tracks.push(ch);
+    state.tracks.sort((a, b) => a - b);
+    state.slots.forEach((p) => { p.synth.tracks[k].mute = false; });
+  }
+
   /** Prima modifica: copia il preset di libreria nella traccia. */
   function ensurePatch() {
+    activate();
     const t = tr();
     if (!t.patch) {
       const base = PRESETS[t.preset];
@@ -157,7 +167,12 @@ export function initWaveEditor(app) {
     const t = tr(), P = patch();
     $('#waveTitle').textContent = `EDITOR WAVETABLE · ${SYNTH_TRACKS[k].name.toUpperCase()}`;
     $$('#waveTabs .btn').forEach((b) => app.setToggle(b, b.dataset.tab === tab));
-    $$('#waveTracks .btn').forEach((b) => app.setToggle(b, +b.dataset.wtk === k));
+    $$('#waveTracks .btn').forEach((b) => {
+      app.setToggle(b, +b.dataset.wtk === k);
+      const empty = Array.isArray(state.tracks) && !state.tracks.includes(8 + +b.dataset.wtk);
+      b.classList.toggle('empty', empty);
+      b.title = empty ? 'Traccia vuota: la prima modifica la attiva con questo strumento' : '';
+    });
     const isWT = !!(P && P.wt);
     $('#waveNotWT').hidden = isWT;
     $('#waveMain').hidden = !isWT;
@@ -320,6 +335,7 @@ export function initWaveEditor(app) {
     if (act === 'wave-play') preview();
     else if (act === 'wave-init') {
       app.snapshot();
+      activate();
       t.patch = normalizeWTPreset({ name: 'Init Wavetable', wt: JSON.parse(JSON.stringify(WT_DEFAULT)) });
       t.patch.rev = 1;
       app.save(); app.onChange(); render(); preview();

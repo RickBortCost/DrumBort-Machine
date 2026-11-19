@@ -2,6 +2,17 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.24.0] - 2026-11-19
+
+### Aggiunto
+- **Preset Player e Synth wavetable anche dal telefono** (e dalla web app): Menu ☰ → **Preset Player** e → **Synth wavetable** (pulsante WT).
+  - Preset Player su telefono: tracce con l'indicazione "vuota", display con ◀ ▶, categorie, preferiti ★, ricerca, APPLICA alla traccia, macro, arpeggiatore e trance gate con i comandi a misura di dito.
+  - Il Wavetable e il Preset Player applicati a una traccia vuota la attivano come strumento (anche sul PC collegato).
+  - Collegato all'app per PC, ogni modifica dal telefono arriva al motore e aggiorna subito le finestre Wavetable e Preset Player aperte sul PC (e viceversa).
+
+### Corretto
+- I plugin VST 3 nella catena restano nel progetto anche quando la catena viene modificata da un telefono o dalla web app (sul telefono compaiono come "VST3 · nome", l'audio passa invariato).
+
 ## [1.23.0] - 2026-11-19
 
 ### Aggiunto

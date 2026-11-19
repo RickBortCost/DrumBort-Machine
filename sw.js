@@ -3,7 +3,7 @@
  * Percorsi relativi: il sito è servito sotto /DrumBort-Machine/.
  * Aggiornare VERSION a ogni rilascio (insieme a js/version.js) per invalidare la cache.
  */
-const VERSION = '1.23.0';
+const VERSION = '1.24.0';
 const CACHE = `drumbort-v${VERSION}`;
 const ASSETS = [
   './',
@@ -31,6 +31,7 @@ const ASSETS = [
   './js/panels.js',
   './js/wavetable.js',
   './js/waveeditor.js',
+  './js/presetplayer.js',
   './js/session.js',
   './js/studio.js',
   './js/remote.js',

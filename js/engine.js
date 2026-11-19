@@ -230,8 +230,31 @@ export class Engine {
   // Mixer ed effetti
   // -------------------------------------------------------------------
   /** Imposta volume, pan e mandate di un canale, a partire da `time`. */
+  /**
+   * Parametri del suono di una traccia synth cambiati: le voci che suonano li seguono e per qualche
+   * secondo le nuove note sono sintetizzate dal vivo (non dalla cache), così seguono il movimento.
+   */
+  tweakSynth(k, tr) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.liveUntil = this.liveUntil || [0, 0, 0, 0];
+    this.liveUntil[k] = t + 4;
+    const q = voiceParams(tr);
+    const all = [this.mono[k], ...(this.polyVoices[k] || [])].filter(Boolean);
+    all.forEach((v) => { if (v.handle && v.handle.tweak) v.handle.tweak(q, t); });
+  }
+
   setChannel(i, tr, time) {
     if (!this.ctx) return;
+    // Tracce synth: cutoff, risonanza, LFO o posizione cambiati → anche le note che suonano
+    if (i >= SYNTH_CH && i < SYNTH_CH + 4) {
+      const k = i - SYNTH_CH, who = `${tr.preset}|${tr.patch ? tr.patch.name : ''}`;
+      const sig = `${tr.cut ?? 0}|${tr.res ?? 0}|${tr.lfo ?? 1}|${tr.pos ?? 0}`;
+      this._syn = this._syn || [];
+      const prev = this._syn[k];
+      if (prev && prev.who === who && prev.sig !== sig) this.tweakSynth(k, tr);
+      this._syn[k] = { who, sig };
+    }
     const ch = this.channels[i];
     const t = Math.max(time || 0, this.ctx.currentTime);
     if (typeof tr.vol === 'number') ch.gain.gain.setTargetAtTime(tr.vol * tr.vol * 1.2, t, 0.01);
@@ -479,7 +502,8 @@ export class Engine {
     const rel = releaseTime(pr, voiceParams(tr));
     let v;
     // Note del sequencer (durata nota): cache; note tenute dal vivo: sempre sintetizzate
-    const key = dur != null && this.cache ? this._synthKey(tr, notes, dur, vel, glideFrom) : null;
+    const live = this.liveUntil && t < this.liveUntil[k];
+    const key = dur != null && this.cache && !live ? this._synthKey(tr, notes, dur, vel, glideFrom) : null;
     const buf = key && this.cache.get(key);
     if (buf) {
       const src = ctx.createBufferSource();

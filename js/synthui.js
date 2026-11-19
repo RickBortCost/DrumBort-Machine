@@ -45,7 +45,6 @@ const SPARAMS = [
 const PAGES = ['snd', 'mod', 'mix', 'fx'];
 /** Nome del suono di una traccia (* = patch modificata nell'editor). */
 const soundName = (t) => (t.patch && t.patch.wt ? `${t.patch.name} *` : (PRESETS[t.preset] || {}).name || '—');
-const MIX_KEYS = ['vol', 'pan', 'rev', 'dly', 'drv', 'crush', 'flt', 'lo', 'hi', 'cmp'];
 
 /** Tipo di accordo dedotto dagli intervalli salvati. */
 function chordTypeOf(ch) {
@@ -431,7 +430,8 @@ export function initSynthUI(app) {
     app.paramSet(SYNTH_CH + ui.ssel, t, key, v);
     inp.nextElementSibling.textContent = SPARAMS.find((d) => d.k === key).fmt(v);
     if (key === 'len') { renderRow(ui.ssel); renderLabels(); }
-    else if (MIX_KEYS.includes(key) && app.isPlayingPattern(app.pat())) engine.setChannel(SYNTH_CH + ui.ssel, t);
+    // Mixer e suono (cutoff, risonanza, LFO…) seguono subito, anche sulle note che suonano
+    else if (app.isPlayingPattern(app.pat())) engine.setChannel(SYNTH_CH + ui.ssel, t);
     app.save();
   });
   // Doppio tap → valore di default

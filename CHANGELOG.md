@@ -2,6 +2,16 @@
 
 Formato basato su [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni secondo [SemVer](https://semver.org/lang/it/).
 
+## [1.28.0] - 2026-11-19
+
+### Aggiunto
+- **Modifiche al suono anche sulla nota che sta suonando** (motore PC e web): cutoff, risonanza, profondità dell'LFO e posizione nella tabella wavetable seguono subito manopole, controller MIDI, macro e telefono, con un passaggio morbido di circa 15 ms. Il cutoff sposta l'intera curva del filtro, inviluppo compreso. Mentre si regola, le note nuove della traccia sono sintetizzate dal vivo per qualche secondo invece che dalla cache, così seguono anche loro il movimento.
+- **Gruppi di note nel piano roll** (Windows):
+  - **doppio clic** su una nota seleziona il suo gruppo, cioè le note collegate senza pause; un'altra sezione della traccia, dopo una pausa, resta fuori. Ctrl+doppio clic aggiunge un gruppo, Ctrl+A seleziona tutto, Esc deseleziona;
+  - il gruppo si modifica da solo: trascinamento (tempo e altezza), ←→ sposta, ↑↓ trasponi (Shift = ottava), Alt+←→ durata, Ctrl+D duplica dopo il gruppo, Canc elimina;
+  - CHOP, GLUE, LEGATO, UMANIZZA, PULISCI, le trasposizioni e il graph editor agiscono solo sul gruppo selezionato;
+  - clic su una nota la seleziona (prima la cancellava): si elimina col tasto destro o con Canc.
+
 ## [1.27.0] - 2026-11-19
 
 ### Migliorato

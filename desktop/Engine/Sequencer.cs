@@ -92,6 +92,7 @@ public sealed class Sequencer
     // Song
     int songI, songR;
     public long Tick => tick;
+    readonly (string Preset, string? Item2, double Cut, double Res, double Lfo, double Pos)?[] lastSyn = new (string, string?, double, double, double, double)?[4];
     /// <summary>Battuta da cui parte l'arrangiamento (righello della timeline) e battuta in riproduzione.</summary>
     public int ArrStart;
     public int ArrBar => arrBar;
@@ -156,6 +157,14 @@ public sealed class Sequencer
         mx.SetFx(P.Fx, Pattern.Bpm);
         for (int i = 0; i < Mixer.Channels; i++) mx.SetDevices(i, P.Devs[i]);
         mx.SetBuses(P.Buses);
+        // Parametri del suono synth cambiati: si applicano anche alle note che suonano
+        for (int k = 0; k < 4; k++)
+        {
+            var st = Pattern.Synth.Tracks[k];
+            var sig = (st.Preset, st.Patch?.Name, st.Cut, st.Res, st.Lfo, st.Pos);
+            if (lastSyn[k] is var prev && prev.HasValue && prev.Value.Preset == sig.Preset && prev.Value.Item2 == sig.Item2 && prev.Value != sig) mx.TweakSynth(k, st);
+            lastSyn[k] = sig;
+        }
         Prewarm();
     }
 

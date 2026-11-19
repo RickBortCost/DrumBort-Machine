@@ -63,6 +63,8 @@ public sealed class GraphLane : FrameworkElement
     public Param P;
     public int Playhead = -1;
     public event Action<string>? Hover;
+    /// <summary>Solo gli step per cui vale true sono modificabili (gruppo selezionato nel piano roll).</summary>
+    public Func<int, bool>? Filter;
     bool drawing, reset;
     int last = -1; double lastV;
     Point? from;
@@ -104,6 +106,7 @@ public sealed class GraphLane : FrameworkElement
 
     void Set(int s, double? v)
     {
+        if (Filter != null && !Filter(s)) return;
         JsonObject? obj;
         if (Synth)
         {
@@ -142,7 +145,7 @@ public sealed class GraphLane : FrameworkElement
         {
             if ((s / 4) % 2 == 1) dc.DrawRectangle(Theme.Panel, null, new Rect(s * cw, 0, cw, h));
             if (s % 16 == 0) dc.DrawRectangle(Theme.Panel3, null, new Rect(s * cw, 0, 1, h));
-            bool hit = Hit(s);
+            bool hit = Hit(s) && (Filter == null || Filter(s));
             var v = Get(s);
             double val = v ?? Default(s);
             if (!hit && v == null) continue;
@@ -266,6 +269,19 @@ public sealed class EditorPanel : DockPanel
         if (syn)
         {
             Roll = new PianoRoll(doc, ch);
+            var selInfo = Txt.Make("Doppio clic su una nota: seleziona il suo gruppo (Ctrl = aggiunge) · Ctrl+A: tutte", 11, Theme.Dim);
+            selInfo.Margin = new Thickness(10, 0, 0, 0); selInfo.VerticalAlignment = VerticalAlignment.Center;
+            bar.Children.Add(selInfo);
+            Roll.SelectionChanged += () =>
+            {
+                var sel = Roll.Selection;
+                selInfo.Text = sel.Count == 0
+                    ? "Doppio clic su una nota: seleziona il suo gruppo (Ctrl = aggiunge) · Ctrl+A: tutte"
+                    : $"Gruppo: {sel.Count} note (step {sel.Min + 1}–{sel.Max + 1}) · strumenti e graph solo qui · trascina o ←→ sposta · ↑↓ trasponi (Shift ottava) · Alt+←→ durata · Ctrl+D duplica · Canc elimina · Esc";
+                selInfo.Foreground = sel.Count == 0 ? Theme.Dim : Theme.Lcd;
+                Graph.Filter = sel.Count == 0 ? null : sel.Contains;
+                Graph.InvalidateVisual();
+            };
             var sv = new ScrollViewer { Content = Roll, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Background = Theme.Bg };
             sv.Loaded += (_, _) => sv.Dispatcher.BeginInvoke(() => sv.ScrollToVerticalOffset(Math.Max(0, Roll.FocusY() - sv.ViewportHeight / 2)), System.Windows.Threading.DispatcherPriority.Loaded);
             Children.Add(sv);
@@ -316,22 +332,27 @@ public sealed class EditorPanel : DockPanel
         Tool("LEGATO", "Allunga ogni nota fino alla successiva", Legato);
         Tool("UMANIZZA", "Velocity leggermente diverse a ogni nota", Humanize);
         Tool("RIFF", "Genera una frase nella scala (come Riff Machine): ogni clic una variante", Riff);
-        Tool("PULISCI", "Toglie tutte le note della traccia", () => { var a = NoteSteps; for (int i = 0; i < a.Count; i++) a[i] = null; });
+        Tool("PULISCI", "Toglie le note del gruppo selezionato (o tutte se non c'è selezione)", () => { var a = NoteSteps; for (int i = 0; i < a.Count; i++) if (In(i)) a[i] = null; Roll?.Selection.Clear(); });
     }
 
+    /// <summary>Lo step è tra quelli su cui agiscono gli strumenti (gruppo selezionato, o tutti).</summary>
+    bool In(int s) => Roll == null || Roll.Selection.Count == 0 || Roll.Selection.Contains(s);
     void Transpose(int d)
     {
-        foreach (var st in NoteSteps.OfType<JsonObject>()) st["n"] = Math.Clamp((int)Doc.Num(st, "n", 60) + d, 12, 108);
+        var a = NoteSteps;
+        for (int i = 0; i < a.Count; i++) if (In(i) && a[i] is JsonObject st) st["n"] = Math.Clamp((int)Doc.Num(st, "n", 60) + d, 12, 108);
     }
     void Chop()
     {
         var a = NoteSteps;
+        bool sel = Roll != null && Roll.Selection.Count > 0;
         for (int s = 0; s < a.Count; s++)
-            if (a[s] is JsonObject st && Doc.Num(st, "g", 1) > 1)
+            if (In(s) && a[s] is JsonObject st && Doc.Num(st, "g", 1) > 1)
             {
                 int g = (int)Doc.Num(st, "g", 1);
                 st["g"] = 1;
-                for (int k = 1; k < g && s + k < a.Count; k++) if (a[s + k] == null) { var c = (JsonObject)st.DeepClone(); c["a"] = 0; a[s + k] = c; }
+                for (int k = 1; k < g && s + k < a.Count; k++)
+                    if (a[s + k] == null) { var c = (JsonObject)st.DeepClone(); c["a"] = 0; a[s + k] = c; if (sel) Roll!.Selection.Add(s + k); }
                 s += g - 1;
             }
     }
@@ -340,9 +361,9 @@ public sealed class EditorPanel : DockPanel
         var a = NoteSteps;
         for (int s = 0; s < a.Count; s++)
         {
-            if (a[s] is not JsonObject st) continue;
+            if (!In(s) || a[s] is not JsonObject st) continue;
             int end = s + (int)Doc.Num(st, "g", 1);
-            while (end < a.Count && a[end] is JsonObject nx && Doc.Num(nx, "n", 0) == Doc.Num(st, "n", -1) && (nx["ch"]?.ToJsonString() ?? "") == (st["ch"]?.ToJsonString() ?? ""))
+            while (end < a.Count && In(end) && a[end] is JsonObject nx && Doc.Num(nx, "n", 0) == Doc.Num(st, "n", -1) && (nx["ch"]?.ToJsonString() ?? "") == (st["ch"]?.ToJsonString() ?? ""))
             {
                 end += (int)Doc.Num(nx, "g", 1);
                 a[end - (int)Doc.Num(nx, "g", 1)] = null;
@@ -357,6 +378,7 @@ public sealed class EditorPanel : DockPanel
         var on = Enumerable.Range(0, Math.Min(len, a.Count)).Where(s => a[s] is JsonObject).ToList();
         for (int i = 0; i < on.Count; i++)
         {
+            if (!In(on[i])) continue;
             int next = i + 1 < on.Count ? on[i + 1] : on[0] + len;
             ((JsonObject)a[on[i]]!)["g"] = Math.Max(1, Math.Min(16, next - on[i]));
         }
@@ -364,7 +386,8 @@ public sealed class EditorPanel : DockPanel
     void Humanize()
     {
         var r = new Random();
-        foreach (var st in NoteSteps.OfType<JsonObject>())
+        var a = NoteSteps;
+        foreach (var st in Enumerable.Range(0, a.Count).Where(In).Select(i => a[i]).OfType<JsonObject>())
         {
             double baseV = Doc.Num(st, "a", 0) > 0 ? 1 : 0.7;
             if (st["pl"] is not JsonObject pl) st["pl"] = pl = new JsonObject();

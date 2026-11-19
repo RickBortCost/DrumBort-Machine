@@ -10,6 +10,41 @@ namespace DrumBort.Host;
 public static class Tools
 {
     /// <summary>Picco e RMS di ogni voce di batteria e di ogni preset synth (render offline isolato).</summary>
+    /// <summary>Prova: il cutoff cambiato durante una nota lunga cambia il suono della nota stessa.</summary>
+    public static int TweakTest(int rate)
+    {
+        int fails = 0;
+        foreach (var id in new[] { "juno", "wtGrowl", "acid303" })
+        {
+            var ctx = new AudioContext(rate);
+            var mx = new Mixer(ctx) { Cache = null };
+            var tr = (SynthTrack)SynthTrack.Parse(null, 2);
+            tr.Preset = id;
+            mx.PlaySynth(2, 0.01, 3, new[] { 48, 55, 60 }, 0.8, tr);
+            var l = new float[AudioContext.Block]; var r = new float[AudioContext.Block];
+            double Bright(double secs)
+            {
+                double hf = 0, all = 0; float prev = 0;
+                for (int f = 0; f < rate * secs; f += AudioContext.Block)
+                {
+                    ctx.RenderBlock(l, r, 0);
+                    foreach (var v in l) { hf += (v - prev) * (v - prev); all += v * v; prev = v; }
+                }
+                return all > 0 ? Math.Sqrt(hf / all) : 0;
+            }
+            Bright(0.8);
+            double before = Bright(0.5);
+            tr.Cut = -0.9;
+            mx.TweakSynth(2, tr);
+            Bright(0.2);
+            double after = Bright(0.5);
+            bool ok = after < before * 0.8;
+            if (!ok) fails++;
+            Console.WriteLine($"tweak {id}: brillantezza {before:0.000} → {after:0.000} {(ok ? "ok" : "NESSUN EFFETTO")}");
+        }
+        return fails;
+    }
+
     /// <summary>Benchmark del synth wavetable: ogni preset come accordo di 3 note (2 s), tempo per preset.</summary>
     public static void BenchWavetable(int rate, int reps)
     {

@@ -898,6 +898,22 @@ public sealed class MainWindow : Window
             ShotOf(ppw, Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selftest!))!, Path.GetFileNameWithoutExtension(selftest) + "-presetplayer.png"));
             Console.WriteLine($"preset player: {Doc.Str(Doc.TrackOf(doc.Pat, 9), "preset", "")} su LD");
             ppw.Close();
+            // Gruppi di note: doppio clic seleziona solo le note collegate, le modifiche restano nel gruppo
+            {
+                var lead = (JsonArray)doc.Track(9)["steps"]!;
+                for (int i = 0; i < lead.Count; i++) lead[i] = null;
+                JsonObject N(int n, int g) => new() { ["n"] = n, ["g"] = g, ["a"] = 0, ["sl"] = 0, ["ch"] = null };
+                lead[0] = N(60, 4); lead[2] = N(62, 2); lead[4] = N(64, 1);      // gruppo A
+                lead[8] = N(67, 2); lead[9] = N(69, 2);                          // gruppo B
+                var pr = new PianoRoll(doc, 9);
+                var grp = pr.GroupOf(2);
+                bool okGroup = grp.SetEquals(new[] { 0, 2, 4 }) && pr.GroupOf(9).SetEquals(new[] { 8, 9 });
+                foreach (int i in grp) pr.Selection.Add(i);
+                pr.MoveSelection(1, 12);
+                bool okMove = Doc.Num(lead[1], "n", 0) == 72 && Doc.Num(lead[5], "n", 0) == 76 && lead[0] == null && Doc.Num(lead[8], "n", 0) == 67 && Doc.Num(lead[9], "n", 0) == 69;
+                Console.WriteLine($"gruppi di note: selezione {(okGroup ? "ok" : "NO")}, modifica del solo gruppo {(okMove ? "ok" : "NO")}");
+                if (!(okGroup && okMove)) throw new Exception("gruppi di note: comportamento inatteso");
+            }
             // Controller MIDI simulato sullo swing (50-75): aggancio, 14 bit, encoder infinito
             {
                 double Sw() => (swing.Value - 50) / 25;

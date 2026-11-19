@@ -10,6 +10,8 @@ public interface IVoiceHandle
 {
     void Release(double at);
     void Kill(double at);
+    /// <summary>Parametri della traccia cambiati mentre la voce suona (cutoff, risonanza, LFO, posizione).</summary>
+    void Tweak(VoiceParams p, double at) { }
 }
 
 public static class Synth
@@ -166,6 +168,8 @@ public static class Synth
 
     sealed class Handle : IVoiceHandle
     {
+        public Action<VoiceParams, double>? OnTweak;
+        public void Tweak(VoiceParams p, double at) => OnTweak?.Invoke(p, at);
         public required AudioContext Ctx; public required GainNode Rel; public required List<SourceNode> Sources;
         public double R; public Action<double>? OnRelease;
         bool released;
@@ -189,9 +193,9 @@ public static class Synth
     }
 
     /// <summary>Handle di rilascio/taglio; con `dur` il rilascio è già pianificato a t + dur.</summary>
-    internal static IVoiceHandle MakeHandle(AudioContext ctx, GainNode rel, List<SourceNode> sources, double r, double t, double? dur, Action<double>? onRelease = null)
+    internal static IVoiceHandle MakeHandle(AudioContext ctx, GainNode rel, List<SourceNode> sources, double r, double t, double? dur, Action<double>? onRelease = null, Action<VoiceParams, double>? tweak = null)
     {
-        var h = new Handle { Ctx = ctx, Rel = rel, Sources = sources, R = r, OnRelease = onRelease };
+        var h = new Handle { Ctx = ctx, Rel = rel, Sources = sources, R = r, OnRelease = onRelease, OnTweak = tweak };
         if (dur != null) h.Release(t + Math.Max(0.01, dur.Value));
         return h;
     }
@@ -251,6 +255,7 @@ public static class Synth
         f.Frequency.SetTargetAtTime((float)bas, t + a, Math.Max(0.01, pr.Fdec * decMul * (accent ? 0.7 : 1) / 3));
         f.Q.Value = (float)Math.Min(25, pr.Res * Math.Pow(2, p.Res * 1.5) * (accent ? 1.2 : 1));
         f.Connect(amp);
+        var p0 = p;
         if (lfoGain != null && lfoCfg!.To == "cut")
         {
             var lg = ctx.Gain((float)bas);
@@ -335,6 +340,18 @@ public static class Synth
             }
         }
         foreach (var x in sources) x.Start(t);
-        return MakeHandle(ctx, rel, sources, r, t, dur);
+        // Modifiche durante la nota: cutoff come spostamento in cent dell'intera curva del filtro,
+        // risonanza, profondità e velocità dell'LFO
+        void Tweak(VoiceParams q, double at)
+        {
+            f.Detune.SetTargetAtTime((float)((q.Cut - p0.Cut) * 3600), at, 0.015);
+            f.Q.SetTargetAtTime((float)Math.Min(25, pr.Res * Math.Pow(2, q.Res * 1.5) * (accent ? 1.2 : 1)), at, 0.015);
+            if (lfoGain != null && lfoCfg != null && lfoCfg.Delay <= 0)
+            {
+                double depth = lfoCfg.Depth * q.Lfo;
+                lfoGain.GainParam.SetTargetAtTime((float)(lfoCfg.To == "amp" ? depth / 2 : depth), at, 0.03);
+            }
+        }
+        return MakeHandle(ctx, rel, sources, r, t, dur, null, Tweak);
     }
 }

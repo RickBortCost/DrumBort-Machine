@@ -60,6 +60,8 @@ jobs:
         run: |
           ./desktop/bin/Release/net8.0/DrumBortHost --render-voices voices.json
           node tests/desktop-compare.mjs voices.json
+      - name: Modifiche al suono sulle note che suonano
+        run: ./desktop/bin/Release/net8.0/DrumBortHost --tweak-test
       - name: Telefono ↔ PC (nativo e relay)
         run: node tests/remote.mjs
 

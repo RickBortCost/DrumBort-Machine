@@ -419,6 +419,21 @@ public sealed class Mixer
         if (!Cache!.TryGet(key, out _)) RequestDrum(kit, i, p.Tune, p.Decay, key);
     }
 
+    readonly double[] liveUntil = new double[4];
+    /// <summary>
+    /// Parametri di una traccia synth cambiati (manopola, controller, telefono): le voci che suonano
+    /// li seguono subito; per qualche secondo le nuove note sono sintetizzate dal vivo (non dalla cache)
+    /// così anche loro seguono il movimento.
+    /// </summary>
+    public void TweakSynth(int k, SynthTrack tr)
+    {
+        double t = Ctx.CurrentTime;
+        liveUntil[k] = t + 4;
+        var vp = tr.Params(Bpm);
+        if (k < mono.Length && mono[k]?.Handle is IVoiceHandle h) h.Tweak(vp, t);
+        foreach (var v in poly[k]) v.Handle?.Tweak(vp, t);
+    }
+
     public IVoiceHandle? PlaySynth(int k, double time, double? dur, int[] notes, double vel, SynthTrack tr, int? glideFrom = null)
     {
         var pr = Synth.PresetOf(tr);
@@ -439,7 +454,7 @@ public sealed class Mixer
         var v = NewVoice(ch[SynthCh + k].Gain, out var g);
         try
         {
-            string? key = Cache != null && dur != null ? SynthKey(tr, pr, notes, dur.Value, vel, glideFrom, Bpm) : null;
+            string? key = Cache != null && dur != null && t >= liveUntil[k] ? SynthKey(tr, pr, notes, dur.Value, vel, glideFrom, Bpm) : null;
             if (key != null && Cache!.TryGet(key, out var buf))
             {
                 var src = Ctx.BufferSource(buf);

@@ -141,8 +141,13 @@ public sealed class PianoRoll : FrameworkElement
     const double Key = 46, RowH = 14;
     const int Span = 37;          // da una ottava sotto la tonica a due sopra
     (int s, int p)? drawing;
+    /// <summary>Step delle note selezionate (gruppo scelto con doppio clic): strumenti e tasti agiscono solo su queste.</summary>
+    public readonly SortedSet<int> Selection = new();
+    public event Action? SelectionChanged;
+    // Spostamento della selezione col mouse
+    (int s, int p)? moveFrom; int moveDs, moveDp; bool moved;
 
-    public PianoRoll(Doc doc, int ch) { this.doc = doc; Ch = ch; Height = Span * RowH; Cursor = Cursors.Cross; }
+    public PianoRoll(Doc doc, int ch) { this.doc = doc; Ch = ch; Height = Span * RowH; Cursor = Cursors.Cross; Focusable = true; FocusVisualStyle = null; }
 
     int K => Ch - 8;
     /// <summary>Y del centro delle note (o della tonica) per centrare lo scorrimento.</summary>
@@ -199,11 +204,58 @@ public sealed class PianoRoll : FrameworkElement
                 int r = low + Span - 1 - p;
                 if (r < 0 || r >= Span) continue;
                 var rect = new Rect(Key + s * cw + 1, r * RowH + 1, Math.Max(3, g * cw - 2), RowH - 2);
-                dc.DrawRoundedRectangle(col, new Pen(acc ? Brushes.White : Theme.Dark, acc ? 1.5 : 1), rect, 2, 2);
+                bool inSel = Selection.Contains(s);
+                var fill = Selection.Count > 0 && !inSel ? new SolidColorBrush(Color.FromArgb(110, ((SolidColorBrush)col).Color.R, ((SolidColorBrush)col).Color.G, ((SolidColorBrush)col).Color.B)) : col;
+                dc.DrawRoundedRectangle(fill, new Pen(inSel ? Brushes.White : acc ? Brushes.White : Theme.Dark, inSel ? 2 : acc ? 1.5 : 1), rect, 2, 2);
                 // Slide (portamento verso la nota successiva)
                 if (Doc.Num(st, "sl", 0) > 0) dc.DrawLine(new Pen(Brushes.White, 1.5), new Point(rect.Right - 6, rect.Bottom - 2), new Point(rect.Right, rect.Top + 2));
             }
         }
+    }
+
+    /// <summary>
+    /// Gruppo della nota allo step s: note collegate senza pause (ogni nota parte prima che finisca la
+    /// precedente o subito dopo). Un'altra sezione della traccia, dopo una pausa, è un altro gruppo.
+    /// </summary>
+    public SortedSet<int> GroupOf(int s)
+    {
+        var steps = Steps;
+        var on = Enumerable.Range(0, Math.Min(N, steps.Count)).Where(i => steps[i] is JsonObject).ToList();
+        var res = new SortedSet<int>();
+        if (!on.Contains(s)) return res;
+        // Segmenti contigui: [inizio, fine) che si toccano o si sovrappongono
+        var groups = new List<List<int>>();
+        int end = -1;
+        foreach (int i in on)
+        {
+            int g = (int)Doc.Num(steps[i], "g", 1);
+            if (groups.Count == 0 || i > end) { groups.Add(new List<int>()); end = i; }
+            groups[^1].Add(i);
+            end = Math.Max(end, i + g);
+        }
+        foreach (var grp in groups) if (grp.Contains(s)) foreach (int i in grp) res.Add(i);
+        return res;
+    }
+
+    public void ClearSelection() { if (Selection.Count == 0) return; Selection.Clear(); InvalidateVisual(); SelectionChanged?.Invoke(); }
+
+    /// <summary>Sposta le note selezionate di ds step e dp semitoni (le note che escono dal pattern si perdono).</summary>
+    public void MoveSelection(int ds, int dp)
+    {
+        if (Selection.Count == 0 || (ds == 0 && dp == 0)) return;
+        var steps = Steps;
+        var take = Selection.Where(i => i < steps.Count && steps[i] is JsonObject).ToDictionary(i => i, i => (JsonObject)steps[i]!.DeepClone());
+        foreach (int i in take.Keys) steps[i] = null;
+        var ns = new SortedSet<int>();
+        foreach (var (i, st) in take)
+        {
+            int j = i + ds;
+            if (j < 0 || j >= N) continue;
+            st["n"] = Math.Clamp((int)Doc.Num(st, "n", 60) + dp, 12, 108);
+            steps[j] = st;
+            ns.Add(j);
+        }
+        Selection.Clear(); foreach (int j in ns) Selection.Add(j);
     }
 
     (int s, int p) At(Point pt)
@@ -230,19 +282,39 @@ public sealed class PianoRoll : FrameworkElement
             return;
         }
         var (s, p) = At(e.GetPosition(this));
-        doc.Snapshot();
+        Focus();
         var steps = Steps;
         int at = NoteAt(s, p);
         if (at >= 0)
         {
             var st = (JsonObject)steps[at]!;
-            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) st["a"] = Doc.Num(st, "a", 0) > 0 ? 0 : 1;
-            else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) st["sl"] = Doc.Num(st, "sl", 0) > 0 ? 0 : 1;
-            else RemovePitch(at, p);
-            doc.Commit(doc.PatKey);
+            var mod = Keyboard.Modifiers;
+            if (e.ClickCount == 2)
+            {
+                // Doppio clic: seleziona il gruppo di note collegate (Ctrl = aggiunge alla selezione)
+                if (!mod.HasFlag(ModifierKeys.Control)) Selection.Clear();
+                foreach (int i in GroupOf(at)) Selection.Add(i);
+                InvalidateVisual(); SelectionChanged?.Invoke();
+                e.Handled = true; return;
+            }
+            if (mod.HasFlag(ModifierKeys.Shift)) { doc.Snapshot(); st["a"] = Doc.Num(st, "a", 0) > 0 ? 0 : 1; doc.Commit(doc.PatKey); e.Handled = true; return; }
+            if (mod.HasFlag(ModifierKeys.Alt)) { doc.Snapshot(); st["sl"] = Doc.Num(st, "sl", 0) > 0 ? 0 : 1; doc.Commit(doc.PatKey); e.Handled = true; return; }
+            // Clic su una nota: la seleziona (se non è già nella selezione) e si può trascinare
+            if (!Selection.Contains(at))
+            {
+                if (!mod.HasFlag(ModifierKeys.Control)) Selection.Clear();
+                Selection.Add(at);
+                SelectionChanged?.Invoke();
+            }
+            moveFrom = (s, p); moveDs = moveDp = 0; moved = false;
+            doc.Op("prev", new JsonObject { ["k"] = K, ["notes"] = new JsonArray(p) });
+            CaptureMouse(); InvalidateVisual();
             e.Handled = true;
             return;
         }
+        if (e.ClickCount == 2) { e.Handled = true; return; }
+        if (Selection.Count > 0) { Selection.Clear(); SelectionChanged?.Invoke(); }
+        doc.Snapshot();
         if (Doc.Mono(K) || steps[s] is not JsonObject cur)
             steps[s] = new JsonObject { ["n"] = p, ["g"] = 1, ["a"] = 0, ["sl"] = 0, ["ch"] = null };
         else
@@ -260,6 +332,18 @@ public sealed class PianoRoll : FrameworkElement
     }
     protected override void OnMouseMove(MouseEventArgs e)
     {
+        if (moveFrom is var (ms, mp))
+        {
+            var (cs, pp) = At(e.GetPosition(this));
+            int ds = cs - ms, dp = pp - mp;
+            if (ds == moveDs && dp == moveDp) return;
+            if (!moved) { doc.Snapshot(); moved = true; }
+            MoveSelection(ds - moveDs, dp - moveDp);
+            moveDs = ds; moveDp = dp;
+            InvalidateVisual();
+            doc.CommitQuiet(doc.PatKey);
+            return;
+        }
         if (drawing is not var (s0, _) || Steps[s0] is not JsonObject st) return;
         var (s, _) = At(e.GetPosition(this));
         int g = Math.Max(1, s - s0 + 1);
@@ -269,6 +353,12 @@ public sealed class PianoRoll : FrameworkElement
     }
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
+        if (moveFrom != null)
+        {
+            moveFrom = null; ReleaseMouseCapture();
+            if (moved) { doc.Commit(doc.PatKey); SelectionChanged?.Invoke(); }
+            return;
+        }
         if (drawing == null) return;
         drawing = null;
         ReleaseMouseCapture();
@@ -284,6 +374,51 @@ public sealed class PianoRoll : FrameworkElement
         doc.Commit(doc.PatKey);
         e.Handled = true;
     }
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        var mod = Keyboard.Modifiers;
+        if (e.Key == System.Windows.Input.Key.Escape) { ClearSelection(); e.Handled = true; return; }
+        if (e.Key == System.Windows.Input.Key.A && mod == ModifierKeys.Control)
+        {
+            Selection.Clear();
+            var all = Steps;
+            for (int i = 0; i < Math.Min(N, all.Count); i++) if (all[i] is JsonObject) Selection.Add(i);
+            InvalidateVisual(); SelectionChanged?.Invoke(); e.Handled = true; return;
+        }
+        if (Selection.Count == 0) return;
+        void Edit(Action a) { doc.Snapshot(); a(); doc.Commit(doc.PatKey); InvalidateVisual(); SelectionChanged?.Invoke(); e.Handled = true; }
+        var steps = Steps;
+        switch (e.Key)
+        {
+            case System.Windows.Input.Key.Up: Edit(() => MoveSelection(0, mod.HasFlag(ModifierKeys.Shift) ? 12 : 1)); break;
+            case System.Windows.Input.Key.Down: Edit(() => MoveSelection(0, mod.HasFlag(ModifierKeys.Shift) ? -12 : -1)); break;
+            case System.Windows.Input.Key.Left when mod.HasFlag(ModifierKeys.Alt):
+                Edit(() => { foreach (int i in Selection) if (steps[i] is JsonObject st) st["g"] = Math.Max(1, (int)Doc.Num(st, "g", 1) - 1); }); break;
+            case System.Windows.Input.Key.Right when mod.HasFlag(ModifierKeys.Alt):
+                Edit(() => { foreach (int i in Selection) if (steps[i] is JsonObject st) st["g"] = Math.Min(N, (int)Doc.Num(st, "g", 1) + 1); }); break;
+            case System.Windows.Input.Key.Left: Edit(() => MoveSelection(-1, 0)); break;
+            case System.Windows.Input.Key.Right: Edit(() => MoveSelection(1, 0)); break;
+            case System.Windows.Input.Key.Delete or System.Windows.Input.Key.Back: Edit(() => { foreach (int i in Selection) if (i < steps.Count) steps[i] = null; Selection.Clear(); }); break;
+            case System.Windows.Input.Key.D when mod == ModifierKeys.Control:
+                Edit(() =>
+                {
+                    // Duplica il gruppo subito dopo la sua fine
+                    int first = Selection.Min, last = Selection.Max;
+                    int len = last - first + Math.Max(1, (int)Doc.Num(steps[last], "g", 1));
+                    var copy = Selection.ToList();
+                    Selection.Clear();
+                    foreach (int i in copy)
+                    {
+                        int j = i + len;
+                        if (j >= N || steps[i] is not JsonObject st) continue;
+                        steps[j] = st.DeepClone();
+                        Selection.Add(j);
+                    }
+                });
+                break;
+        }
+    }
+
     void RemovePitch(int at, int p)
     {
         var steps = Steps;

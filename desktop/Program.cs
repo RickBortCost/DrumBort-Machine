@@ -43,6 +43,7 @@ if (Flag("--render"))
     return;
 }
 
+if (Flag("--tweak-test")) { Environment.Exit(Tools.TweakTest(rate)); }
 if (Flag("--bench-wt")) { Tools.BenchWavetable(rate, int.Parse(Arg("--reps", "3"))); return; }
 if (Flag("--vst3-test")) { Environment.Exit(Tools.Vst3Test(Arg("--vst3-test", "."))); }
 if (Flag("--export"))

@@ -324,11 +324,13 @@ public static class Wavetable
         // Bus di posizione per oscillatore (−1…1)
         // Posizione non modulata: valore fisso sull'oscillatore (niente bus né sorgente costante)
         var posMod = W.Osc.Select((_, i) => W.Mod.Any(m => m.Amt != 0 && (m.Dst == "pos" || m.Dst == $"pos{i + 1}"))).ToArray();
+        var posParams = new List<(AudioParam prm, double pos)>();
         var posBus = W.Osc.Select((o, i) =>
         {
             if (o.Level <= 0 || !posMod[i]) return null;
             var bus = ctx.Gain();
             var off = ctx.Constant((float)(Math.Clamp(o.Pos + p.Pos, 0, 1) * 2 - 1));
+            posParams.Add((off.Offset, o.Pos));
             off.Connect(bus);
             sources.Add(off);
             return bus;
@@ -404,7 +406,7 @@ public static class Wavetable
                     osc.Detune.Value = (float)(o.Fine + sp * W.UniDetune);
                     if (pitchMod) pitchBus.Connect(osc.Detune);
                     if (posBus[i] is GainNode pb) { osc.Position.Value = 0; pb.Connect(osc.Position); }
-                    else osc.Position.Value = (float)(Math.Clamp(o.Pos + p.Pos, 0, 1) * 2 - 1);
+                    else { osc.Position.Value = (float)(Math.Clamp(o.Pos + p.Pos, 0, 1) * 2 - 1); posParams.Add((osc.Position, o.Pos)); }
                     osc.Connect(dest);
                     if (pmIn != null) pmIn.Connect(osc.Frequency);
                     oscs.Add(osc);
@@ -466,6 +468,16 @@ public static class Wavetable
         foreach (var x in sources) x.Start(t);
         foreach (var x in oscs) x.Start(t);
         var all = sources.Concat(oscs).ToList();
-        return Synth.MakeHandle(ctx, rel, all, r, t, dur, when => { foreach (var (g, e) in envs) g.GainParam.SetTargetAtTime(0, when, Math.Max(0.01, e.R / 3)); });
+        // Modifiche durante la nota: cutoff (spostamento in cent), risonanza, posizione nella tabella
+        var p0 = p;
+        void Tweak(VoiceParams q, double at)
+        {
+            float cents = accentCents + (float)((q.Cut - p0.Cut) * 3600);
+            f1.Detune.SetTargetAtTime(cents, at, 0.015);
+            f1.Q.SetTargetAtTime((float)Math.Min(25, W.F1.Res * Math.Pow(2, q.Res * 1.5)), at, 0.015);
+            if (f2 != null) { f2.Detune.SetTargetAtTime(cents, at, 0.015); f2.Q.SetTargetAtTime((float)Math.Min(25, W.F2.Res * Math.Pow(2, q.Res * 1.5)), at, 0.015); }
+            foreach (var (prm, basePos) in posParams) prm.SetTargetAtTime((float)(Math.Clamp(basePos + q.Pos, 0, 1) * 2 - 1), at, 0.02);
+        }
+        return Synth.MakeHandle(ctx, rel, all, r, t, dur, when => { foreach (var (g, e) in envs) g.GainParam.SetTargetAtTime(0, when, Math.Max(0.01, e.R / 3)); }, Tweak);
     }
 }

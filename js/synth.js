@@ -385,7 +385,18 @@ export function playVoice(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = 
   sources.forEach((o) => o.start(t));
 
   let released = false;
+  const p0 = { cut: p.cut || 0 };
   const handle = {
+    /** Parametri cambiati durante la nota: cutoff (cent sull'intera curva), risonanza, LFO. */
+    tweak(q, at) {
+      const when = Math.max(at, ctx.currentTime);
+      f.detune.setTargetAtTime(((q.cut || 0) - p0.cut) * 3600, when, 0.015);
+      f.Q.setTargetAtTime(Math.min(25, pr.res * Math.pow(2, (q.res || 0) * 1.5) * (accent ? 1.2 : 1)), when, 0.015);
+      if (lfoGain && lfoCfg && !lfoCfg.delay) {
+        const depth = lfoCfg.depth * (q.lfo ?? 1);
+        lfoGain.gain.setTargetAtTime(lfoCfg.to === 'amp' ? depth / 2 : depth, when, 0.03);
+      }
+    },
     release(at) {
       if (released) return;
       released = true;

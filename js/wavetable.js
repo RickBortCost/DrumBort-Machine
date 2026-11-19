@@ -346,12 +346,14 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
   // --- Bus di posizione per oscillatore (segnale -1..1) ---
   // Se la posizione di un oscillatore non è modulata i pesi dei frame sono costanti: bastano i
   // 1-2 frame vicini con guadagni fissi (niente bus, niente waveshaper, 2 oscillatori invece di 4).
+  const posOffsets = [], fixedGains = [];
   const posMod = W.osc.map((_, i) => W.mod.some((m) => m.amt && MOD_SOURCES.includes(m.src) && (m.dst === 'pos' || m.dst === `pos${i + 1}`)));
   const posBus = W.osc.map((o, i) => {
     if (!o.level || !posMod[i]) return null;
     const bus = ctx.createGain();
     const off = ctx.createConstantSource();
     off.offset.value = Math.min(1, Math.max(0, o.pos + (p.pos || 0))) * 2 - 1;
+    posOffsets.push([off.offset, o.pos]);
     off.connect(bus);
     sources.push(off);
     return bus;
@@ -403,6 +405,8 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
       const x = Math.min(1, Math.max(0, o.pos + (p.pos || 0))) * (F - 1);
       fixed = Array.from({ length: F }, (_, k) => Math.max(0, 1 - Math.abs(x - k)));
     }
+    const fixedList = [];
+    if (fixed) fixedGains.push([fixedList, o.pos]);
     const voices = i === 0 ? W.uni.voices : 1;
     const spread = voices === 1 ? [0] : voices === 2 ? [-0.5, 0.5] : [-1, 0, 1];
     const lvl = ctx.createGain();
@@ -442,7 +446,7 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
           osc.detune.value = o.fine + sp * W.uni.detune;
           if (pitchMod) pitchBus.connect(osc.detune);
           const fg = ctx.createGain();
-          if (fixed) fg.gain.value = fixed[k];
+          if (fixed) { fg.gain.value = fixed[k]; fixedList.push([fg, k]); }
           else { fg.gain.value = 0; weights[k].connect(fg.gain); }
           osc.connect(fg).connect(dest);
           if (pmIn) pmIn.connect(osc.frequency);
@@ -498,7 +502,20 @@ export function playWT(ctx, out, t, dur, notes, vel, pr, p = {}, glideFrom = nul
 
   let released = false;
   const all = () => sources.concat(oscs);
+  const p0 = { cut: p.cut || 0 };
   const handle = {
+    /** Parametri cambiati durante la nota: cutoff, risonanza, posizione nella tabella. */
+    tweak(q, at) {
+      const when = Math.max(at, ctx.currentTime), cents = accentCents + ((q.cut || 0) - p0.cut) * 3600;
+      f1.detune.setTargetAtTime(cents, when, 0.015);
+      f1.Q.setTargetAtTime(Math.min(25, W.f1.res * Math.pow(2, (q.res || 0) * 1.5)), when, 0.015);
+      if (f2) { f2.detune.setTargetAtTime(cents, when, 0.015); f2.Q.setTargetAtTime(Math.min(25, W.f2.res * Math.pow(2, (q.res || 0) * 1.5)), when, 0.015); }
+      posOffsets.forEach(([prm, base]) => prm.setTargetAtTime(Math.min(1, Math.max(0, base + (q.pos || 0))) * 2 - 1, when, 0.02));
+      fixedGains.forEach(([gs, base]) => {
+        const x = Math.min(1, Math.max(0, base + (q.pos || 0))) * (F - 1);
+        gs.forEach(([g, k]) => g.gain.setTargetAtTime(Math.max(0, 1 - Math.abs(x - k)), when, 0.02));
+      });
+    },
     release(at) {
       if (released) return;
       released = true;
